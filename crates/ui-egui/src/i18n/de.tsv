@@ -2513,3 +2513,16 @@ presence	Offline	Offline
 	No category	Keine Kategorie
 	Flagged messages	Markierte Nachrichten
 	In folder	In Ordner
+	New calendar group…	Neue Kalendergruppe…
+	Rename group…	Gruppe umbenennen…
+	Delete group…	Gruppe löschen…
+	Move to group	In Gruppe verschieben
+	Delete the calendar group {name}?	Die Kalendergruppe {name} löschen?
+	New calendar group	Neue Kalendergruppe
+	Rename calendar group	Kalendergruppe umbenennen
+	Delete calendar group	Kalendergruppe löschen
+	This account's server doesn't keep calendar groups	Der Server dieses Kontos führt keine Kalendergruppen
+	Microsoft 365 keeps no order for calendar groups	Microsoft 365 führt keine Reihenfolge für Kalendergruppen
+	Microsoft 365 can't move a calendar between groups	Microsoft 365 kann einen Kalender nicht zwischen Gruppen verschieben
+	Group name	Gruppenname
+	This calendar isn't in Outlook's calendar groups yet	Dieser Kalender ist noch nicht in einer Kalendergruppe von Outlook

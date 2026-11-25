@@ -455,6 +455,38 @@ impl Data {
                 let list: Vec<Value> = self.groups.iter().map(|(id, name, _)| json!({"id": id, "name": name})).collect();
                 ok(json!({ "value": list }))
             }
+            // A calendar group made, renamed or deleted, as Graph has it: a name taken refused,
+            // and the group holding the account's default calendar never deleted.
+            ("POST", ["me", "calendarGroups"]) => {
+                let name = input["name"].as_str().unwrap_or("").trim().to_string();
+                if name.is_empty() || self.groups.iter().any(|(_, n, _)| n.eq_ignore_ascii_case(&name)) {
+                    let error = json!({"error": {"code": "ErrorFolderExists", "message": "A folder with the specified name already exists."}});
+                    return (409, error.to_string().into_bytes(), "application/json");
+                }
+                let id = self.id("G");
+                self.groups.push((id.clone(), name.clone(), Vec::new()));
+                (201, json!({"id": id, "name": name}).to_string().into_bytes(), "application/json")
+            }
+            ("PATCH", ["me", "calendarGroups", gid]) => {
+                let Some(name) = input["name"].as_str().map(str::trim).filter(|n| !n.is_empty()) else {
+                    return (400, Vec::new(), "application/json");
+                };
+                if self.groups.iter().any(|(g, n, _)| g != gid && n.eq_ignore_ascii_case(name)) {
+                    let error = json!({"error": {"code": "ErrorFolderExists", "message": "A folder with the specified name already exists."}});
+                    return (409, error.to_string().into_bytes(), "application/json");
+                }
+                let Some(group) = self.groups.iter_mut().find(|(g, _, _)| g == gid) else { return not_found() };
+                group.1 = name.to_string();
+                ok(json!({"id": gid, "name": name}))
+            }
+            ("DELETE", ["me", "calendarGroups", gid]) => {
+                let default = self.calendars.first().map(|(id, _)| id.as_str());
+                let Some(pos) = self.groups.iter().position(|(g, _, ids)| g == gid && !ids.iter().any(|id| Some(id.as_str()) == default)) else {
+                    return not_found();
+                };
+                self.groups.remove(pos);
+                (204, Vec::new(), "application/json")
+            }
             ("GET", ["me", "calendarGroups", gid, "calendars"]) => {
                 let Some((_, _, ids)) = self.groups.iter().find(|(g, _, _)| g == gid) else { return not_found() };
                 let list: Vec<Value> = ids

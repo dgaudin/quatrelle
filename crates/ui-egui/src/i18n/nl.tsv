@@ -2509,3 +2509,16 @@ presence	Offline	Offline
 	No category	Geen categorie
 	Flagged messages	Gemarkeerde berichten
 	In folder	In map
+	New calendar group…	Nieuwe agendagroep…
+	Rename group…	Groep een andere naam geven…
+	Delete group…	Groep verwijderen…
+	Move to group	Naar groep verplaatsen
+	Delete the calendar group {name}?	De agendagroep {name} verwijderen?
+	New calendar group	Nieuwe agendagroep
+	Rename calendar group	Agendagroep een andere naam geven
+	Delete calendar group	Agendagroep verwijderen
+	This account's server doesn't keep calendar groups	De server van dit account bewaart geen agendagroepen
+	Microsoft 365 keeps no order for calendar groups	Microsoft 365 bewaart geen volgorde voor agendagroepen
+	Microsoft 365 can't move a calendar between groups	Microsoft 365 kan een agenda niet tussen groepen verplaatsen
+	Group name	Naam van de groep
+	This calendar isn't in Outlook's calendar groups yet	Deze agenda staat nog niet in een agendagroep van Outlook

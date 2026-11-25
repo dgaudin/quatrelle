@@ -142,6 +142,25 @@ pub enum Op {
     /// Delete one of the account's calendars and its events (into Deleted Items, where the
     /// server keeps one).
     DeleteCalendar { calendar: String },
+
+    /// Make a calendar group called `name` in the account's Calendar pane, as Outlook keeps its
+    /// groups on the server (Exchange's navigation shortcuts, Microsoft 365's calendar groups).
+    CreateCalendarGroup { name: String },
+    /// Rename a calendar group (`group`: its name, as the server keeps it).
+    RenameCalendarGroup { group: String, name: String },
+    /// Delete a calendar group; the account's own calendars go back to My Calendars, and other
+    /// people's calendars leave the list.
+    DeleteCalendarGroup { group: String },
+    /// Move a calendar group up (`up`) or down among the groups, as the server orders them.
+    MoveCalendarGroup { group: String, up: bool },
+    /// Put a calendar in a group (`group`: its name; empty: My Calendars), as Outlook's Calendar
+    /// pane does, kept on the server.
+    MoveCalendarToGroup {
+        calendar: String,
+        /// The calendar's name as the account lists it (for an own calendar's shortcut).
+        name: String,
+        group: String,
+    },
 }
 
 /// Automatic replies (out of office): sent once per sender while on, between the dates when
@@ -241,6 +260,11 @@ impl Op {
             | Op::SetArchiveTag { keys, .. } => keys,
             Op::CreateFolder { .. } | Op::RenameFolder { .. } | Op::DeleteFolder { .. } | Op::EmptyFolder { .. } => &[],
             Op::CreateCalendar { .. } | Op::RenameCalendar { .. } | Op::DeleteCalendar { .. } => &[],
+            Op::CreateCalendarGroup { .. }
+            | Op::RenameCalendarGroup { .. }
+            | Op::DeleteCalendarGroup { .. }
+            | Op::MoveCalendarGroup { .. }
+            | Op::MoveCalendarToGroup { .. } => &[],
         }
     }
 
@@ -278,6 +302,11 @@ impl Op {
             Op::CreateCalendar { .. } => return "CreateCalendar".into(),
             Op::RenameCalendar { .. } => return "RenameCalendar".into(),
             Op::DeleteCalendar { .. } => return "DeleteCalendar".into(),
+            Op::CreateCalendarGroup { .. } => return "CreateCalendarGroup".into(),
+            Op::RenameCalendarGroup { .. } => return "RenameCalendarGroup".into(),
+            Op::DeleteCalendarGroup { .. } => return "DeleteCalendarGroup".into(),
+            Op::MoveCalendarGroup { .. } => return "MoveCalendarGroup".into(),
+            Op::MoveCalendarToGroup { .. } => return "MoveCalendarToGroup".into(),
         };
         if let Some(folder) = folder {
             return format!("{kind} of {folder}");
@@ -297,7 +326,17 @@ impl Op {
 
     /// Whether this changes the account's calendars (their list is read again after).
     pub fn is_calendar_op(&self) -> bool {
-        matches!(self, Op::CreateCalendar { .. } | Op::RenameCalendar { .. } | Op::DeleteCalendar { .. })
+        matches!(
+            self,
+            Op::CreateCalendar { .. }
+                | Op::RenameCalendar { .. }
+                | Op::DeleteCalendar { .. }
+                | Op::CreateCalendarGroup { .. }
+                | Op::RenameCalendarGroup { .. }
+                | Op::DeleteCalendarGroup { .. }
+                | Op::MoveCalendarGroup { .. }
+                | Op::MoveCalendarToGroup { .. }
+        )
     }
 }
 

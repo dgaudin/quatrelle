@@ -2511,3 +2511,16 @@ presence	Offline	Offline
 	No category	Nessuna categoria
 	Flagged messages	Messaggi contrassegnati
 	In folder	In cartella
+	New calendar group…	Nuovo gruppo di calendari…
+	Rename group…	Rinomina gruppo…
+	Delete group…	Elimina gruppo…
+	Move to group	Sposta nel gruppo
+	Delete the calendar group {name}?	Eliminare il gruppo di calendari {name}?
+	New calendar group	Nuovo gruppo di calendari
+	Rename calendar group	Rinomina gruppo di calendari
+	Delete calendar group	Elimina gruppo di calendari
+	This account's server doesn't keep calendar groups	Il server di questo account non conserva gruppi di calendari
+	Microsoft 365 keeps no order for calendar groups	Microsoft 365 non conserva un ordine per i gruppi di calendari
+	Microsoft 365 can't move a calendar between groups	Microsoft 365 non può spostare un calendario tra gruppi
+	Group name	Nome del gruppo
+	This calendar isn't in Outlook's calendar groups yet	Questo calendario non è ancora in un gruppo di calendari di Outlook

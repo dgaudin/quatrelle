@@ -244,7 +244,7 @@ fn dav_results_merge_without_losing_local_changes() {
     use quatrelle_model::ical::CalEvent;
     use quatrelle_model::pim::{CalendarInfo, DavSync, StoredEvent};
     let mut s = Session::open(Some(temp("dav-merge")), quatrelle_model::dates::Clock::new(NOW, 0));
-    let id = s.run("account.add", &json!({"email": "zoe@example.org", "password": "pw"})).unwrap()["account"].as_str().unwrap().to_string();
+    let id = s.run("account.add", &json!({"email": "zoe@contoso.example", "password": "pw"})).unwrap()["account"].as_str().unwrap().to_string();
     let cal = "https://dav.example.org/cal/work/".to_string();
     let ev = |uid: &str, summary: &str, href: &str| StoredEvent {
         calendar: cal.clone(),
@@ -381,6 +381,66 @@ fn dav_results_merge_without_losing_local_changes() {
     done(s2);
 }
 
+/// The calendar groups read from the server are kept in its order; one not read (a partial sync)
+/// leaves them as they were, and an empty list says the server has none.
+#[test]
+fn calendar_groups_follow_the_server_and_stay_when_not_read() {
+    use quatrelle_model::pim::DavSync;
+    let mut s = Session::open(Some(temp("dav-groups")), quatrelle_model::dates::Clock::new(NOW, 0));
+    let id = s.run("account.add", &json!({"email": "zoe@contoso.example", "password": "pw"})).unwrap()["account"].as_str().unwrap().to_string();
+    let read = DavSync {
+        calendar_groups: Some(vec!["Équipe".into(), "Salles".into()]),
+        my_calendar_group: Some("Mes calendriers".into()),
+        checked: NOW,
+        ..Default::default()
+    };
+    s.apply(Event::DavSynced { account: id.clone(), sync: Box::new(read) });
+    assert_eq!(s.pim.get(&id).unwrap().calendar_groups, ["Équipe", "Salles"]);
+    assert_eq!(s.pim.get(&id).unwrap().my_calendar_group, "Mes calendriers", "the server's name for My Calendars is kept");
+    // A partial sync (this account's own calendar only) doesn't name the groups: kept.
+    s.apply(Event::DavSynced { account: id.clone(), sync: Box::new(DavSync { checked: NOW + 1, ..Default::default() }) });
+    assert_eq!(s.pim.get(&id).unwrap().calendar_groups, ["Équipe", "Salles"]);
+    assert_eq!(s.pim.get(&id).unwrap().my_calendar_group, "Mes calendriers", "a partial sync keeps it");
+    // The server says it has none.
+    let none = DavSync { calendar_groups: Some(Vec::new()), checked: NOW + 2, ..Default::default() };
+    s.apply(Event::DavSynced { account: id.clone(), sync: Box::new(none) });
+    assert!(s.pim.get(&id).unwrap().calendar_groups.is_empty());
+    done(s);
+}
+
+/// Moving a calendar back to My Calendars names the group the server keeps the main calendar
+/// in, not a literal English name and not the group it is already in.
+#[test]
+fn moving_a_calendar_back_to_my_calendars_names_the_servers_group() {
+    use quatrelle_model::pim::{CalendarInfo, DavSync};
+    let mut s = Session::open(Some(temp("ews-move-my")), quatrelle_model::dates::Clock::new(NOW, 0));
+    let id = s
+        .run("account.add", &json!({"email": "zoe@contoso.example", "password": "pw", "ews": "https://mail.contoso.example/EWS/Exchange.asmx"}))
+        .unwrap()["account"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let sync = DavSync {
+        calendars: Some(vec![
+            CalendarInfo { id: "FOLDER1".into(), name: "Calendar".into(), main: true, ..Default::default() },
+            CalendarInfo { id: "FOLDER2".into(), name: "Meetings".into(), group: "Équipe".into(), ..Default::default() },
+        ]),
+        calendar_groups: Some(vec!["Équipe".into()]),
+        my_calendar_group: Some("Mes calendriers".into()),
+        checked: NOW,
+        ..Default::default()
+    };
+    s.apply(Event::DavSynced { account: id.clone(), sync: Box::new(sync) });
+    s.take_jobs();
+    s.run("calendar.moveTo", &json!({"account": id, "calendar": "FOLDER2", "group": ""})).unwrap();
+    let jobs = s.take_jobs();
+    assert!(
+        jobs.iter().any(|j| matches!(j, Job::Apply { op: Op::MoveCalendarToGroup { group, .. }, .. } if group == "Mes calendriers")),
+        "the server's group name goes with the move: {jobs:?}"
+    );
+    assert_eq!(s.pim.get(&id).unwrap().calendars.iter().find(|c| c.id == "FOLDER2").unwrap().group, "", "My Calendars is the pane's own heading");
+    done(s);
+}
 /// Issue #1: a signature goes into the message being written from the message itself.
 #[test]
 fn a_signature_goes_in_from_the_message() {

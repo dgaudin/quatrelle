@@ -2515,3 +2515,16 @@ presence	Offline	離線
 	No category	無類別
 	Flagged messages	已加上旗標的郵件
 	In folder	所在資料夾
+	New calendar group…	新增行事曆群組…
+	Rename group…	重新命名群組…
+	Delete group…	刪除群組…
+	Move to group	移至群組
+	Delete the calendar group {name}?	刪除行事曆群組 {name}?
+	New calendar group	新增行事曆群組
+	Rename calendar group	重新命名行事曆群組
+	Delete calendar group	刪除行事曆群組
+	This account's server doesn't keep calendar groups	此帳戶的伺服器不保留行事曆群組
+	Microsoft 365 keeps no order for calendar groups	Microsoft 365 不保留行事曆群組的順序
+	Microsoft 365 can't move a calendar between groups	Microsoft 365 無法在群組之間移動行事曆
+	Group name	群組名稱
+	This calendar isn't in Outlook's calendar groups yet	此行事曆尚未放在 Outlook 的某個行事曆群組中

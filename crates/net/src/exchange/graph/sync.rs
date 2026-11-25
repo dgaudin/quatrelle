@@ -420,6 +420,24 @@ pub fn apply_remote(c: &Client, st: &State, op: &Op) -> Result<()> {
             Err(e) if crate::gone(&e) => Ok(()),
             r => r.map(drop),
         },
+        // Microsoft 365's calendar groups: made, renamed and deleted there. Graph keeps no order
+        // for them, and can't move an existing calendar from one to another: those are refused
+        // with the reason, and the pane greys them.
+        Op::CreateCalendarGroup { name } => c.post("/me/calendarGroups", &json!({"name": name})).map(drop),
+        Op::RenameCalendarGroup { group, name } => {
+            let id = graph_group(c, group)?;
+            let body = serde_json::to_vec(&json!({"name": name})).map_err(|e| NetError::Protocol(e.to_string()))?;
+            c.send_raw("PATCH", &format!("/me/calendarGroups/{}", seg(&id)), "application/json", body).map(drop)
+        }
+        Op::DeleteCalendarGroup { group } => {
+            let id = graph_group(c, group)?;
+            match c.delete_item(&format!("/me/calendarGroups/{}", seg(&id))) {
+                Err(e) if crate::gone(&e) => Ok(()),
+                r => r.map(drop),
+            }
+        }
+        Op::MoveCalendarGroup { .. } => Err(NetError::No("Microsoft 365 keeps no order for calendar groups".into())),
+        Op::MoveCalendarToGroup { .. } => Err(NetError::No("Microsoft 365 can't move a calendar between groups".into())),
     }
 }
 
@@ -432,6 +450,18 @@ fn graph_calendar(calendar: &str) -> Result<&str> {
         return Err(NetError::No("that calendar isn't one Microsoft 365 keeps for the account".into()));
     }
     Ok(calendar)
+}
+
+/// A calendar group's id, from the name Graph gives it.
+fn graph_group(c: &Client, name: &str) -> Result<String> {
+    let groups = c.all("/me/calendarGroups?$top=50&$select=id,name", 50)?;
+    groups
+        .iter()
+        .find(|g| g.get("name").and_then(Value::as_str).is_some_and(|n| n.eq_ignore_ascii_case(name)))
+        .and_then(|g| g.get("id").and_then(Value::as_str))
+        .filter(|id| !id.is_empty())
+        .map(str::to_string)
+        .ok_or_else(|| NetError::No("no calendar group with that name".into()))
 }
 
 /// The parent folder id (`None` at the top) and the leaf name of a folder path.

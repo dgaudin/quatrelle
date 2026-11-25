@@ -173,6 +173,12 @@ impl Session {
             merge_events(p, sync);
             p.calendars = list;
         }
+        if let Some(my) = &sync.my_calendar_group {
+            p.my_calendar_group = my.clone();
+        }
+        if let Some(groups) = &sync.calendar_groups {
+            p.calendar_groups = groups.clone();
+        }
         self.note_new_calendars();
         if refiled > 0 {
             log::info!("{account}: {refiled} appointments not yet sent moved to the main calendar, theirs gone from the server");

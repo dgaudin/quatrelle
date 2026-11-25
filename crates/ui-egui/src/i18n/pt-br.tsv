@@ -2512,3 +2512,16 @@ presence	Offline	Offline
 	No category	Sem categoria
 	Flagged messages	Mensagens sinalizadas
 	In folder	Na pasta
+	New calendar group…	Novo grupo de agendas…
+	Rename group…	Renomear grupo…
+	Delete group…	Excluir grupo…
+	Move to group	Mover para o grupo
+	Delete the calendar group {name}?	Excluir o grupo de agendas {name}?
+	New calendar group	Novo grupo de agendas
+	Rename calendar group	Renomear grupo de agendas
+	Delete calendar group	Excluir grupo de agendas
+	This account's server doesn't keep calendar groups	O servidor desta conta não mantém grupos de agendas
+	Microsoft 365 keeps no order for calendar groups	O Microsoft 365 não mantém uma ordem para grupos de agendas
+	Microsoft 365 can't move a calendar between groups	O Microsoft 365 não pode mover uma agenda entre grupos
+	Group name	Nome do grupo
+	This calendar isn't in Outlook's calendar groups yet	Esta agenda ainda não está em um grupo de agendas do Outlook

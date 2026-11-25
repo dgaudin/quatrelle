@@ -701,3 +701,18 @@ local-first, media-aware v1); the fuller request is
   mailboxes opened in it (the archive's and the shared ones list, their tasks aren't read yet); Current View and Arrange By offer Simple List, Detailed, Active,
   Completed, Next 7 Days, Overdue and Prioritized, ordered by due or start date, importance,
   categories, folder or type, remembered per list.
+- **2026-11-21** — **Calendar groups, as Outlook keeps them**: the Common Views folder is found
+  by the shortcuts it holds, kept for the session; the shortcuts are read page by page, grouped
+  by their headers, ordered by their ordinals, and the account's own calendars are filed under
+  their group. One privacy-safe log line says what the folder held. The pane lists the server's
+  groups in its order, between My Calendars and Shared Calendars; a header folds and unfolds
+  (remembered), its tick shows or hides all the group's calendars side by side, and a calendar
+  dragged onto a header or a row moves there. The group header's menu makes, renames, deletes and
+  moves groups; a calendar's menu moves it to a group or back to My Calendars. On Exchange the
+  navigation shortcuts are written in Common Views as [MS-OXOCFG] gives them (binary ids, a save
+  stamp and flags on a header), read back after each write, and only the Calendar section's
+  shortcuts read whole are touched. Microsoft 365's groups are made, renamed and deleted through
+  Graph; Graph v1.0 can't move a calendar between groups or order them, so those entries are
+  greyed with the reason. The EWS writes have been tried on the fake Exchange only: `gaps.md` #16
+  says what a real mailbox must still confirm, and that adding a calendar from Address Book or
+  the Room List is still to come.

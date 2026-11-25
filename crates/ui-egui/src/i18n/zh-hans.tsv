@@ -2512,3 +2512,16 @@ presence	Offline	离线
 	No category	无类别
 	Flagged messages	已标记邮件
 	In folder	所在文件夹
+	New calendar group…	新建日历组…
+	Rename group…	重命名组…
+	Delete group…	删除组…
+	Move to group	移到组
+	Delete the calendar group {name}?	删除日历组 {name}?
+	New calendar group	新建日历组
+	Rename calendar group	重命名日历组
+	Delete calendar group	删除日历组
+	This account's server doesn't keep calendar groups	此帐户的服务器不保留日历组
+	Microsoft 365 keeps no order for calendar groups	Microsoft 365 不保留日历组的顺序
+	Microsoft 365 can't move a calendar between groups	Microsoft 365 无法在组之间移动日历
+	Group name	组名
+	This calendar isn't in Outlook's calendar groups yet	此日历还不在 Outlook 的某个日历组中

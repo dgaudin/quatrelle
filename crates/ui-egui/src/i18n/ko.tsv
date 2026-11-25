@@ -2511,3 +2511,16 @@ presence	Offline	오프라인
 	No category	범주 없음
 	Flagged messages	플래그 표시된 메시지
 	In folder	폴더 위치
+	New calendar group…	새 일정 그룹…
+	Rename group…	그룹 이름 바꾸기…
+	Delete group…	그룹 삭제…
+	Move to group	그룹으로 이동
+	Delete the calendar group {name}?	일정 그룹 {name}을(를) 삭제하시겠습니까?
+	New calendar group	새 일정 그룹
+	Rename calendar group	일정 그룹 이름 바꾸기
+	Delete calendar group	일정 그룹 삭제
+	This account's server doesn't keep calendar groups	이 계정의 서버는 일정 그룹을 보관하지 않습니다
+	Microsoft 365 keeps no order for calendar groups	Microsoft 365는 일정 그룹의 순서를 보관하지 않습니다
+	Microsoft 365 can't move a calendar between groups	Microsoft 365는 일정을 그룹 간에 이동할 수 없습니다
+	Group name	그룹 이름
+	This calendar isn't in Outlook's calendar groups yet	이 일정은 아직 Outlook의 일정 그룹에 없습니다

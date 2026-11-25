@@ -4,7 +4,7 @@
 //! EWS calendars and contacts: the sync — what changed here sent first, then every calendar,
 //! address book, the notes and the tasks read by their changes ([`changes`](super::changes)).
 
-use quatrelle_model::pim::Tombstone;
+use quatrelle_model::pim::{Tombstone, plain_name};
 
 use super::changes::{Public, notes_read, public_calendar, public_contacts, read_contacts, read_own_calendar, shared_calendar};
 use super::*;
@@ -95,9 +95,28 @@ fn sync_as(c: &Client, pim: &Pim, now: i64, calendars_only: bool) -> Result<DavS
         }
     }
     match calendar_links(c) {
-        Ok(links) => {
-            for l in links {
-                match others.iter_mut().find(|(e, _, _, _)| *e == l.email) {
+        Ok(shortcuts) => {
+            let links = shortcuts.links;
+            // The account's own calendars in a group: Outlook's shortcuts name them as the
+            // folders are named. The group holding the main calendar is "My Calendars", which is
+            // the account's own (the pane shows it first), not a group of its own.
+            let main_name = calendars.first().map(|k| plain_name(&k.name)).unwrap_or_default();
+            let my_calendars = links
+                .iter()
+                .find(|l| l.email.is_empty() && l.name.eq_ignore_ascii_case(&main_name))
+                .map(|l| l.group.clone())
+                .filter(|g| !g.is_empty());
+            // The pane draws My Calendars itself: the server's name for it isn't a group.
+            out.calendar_groups = Some(shortcuts.groups.iter().filter(|g| my_calendars.as_deref() != Some(g.as_str())).cloned().collect());
+            out.my_calendar_group = my_calendars.clone();
+            for l in links.iter().filter(|l| l.email.is_empty()) {
+                let Some(k) = calendars.iter_mut().find(|k| plain_name(&k.name).eq_ignore_ascii_case(&l.name)) else { continue };
+                if !l.group.is_empty() && my_calendars.as_deref() != Some(l.group.as_str()) && k.group.is_empty() {
+                    k.group = l.group.clone();
+                }
+            }
+            for l in links.iter().filter(|l| !l.email.is_empty()) {
+                match others.iter_mut().find(|(e, _, _, _)| e.eq_ignore_ascii_case(&l.email)) {
                     Some(o) => {
                         if !l.name.is_empty() {
                             o.1 = l.name.clone();
@@ -106,7 +125,7 @@ fn sync_as(c: &Client, pim: &Pim, now: i64, calendars_only: bool) -> Result<DavS
                             o.2 = l.group.clone();
                         }
                     }
-                    None => others.push((l.email, l.name, l.group, false)),
+                    None => others.push((l.email.clone(), l.name.clone(), l.group.clone(), false)),
                 }
             }
         }

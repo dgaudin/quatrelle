@@ -160,6 +160,9 @@ pub struct Client {
     /// again at each calendar read (three on a real account, 2.6 s of the 9 the calendar took to
     /// open, 29/10).
     no_calendar: RefCell<Vec<String>>,
+    /// The Common Views folder's id, once found by its name or the shortcuts it holds; `None`
+    /// inside when this mailbox has none this session (see `ews_pim/links.rs`).
+    common_views: RefCell<Option<Option<String>>>,
     /// The folders whose changes the server won't give this session (`SyncFolderItems` refused
     /// from nothing: public folders, on some servers), by the element naming them: read whole, as
     /// before, without asking again.
@@ -417,6 +420,7 @@ impl Client {
             replace_outlook_rules: Cell::new(false),
             user_agent: None,
             no_calendar: RefCell::new(Vec::new()),
+            common_views: RefCell::new(None),
             changes_refused: RefCell::new(Vec::new()),
             fields_refused: Cell::new(false),
             clock: Cell::new(None),
@@ -455,6 +459,7 @@ impl Client {
             replace_outlook_rules: Cell::new(false),
             user_agent: self.user_agent.clone(),
             no_calendar: self.no_calendar.clone(),
+            common_views: self.common_views.clone(),
             changes_refused: self.changes_refused.clone(),
             fields_refused: self.fields_refused.clone(),
             clock: self.clock.clone(),
@@ -463,6 +468,16 @@ impl Client {
             once: Cell::new(false),
             lost: Cell::new(false),
         }
+    }
+
+    /// The Common Views folder's id, once found (`None` inside when this mailbox has none).
+    pub(crate) fn common_views(&self) -> Option<Option<String>> {
+        self.common_views.borrow().clone()
+    }
+
+    /// Keep the Common Views folder's id (or that there is none) for this session.
+    pub(crate) fn keep_common_views(&self, id: &Option<String>) {
+        *self.common_views.borrow_mut() = Some(id.clone());
     }
 
     /// Whether the server refused an appointment's fields asked by name this session.

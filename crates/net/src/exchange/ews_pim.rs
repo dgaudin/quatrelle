@@ -14,7 +14,7 @@
 //! occurrences with it, and the other calendars read again. Notes and tasks go with them (the
 //! Notes and Tasks folders).
 
-use std::collections::{BTreeMap, HashMap};
+use std::collections::BTreeMap;
 use std::time::{Duration, Instant};
 
 use quatrelle_model::ical::{Attendee, CalEvent, PrivateKind, ShowAs};
@@ -424,138 +424,6 @@ fn delete(c: &Client, id: &str, task: bool, cancel: bool) -> Result<()> {
     .map(drop)
 }
 
-/// A calendar Outlook keeps in a group of its Calendar pane (a colleague's in a team's group, a
-/// room's…): whose it is, the name shown, and the group's name.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) struct CalendarLink {
-    pub email: String,
-    pub name: String,
-    pub group: String,
-}
-
-/// Navigation shortcuts read at most.
-const MAX_LINKS: usize = 300;
-
-/// A navigation shortcut that names a calendar in a group: its X.500 directory name, the name
-/// Outlook shows, and the group. `None` for another shortcut, or one that isn't a calendar
-/// another user owns. Read as hostile XML. For the fuzz target too.
-fn shortcut_of(it: &El) -> Option<(String, String, String)> {
-    let text = |tag: &str| ext_text(it, tag);
-    let int = |tag: &str| text(tag).and_then(|v| v.trim().parse::<i64>().ok());
-    // A calendar (section 3) another user owns (kind 2), in a group.
-    if text("0x001A") != Some("IPM.Microsoft.WunderBar.Link") || int("0x6852") != Some(3) || int("0x6849") != Some(2) {
-        return None;
-    }
-    let dn = text("0x6854").and_then(|v| crate::ews::unb64(v.trim())).and_then(|b| address_book_dn(&b))?;
-    // As a folder's name: a length the Calendar pane can show.
-    let name = text("0x0E1D").map(str::trim).filter(|n| !n.is_empty()).unwrap_or_default().chars().take(255).collect::<String>();
-    let group = text("0x6851").unwrap_or_default().trim().chars().take(255).collect::<String>();
-    Some((dn, name, group))
-}
-
-/// The calendars named by navigation shortcuts in a `FindItem` answer's items, each address book
-/// entry once, at most [`MAX_LINKS`], before the directory resolves them. For the fuzz target.
-#[doc(hidden)]
-pub fn shortcuts_listed(doc: &El) -> Vec<(String, String, String)> {
-    let items: Vec<El> = doc.find("Items").map(|i| i.kids.clone()).unwrap_or_default();
-    let mut out: Vec<(String, String, String)> = Vec::new();
-    for it in items.iter().take(MAX_LINKS) {
-        let Some((dn, name, group)) = shortcut_of(it) else { continue };
-        if out.iter().any(|(d, _, _)| *d == dn) {
-            continue;
-        }
-        out.push((dn, name, group));
-    }
-    out
-}
-
-/// The calendars Outlook keeps in groups of its Calendar pane. Outlook stores its groups as
-/// navigation shortcuts ([MS-OXOCFG] 2.2.9): hidden items of the mailbox's Common Views folder,
-/// each naming its group (`PidTagWlinkGroupName`), its section (3: Calendar), its kind (2: a
-/// folder another user owns) and that user's address book entry (`PidTagWlinkAddressBookEID`),
-/// whose X.500 name Exchange resolves to an address.
-pub(crate) fn calendar_links(c: &Client) -> Result<Vec<CalendarLink>> {
-    let m = c.call_one(
-        "<m:FindFolder Traversal=\"Shallow\"><m:FolderShape><t:BaseShape>IdOnly</t:BaseShape><t:AdditionalProperties>\
-         <t:FieldURI FieldURI=\"folder:DisplayName\"/></t:AdditionalProperties></m:FolderShape>\
-         <m:IndexedPageFolderView MaxEntriesReturned=\"200\" Offset=\"0\" BasePoint=\"Beginning\"/>\
-         <m:ParentFolderIds><t:DistinguishedFolderId Id=\"root\"/></m:ParentFolderIds></m:FindFolder>",
-    )?;
-    let mut folders = Vec::new();
-    if let Some(rf) = m.child("RootFolder") {
-        rf.all("Folder", &mut folders);
-    }
-    let Some(views) = folders.iter().find(|f| f.text_of("DisplayName") == Some("Common Views")).and_then(|f| f.child("FolderId")?.attr("Id")) else {
-        return Ok(Vec::new());
-    };
-    let prop = |tag: &str, kind: &str| format!("<t:ExtendedFieldURI PropertyTag=\"{tag}\" PropertyType=\"{kind}\"/>");
-    let m = c.call_one(&format!(
-        "<m:FindItem Traversal=\"Associated\"><m:ItemShape><t:BaseShape>IdOnly</t:BaseShape><t:AdditionalProperties>{}{}{}{}{}{}\
-         </t:AdditionalProperties></m:ItemShape><m:IndexedPageItemView MaxEntriesReturned=\"{MAX_LINKS}\" Offset=\"0\" BasePoint=\"Beginning\"/>\
-         <m:ParentFolderIds><t:FolderId Id=\"{}\"/></m:ParentFolderIds></m:FindItem>",
-        prop("0x001A", "String"),
-        prop("0x0E1D", "String"),
-        prop("0x6849", "Integer"),
-        prop("0x6851", "String"),
-        prop("0x6852", "Integer"),
-        prop("0x6854", "Binary"),
-        esc(views)
-    ))?;
-    let items: Vec<El> = m.find("Items").map(|i| i.kids.clone()).unwrap_or_default();
-    let mut resolved: HashMap<String, Option<String>> = HashMap::new();
-    let mut out: Vec<CalendarLink> = Vec::new();
-    for it in items.iter().take(MAX_LINKS) {
-        let Some((dn, name, group)) = shortcut_of(it) else { continue };
-        let email = match resolved.get(&dn) {
-            Some(e) => e.clone(),
-            None => {
-                let e = resolve(c, &dn);
-                resolved.insert(dn.clone(), e.clone());
-                e
-            }
-        };
-        let Some(email) = email.filter(|e| !e.eq_ignore_ascii_case(c.email())) else { continue };
-        if out.iter().any(|l| l.email == email) {
-            continue;
-        }
-        let name = if name.is_empty() { email.clone() } else { name };
-        out.push(CalendarLink { email, name, group });
-    }
-    Ok(out)
-}
-
-/// An extended property's value, by its tag (`0x6851`, as EWS gives it back).
-fn ext_text<'a>(it: &'a El, tag: &str) -> Option<&'a str> {
-    it.children("ExtendedProperty")
-        .find(|p| p.child("ExtendedFieldURI").and_then(|u| u.attr("PropertyTag")).is_some_and(|t| crate::ews::is_tag(t, tag)))
-        .and_then(|p| p.text_of("Value"))
-}
-
-/// The X.500 name in an Exchange address book entry id ([MS-OXCDATA] 2.2.5.2: flags, the
-/// provider's UID, version and type, then the name, ending in a zero byte).
-fn address_book_dn(b: &[u8]) -> Option<String> {
-    const PROVIDER: [u8; 16] = [0xDC, 0xA7, 0x40, 0xC8, 0xC0, 0x42, 0x10, 0x1A, 0xB4, 0xB9, 0x08, 0x00, 0x2B, 0x2F, 0xE1, 0x82];
-    if b.get(4..20)? != PROVIDER {
-        return None;
-    }
-    let rest = b.get(28..)?;
-    let end = rest.iter().position(|c| *c == 0).unwrap_or(rest.len()).min(1024);
-    let dn = std::str::from_utf8(rest.get(..end)?).ok()?.trim();
-    (dn.starts_with('/') && dn.is_ascii()).then(|| dn.to_string())
-}
-
-/// The address behind an X.500 name, as Exchange's directory has it.
-fn resolve(c: &Client, dn: &str) -> Option<String> {
-    let m = c
-        .call_one(&format!(
-            "<m:ResolveNames ReturnFullContactData=\"false\" SearchScope=\"ActiveDirectory\"><m:UnresolvedEntry>{}</m:UnresolvedEntry></m:ResolveNames>",
-            esc(dn)
-        ))
-        .ok()?;
-    let email = m.find("Mailbox").and_then(|b| b.text_of("EmailAddress"))?.trim().to_ascii_lowercase();
-    email.contains('@').then_some(email)
-}
-
 /// The calendar folder: this mailbox's, or someone else's by their address.
 /// The name the server gives one of the account's own special folders (`calendar`, `contacts`):
 /// the mailbox's language's ("Agenda", "Contactpersonen"). `None` when it doesn't say.
@@ -623,6 +491,7 @@ mod changes;
 mod contacts;
 pub(crate) mod events;
 mod files;
+mod links;
 pub mod mailtips;
 mod own_calendars;
 mod push;
@@ -638,6 +507,11 @@ use events::{event_fields, listed_exception, modified_occurrences, occurrence_it
 pub use events::{event_of, exception_of, own_organizer};
 pub use files::attachment;
 pub(crate) use files::{MAX_EVENT_FILES, MAX_FILE};
+#[cfg(test)]
+pub(crate) use links::address_book_dn;
+pub(crate) use links::calendar_links;
+pub use links::shortcuts_listed;
+pub(crate) use links::{create_calendar_group, delete_calendar_group, move_calendar_group, move_calendar_to_group, rename_calendar_group};
 #[cfg(test)]
 pub(crate) use push::item_gone_code;
 use push::{answer_pending, push_events};

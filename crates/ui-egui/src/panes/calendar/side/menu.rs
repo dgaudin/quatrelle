@@ -9,7 +9,7 @@
 
 use egui::Button;
 use quatrelle_engine::model::pim::{CalendarInfo, teams::one_line};
-use quatrelle_engine::{AccountState, CalendarRefusal, PALETTE_COLORS, RemovalRefusal};
+use quatrelle_engine::{AccountState, CalendarRefusal, GroupRefusal, PALETTE_COLORS, RemovalRefusal};
 
 use super::*;
 
@@ -27,6 +27,16 @@ pub(crate) fn refusal_text(r: CalendarRefusal) -> &'static str {
         CalendarRefusal::Main => tl!("The account's main calendar stays as it is"),
         CalendarRefusal::NotOwn => tl!("Only the account's own calendars can be changed"),
         CalendarRefusal::NotRead => tl!("Waiting for the server's list of calendars"),
+    }
+}
+
+/// Why a calendar group can't be made, renamed, deleted or moved, as the menu says it when
+/// pointed at.
+pub(crate) fn group_refusal_text(r: GroupRefusal) -> &'static str {
+    match r {
+        GroupRefusal::Server => tl!("This account's server doesn't keep calendar groups"),
+        GroupRefusal::Order => tl!("Microsoft 365 keeps no order for calendar groups"),
+        GroupRefusal::Move => tl!("Microsoft 365 can't move a calendar between groups"),
     }
 }
 
@@ -68,6 +78,10 @@ pub(super) fn calendar_menu(ui: &mut Ui, s: &Session, a: &AccountState, c: &Cale
     if entry(ui, Icon::CalendarAdd, tl!("New calendar…"), false, new.is_none(), new) {
         acts.push(Action::Dialog(Dialog::new_calendar(account)));
     }
+    let new_group = s.calendar_groups_change(account).err().map(group_refusal_text);
+    if entry(ui, Icon::CalendarAdd, tl!("New calendar group…"), false, new_group.is_none(), new_group) {
+        acts.push(Action::Dialog(Dialog::new_calendar_group(account)));
+    }
     let change = s.calendar_change(account, Some(id)).err().map(refusal_text);
     if entry(ui, Icon::Rename, tl!("Rename…"), false, change.is_none(), change) {
         acts.push(Action::Dialog(Dialog::rename_calendar(account, c)));
@@ -82,6 +96,39 @@ pub(super) fn calendar_menu(ui: &mut Ui, s: &Session, a: &AccountState, c: &Cale
     }
     if entry(ui, Icon::ChevronDown, tl!("Move down"), false, s.can_move_calendar(account, id, false), None) {
         acts.push(Action::Run("calendar.moveDown", which.clone()));
+    }
+    // Into one of the server's calendar groups (Outlook's Move to group).
+    let groups: Vec<String> = s.pim.get(account).map(|p| p.calendar_groups.clone()).unwrap_or_default();
+    if !groups.is_empty() {
+        let why = if extra.opened.is_some() {
+            Some(tl!("This calendar isn't in Outlook's calendar groups yet"))
+        } else {
+            s.calendar_group_move(account).err().map(group_refusal_text)
+        };
+        let resp = ui
+            .add_enabled_ui(why.is_none(), |ui| {
+                ui.menu_button((widgets::menu_icon(Some(Icon::Move)), tl!("Move to group")), |ui| {
+                    if !c.id.starts_with("shared:")
+                        && !c.main
+                        && !c.group.is_empty()
+                        && entry(ui, Icon::Calendar, tl!("My calendars"), false, true, None)
+                    {
+                        acts.push(Action::Run("calendar.moveTo", json!({"account": account, "calendar": id, "group": ""})));
+                    }
+                    for g in &groups {
+                        if g.eq_ignore_ascii_case(&c.group) {
+                            continue;
+                        }
+                        if entry(ui, Icon::Folder, g, false, true, None) {
+                            acts.push(Action::Run("calendar.moveTo", json!({"account": account, "calendar": id, "group": g})));
+                        }
+                    }
+                });
+            })
+            .response;
+        if let Some(why) = why {
+            resp.on_disabled_hover_text(why);
+        }
     }
     // Subscribed to by its link: read again, or removed.
     if extra.web {
@@ -120,6 +167,36 @@ fn remove_entry(ui: &mut Ui, s: &Session, account: &str, id: &str, acts: &mut Ve
     if r.clicked() {
         acts.push(Action::Run("calendar.remove", json!({"account": account, "calendar": id})));
         ui.close();
+    }
+}
+
+/// A calendar group header's right-click menu: a group made, this one renamed or deleted where
+/// the account's server allows it, and its place among the groups (greyed, with why, where it
+/// doesn't).
+pub(super) fn group_menu(ui: &mut Ui, s: &Session, a: &AccountState, group: &str, acts: &mut Vec<Action>) {
+    let account = a.config.id.as_str();
+    let change = s.calendar_groups_change(account).err().map(group_refusal_text);
+    if entry(ui, Icon::CalendarAdd, tl!("New calendar group…"), false, change.is_none(), change) {
+        acts.push(Action::Dialog(Dialog::new_calendar_group(account)));
+    }
+    let Some(at) = s.pim.get(account).and_then(|p| p.calendar_groups.iter().position(|g| g.eq_ignore_ascii_case(group))) else {
+        return;
+    };
+    let n = s.pim.get(account).map(|p| p.calendar_groups.len()).unwrap_or(0);
+    ui.separator();
+    if entry(ui, Icon::Rename, tl!("Rename group…"), false, change.is_none(), change) {
+        acts.push(Action::Dialog(Dialog::rename_calendar_group(account, group)));
+    }
+    if entry(ui, Icon::Delete, tl!("Delete group…"), false, change.is_none(), change) {
+        acts.push(Action::Dialog(Dialog::delete_calendar_group(account, group)));
+    }
+    ui.separator();
+    let order = s.calendar_group_order(account).err().map(group_refusal_text);
+    if entry(ui, Icon::ChevronUp, tl!("Move up"), false, order.is_none() && at > 0, order) {
+        acts.push(Action::Run("calendar.group.move", json!({"account": account, "group": group, "up": true})));
+    }
+    if entry(ui, Icon::ChevronDown, tl!("Move down"), false, order.is_none() && at + 1 < n, order) {
+        acts.push(Action::Run("calendar.group.move", json!({"account": account, "group": group, "up": false})));
     }
 }
 

@@ -2508,3 +2508,16 @@ presence	Offline	غير متصل
 	No category	بلا فئة
 	Flagged messages	الرسائل المعلّمة
 	In folder	في المجلد
+	New calendar group…	مجموعة تقويمات جديدة…
+	Rename group…	إعادة تسمية المجموعة…
+	Delete group…	حذف المجموعة…
+	Move to group	نقل إلى المجموعة
+	Delete the calendar group {name}?	هل تريد حذف مجموعة التقويمات {name}؟
+	New calendar group	مجموعة تقويمات جديدة
+	Rename calendar group	إعادة تسمية مجموعة التقويمات
+	Delete calendar group	حذف مجموعة التقويمات
+	This account's server doesn't keep calendar groups	خادم هذا الحساب لا يحتفظ بمجموعات التقويمات
+	Microsoft 365 keeps no order for calendar groups	لا يحتفظ Microsoft 365 بترتيب لمجموعات التقويمات
+	Microsoft 365 can't move a calendar between groups	لا يمكن لـ Microsoft 365 نقل تقويم بين المجموعات
+	Group name	اسم المجموعة
+	This calendar isn't in Outlook's calendar groups yet	هذا التقويم ليس بعد في مجموعات تقويمات Outlook

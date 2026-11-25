@@ -108,6 +108,14 @@ pub struct Data {
     /// The next request on a connection already used is met with the connection closed, unread
     /// (a connection the server closed for being idle), this many times.
     pub drop_kept: usize,
+    /// A `FindItem` page never says it holds the last item (a server whose paging is cut short
+    /// or inconsistent).
+    pub wlinks_more: bool,
+    /// A group made with `CreateItem` is stored but not given back by `FindItem` (a reread that
+    /// diverges).
+    pub hide_created_group: bool,
+    /// The shortcuts hidden from `FindItem` by [`Data::hide_created_group`].
+    pub hidden_wlinks: Vec<String>,
     /// The next requests are answered "busy" (`ErrorServerBusy`, back off 10 ms), this many times.
     pub busy: usize,
     /// The search for what messages are (`FindItem` on `item:ItemClass`): refused
@@ -196,6 +204,9 @@ pub struct Data {
     pub source_routes: Vec<String>,
     /// Outlook's navigation shortcuts, as items of the Common Views folder (hidden ones).
     pub wlinks: Vec<String>,
+    /// The name the server gives its Common Views folder, in the mailbox's language (empty:
+    /// "Common Views", as [MS-OXOSFLD] 2.2.1 names it).
+    pub common_views_name: String,
     /// The directory: (X.500 name, address).
     pub directory: Vec<(String, String)>,
     /// The Global Address List: (name, address), found by the start of a name or an address.
@@ -379,6 +390,9 @@ impl Default for Data {
             password_changed: false,
             refused_sign_ins: Vec::new(),
             drop_kept: 0,
+            wlinks_more: false,
+            hide_created_group: false,
+            hidden_wlinks: Vec::new(),
             no_commit_time: false,
             limits: None,
             outlook_rules: false,
@@ -420,6 +434,7 @@ impl Default for Data {
             anchored_items: false,
             source_routes: Vec::new(),
             wlinks: Vec::new(),
+            common_views_name: String::new(),
             directory: Vec::new(),
             people: Vec::new(),
             mailbox_types: Vec::new(),

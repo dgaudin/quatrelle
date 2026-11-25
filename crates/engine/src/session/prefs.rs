@@ -117,6 +117,10 @@ pub struct Prefs {
     /// Day and week show each calendar in a column of its own (Outlook's side-by-side view)
     /// rather than all of them together.
     pub calendars_side_by_side: bool,
+    /// Calendar group headers folded on this computer, by the group's name (as Outlook remembers
+    /// them).
+    #[serde(skip_serializing_if = "BTreeSet::is_empty")]
+    pub folded_calendar_groups: BTreeSet<String>,
     /// Months shown one under another in the calendar's side pane (1 to 6).
     pub calendar_months: u8,
     /// The address book Select Names opens with (Outlook's "Show this address list first"):
@@ -382,6 +386,7 @@ impl Default for Prefs {
             calendar_order: std::collections::BTreeMap::new(),
             removed_calendars: BTreeSet::new(),
             calendars_side_by_side: false,
+            folded_calendar_groups: BTreeSet::new(),
             calendar_months: 2,
             address_book: "all".into(),
             task_views: BTreeMap::new(),

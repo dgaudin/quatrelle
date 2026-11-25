@@ -111,15 +111,19 @@ impl Data {
                     }
                 }
             }
-            // The mailbox's own root (above the mail folders): its Common Views folder.
+            // The mailbox's own root (above the mail folders): its Common Views folder, named in
+            // the mailbox's language.
             "FindFolder"
                 if op.attr("Traversal") == Some("Shallow")
                     && op.child("ParentFolderIds").and_then(|p| p.kids.first()).is_some_and(|f| f.attr("Id") == Some("root")) =>
             {
-                out.push(ok("<m:RootFolder IncludesLastItemInRange=\"true\"><t:Folders><t:Folder><t:FolderId Id=\"COMMON-VIEWS\"/>\
-                     <t:DisplayName>Common Views</t:DisplayName></t:Folder><t:Folder><t:FolderId Id=\"FINDER\"/><t:DisplayName>Finder</t:DisplayName>\
-                     </t:Folder></t:Folders></m:RootFolder>"
-                    .into()));
+                let name = if self.common_views_name.is_empty() { "Common Views" } else { &self.common_views_name };
+                out.push(ok(format!(
+                    "<m:RootFolder IncludesLastItemInRange=\"true\"><t:Folders><t:Folder><t:FolderId Id=\"COMMON-VIEWS\"/>\
+                     <t:DisplayName>{}</t:DisplayName></t:Folder><t:Folder><t:FolderId Id=\"FINDER\"/><t:DisplayName>Finder</t:DisplayName>\
+                     </t:Folder></t:Folders></m:RootFolder>",
+                    esc(name)
+                )));
             }
             // Shallow (public folders): the folders right under the one asked for, in the pages
             // asked for (or scripted).

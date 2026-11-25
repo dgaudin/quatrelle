@@ -519,9 +519,12 @@ pub fn sync(c: &Client, pim: &Pim, now: i64) -> Result<DavSync> {
     // The groups not all read: which calendars are the account's own can't be told (a colleague's
     // kept only in a group would pass for one), so none but the main one counts as such.
     let mut groups_read = true;
+    let mut groups_listed = true;
+    let mut group_names: Vec<String> = Vec::new();
     let groups = c.all("/me/calendarGroups?$top=50&$select=id,name", 50).unwrap_or_else(|e| {
         log::info!("the calendar groups weren't read: {e}");
         groups_read = false;
+        groups_listed = false;
         Vec::new()
     });
     for g in groups {
@@ -539,6 +542,9 @@ pub fn sync(c: &Client, pim: &Pim, now: i64) -> Result<DavSync> {
         };
         // The group holding the account's own calendar is its My Calendars: listed as its own.
         let mine = list.iter().any(|v| own_default.as_deref() == Some(s(v, "id").as_str()));
+        if !mine && !gname.is_empty() && !group_names.iter().any(|n| n.eq_ignore_ascii_case(&gname)) {
+            group_names.push(gname.clone());
+        }
         let group = if mine { String::new() } else { gname.clone() };
         for v in &list {
             let id = s(v, "id");
@@ -565,6 +571,9 @@ pub fn sync(c: &Client, pim: &Pim, now: i64) -> Result<DavSync> {
                 None => {}
             }
         }
+    }
+    if groups_listed {
+        out.calendar_groups = Some(group_names);
     }
     if !groups_read {
         calendars.iter_mut().filter(|x| !x.main).for_each(|x| x.not_own = true);

@@ -56,8 +56,26 @@ impl Data {
             }
             "FindItem" if op.attr("Traversal") == Some("Associated") => {
                 let folder = op.child("ParentFolderIds").and_then(|p| p.kids.first()).and_then(|f| self.folder_id(f)).unwrap_or_default();
-                let items = if folder == "COMMON-VIEWS" { self.wlinks.concat() } else { String::new() };
-                out.push(ok(format!("<m:RootFolder IncludesLastItemInRange=\"true\"><t:Items>{items}</t:Items></m:RootFolder>")));
+                let mut items: Vec<&String> = if folder == "COMMON-VIEWS" {
+                    let hidden = &self.hidden_wlinks;
+                    self.wlinks.iter().filter(|w| !wlink_id(w).is_some_and(|id| hidden.contains(&id))).collect()
+                } else {
+                    Vec::new()
+                };
+                // A restriction on the message class is honored, as a client looking for the
+                // navigation shortcuts asks ([MS-OXOCFG] 2.2.9).
+                if let Some(class) = class_wanted(op) {
+                    items.retain(|w| wlink_class(w).as_deref() == Some(class.as_str()));
+                }
+                // One page, and whether more follow, as Exchange answers an indexed page.
+                let view = op.child("IndexedPageItemView");
+                let max: usize = view.and_then(|v| v.attr("MaxEntriesReturned")).and_then(|o| o.parse().ok()).unwrap_or(1000);
+                let offset: usize = view.and_then(|v| v.attr("Offset")).and_then(|o| o.parse().ok()).unwrap_or(0);
+                let total = items.len();
+                let wanted = wanted_props(op);
+                let page: String = items.iter().skip(offset).take(max).map(|w| props_only(w, &wanted)).collect();
+                let last = !self.wlinks_more && offset.saturating_add(max) >= total;
+                out.push(ok(format!("<m:RootFolder IncludesLastItemInRange=\"{last}\"><t:Items>{page}</t:Items></m:RootFolder>")));
             }
             "ResolveNames" => return self.resolve_names(op),
             "ExpandDL" => return self.expand_dl(op),
@@ -319,6 +337,28 @@ impl Data {
                 }
                 let folder = op.child("SavedItemFolderId").and_then(|s| s.kids.first()).and_then(|f| self.folder_id(f)).unwrap_or_default();
                 for mut m in op.child("Items").map(|i| i.kids.clone()).unwrap_or_default() {
+                    // A navigation shortcut in the Common Views folder ([MS-OXOCFG] 2.2.9): an
+                    // associated item, made with its item id and the properties FindItem asks for.
+                    if folder == "COMMON-VIEWS" {
+                        let id = self.id("W");
+                        let class = m.text_of("ItemClass").unwrap_or_default().to_string();
+                        let subject = m.text_of("Subject").unwrap_or_default().to_string();
+                        let mut stored = xml(&m);
+                        stored = stored.replacen('>', &format!("><t:ItemId Id=\"{}\" ChangeKey=\"ck\"/>", esc(&id)), 1);
+                        let extra = format!(
+                            "<t:ExtendedProperty><t:ExtendedFieldURI PropertyTag=\"0x1A\" PropertyType=\"String\"/><t:Value>{}</t:Value></t:ExtendedProperty>\
+                             <t:ExtendedProperty><t:ExtendedFieldURI PropertyTag=\"0xE1D\" PropertyType=\"String\"/><t:Value>{}</t:Value></t:ExtendedProperty>",
+                            esc(&class),
+                            esc(&subject)
+                        );
+                        stored = stored.replacen("</t:Message>", &format!("{extra}</t:Message>"), 1);
+                        if self.hide_created_group {
+                            self.hidden_wlinks.push(id.clone());
+                        }
+                        self.wlinks.push(stored);
+                        out.push(ok(format!("<m:Items><t:Message><t:ItemId Id=\"{id}\" ChangeKey=\"ck\"/></t:Message></m:Items>")));
+                        continue;
+                    }
                     let sticky = m.text_of("ItemClass").is_some_and(|c| c.starts_with("IPM.StickyNote"));
                     // As Exchange: a message (a sticky note is one) is made with its disposition said.
                     if m.name == "Message" && op.attr("MessageDisposition").is_none() {
@@ -445,6 +485,39 @@ impl Data {
             "UpdateItem" => {
                 for ch in op.child("ItemChanges").map(|c| c.kids.clone()).unwrap_or_default() {
                     let id = ch.child("ItemId").and_then(|i| i.attr("Id")).unwrap_or_default().to_string();
+                    // A navigation shortcut ([MS-OXOCFG] 2.2.9): its fields changed as asked.
+                    if let Some(pos) = self.wlinks.iter().position(|w| wlink_id(w).as_deref() == Some(id.as_str())) {
+                        let mut e = parse(&self.wlinks[pos]);
+                        let mut item = e.kids.remove(0);
+                        let updates = ch.child("Updates").map(|u| u.kids.clone()).unwrap_or_default();
+                        for u in updates {
+                            if u.name != "SetItemField" {
+                                continue;
+                            }
+                            if let Some(field) = u.find("FieldURI").and_then(|f| f.attr("FieldURI")) {
+                                let field = field.split(':').nth(1).unwrap_or("").to_string();
+                                if !field.is_empty() {
+                                    let value = u.kids.iter().find(|k| k.name != "FieldURI").and_then(|w| w.kids.first()).cloned();
+                                    item.kids.retain(|k| k.name != field);
+                                    if let Some(v) = value {
+                                        if field == "Subject" {
+                                            set_ext(&mut item, "0xE1D", "String", &v.text);
+                                        }
+                                        item.kids.push(v);
+                                    }
+                                }
+                            }
+                            if let Some(tag) = u.child("ExtendedFieldURI").and_then(|f| f.attr("PropertyTag"))
+                                && let Some(value) = u.find("ExtendedProperty").and_then(|p| p.text_of("Value"))
+                            {
+                                let kind = u.child("ExtendedFieldURI").and_then(|f| f.attr("PropertyType")).unwrap_or("String");
+                                set_ext(&mut item, tag, kind, value);
+                            }
+                        }
+                        self.wlinks[pos] = xml(&item);
+                        out.push(ok(String::new()));
+                        continue;
+                    }
                     if !self.may_change(&id) {
                         out.push(err("ErrorAccessDenied"));
                         continue;
@@ -580,6 +653,13 @@ impl Data {
             }
             "DeleteItem" => {
                 for id in ids(op.child("ItemIds")) {
+                    // A navigation shortcut ([MS-OXOCFG] 2.2.9) goes.
+                    if let Some(pos) = self.wlinks.iter().position(|w| wlink_id(w).as_deref() == Some(id.as_str())) {
+                        self.wlinks.remove(pos);
+                        self.hidden_wlinks.retain(|h| h != &id);
+                        out.push(ok(String::new()));
+                        continue;
+                    }
                     if !self.may_change(&id) || self.undeletable.contains(&id) {
                         out.push(err("ErrorAccessDenied"));
                         continue;
@@ -699,4 +779,82 @@ impl Data {
         }
         (format!("{}Response", op.name), out)
     }
+}
+
+/// The id of a navigation shortcut kept as its XML.
+fn wlink_id(w: &str) -> Option<String> {
+    parse(w).find("ItemId")?.attr("Id").map(str::to_string)
+}
+
+/// Set an extended property of a shortcut kept as an element, replacing its namesake.
+fn set_ext(item: &mut El, tag: &str, kind: &str, value: &str) {
+    item.kids.retain(|k| {
+        !(k.name == "ExtendedProperty" && k.child("ExtendedFieldURI").and_then(|u| u.attr("PropertyTag")).is_some_and(|t| crate::ews::is_tag(t, tag)))
+    });
+    if let Some(e) = parse(&format!(
+        "<t:ExtendedProperty><t:ExtendedFieldURI PropertyTag=\"{tag}\" PropertyType=\"{kind}\"/><t:Value>{}</t:Value></t:ExtendedProperty>",
+        esc(value)
+    ))
+    .kids
+    .first()
+    {
+        item.kids.push(e.clone());
+    }
+}
+
+/// The message class a `FindItem` restriction asks for, when it asks for one (`IsEqualTo` on
+/// `message:MessageClass`).
+fn class_wanted(op: &El) -> Option<String> {
+    let eq = op.child("Restriction")?.child("IsEqualTo")?;
+    if eq.find("FieldURI")?.attr("FieldURI")? != "message:MessageClass" {
+        return None;
+    }
+    Some(eq.find("Constant")?.attr("Value")?.to_string())
+}
+
+/// The extended properties a `FindItem` asks for, by tag and type: a stored property is only
+/// given back under the type it was stored with, as Exchange does.
+fn wanted_props(op: &El) -> Vec<(String, String)> {
+    op.find("AdditionalProperties")
+        .map(|a| {
+            a.children("ExtendedFieldURI")
+                .filter_map(|u| Some((norm_tag(u.attr("PropertyTag")?), u.attr("PropertyType")?.to_ascii_lowercase())))
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// A property tag as `0x` and four hex digits, whichever way it was written.
+fn norm_tag(t: &str) -> String {
+    let hex = t.trim().strip_prefix("0x").or_else(|| t.trim().strip_prefix("0X"));
+    hex.and_then(|h| u32::from_str_radix(h, 16).ok()).map(|n| format!("0x{n:04X}")).unwrap_or_else(|| t.trim().to_ascii_lowercase())
+}
+
+/// A stored shortcut with only the extended properties asked for under their own type.
+fn props_only(w: &str, wanted: &[(String, String)]) -> String {
+    if wanted.is_empty() {
+        return w.to_string();
+    }
+    let e = parse(w);
+    let Some(mut m) = e.kids.first().cloned() else { return w.to_string() };
+    m.kids.retain(|k| {
+        if k.name != "ExtendedProperty" {
+            return true;
+        }
+        let Some(u) = k.child("ExtendedFieldURI") else { return false };
+        let tag = u.attr("PropertyTag").map(norm_tag);
+        let ty = u.attr("PropertyType").map(str::to_ascii_lowercase);
+        wanted.iter().any(|(wt, wy)| tag.as_deref() == Some(wt.as_str()) && ty.as_deref() == Some(wy.as_str()))
+    });
+    xml(&m)
+}
+
+/// A navigation shortcut's message class (`0x001A`), as it was kept.
+fn wlink_class(w: &str) -> Option<String> {
+    let e = parse(w);
+    let m = e.kids.first()?;
+    m.children("ExtendedProperty")
+        .find(|p| p.child("ExtendedFieldURI").and_then(|u| u.attr("PropertyTag")).is_some_and(|t| crate::ews::is_tag(t, "0x001A")))
+        .and_then(|p| p.text_of("Value"))
+        .map(str::to_string)
 }

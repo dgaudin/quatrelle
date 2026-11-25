@@ -549,6 +549,11 @@ pub async fn apply_remote<H: Http>(c: &Client<H>, st: &State, op: &Op) -> Result
         Op::CreateCalendar { .. } | Op::RenameCalendar { .. } | Op::DeleteCalendar { .. } => {
             Err(Error::No("this server's calendars aren't made or changed from here".into()))
         }
+        Op::CreateCalendarGroup { .. }
+        | Op::RenameCalendarGroup { .. }
+        | Op::DeleteCalendarGroup { .. }
+        | Op::MoveCalendarGroup { .. }
+        | Op::MoveCalendarToGroup { .. } => Err(Error::No("this server's calendar groups aren't changed from here".into())),
     }
 }
 

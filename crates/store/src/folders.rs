@@ -421,7 +421,12 @@ impl Store {
                 | Op::SetArchiveTag { .. }
                 | Op::CreateCalendar { .. }
                 | Op::RenameCalendar { .. }
-                | Op::DeleteCalendar { .. } => {}
+                | Op::DeleteCalendar { .. }
+                | Op::CreateCalendarGroup { .. }
+                | Op::RenameCalendarGroup { .. }
+                | Op::DeleteCalendarGroup { .. }
+                | Op::MoveCalendarGroup { .. }
+                | Op::MoveCalendarToGroup { .. } => {}
             }
             // The list just read has every edit waiting already: none is made again on it (a
             // burst of moves made offline made them all again at each one, over the whole list).
@@ -490,7 +495,12 @@ impl Store {
             | Op::SetArchiveTag { .. }
             | Op::CreateCalendar { .. }
             | Op::RenameCalendar { .. }
-            | Op::DeleteCalendar { .. } => Vec::new(),
+            | Op::DeleteCalendar { .. }
+            | Op::CreateCalendarGroup { .. }
+            | Op::RenameCalendarGroup { .. }
+            | Op::DeleteCalendarGroup { .. }
+            | Op::MoveCalendarGroup { .. }
+            | Op::MoveCalendarToGroup { .. } => Vec::new(),
         };
         quatrelle_model::sort_folders(&mut list);
         self.save_folders(account, &list)?;

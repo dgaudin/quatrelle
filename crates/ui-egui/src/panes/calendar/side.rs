@@ -4,6 +4,8 @@
 //! The calendar's side pane: a month (or several) to jump around in, then the calendars in their
 //! groups; and beside the mail, Outlook's To-Do bar.
 
+use std::collections::HashMap;
+
 use super::*;
 
 mod menu;
@@ -20,6 +22,7 @@ pub fn nav(s: &Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action>) {
         // calendar sits under its name, in the folder pane's order (issue #1).
         let sections = s.pane_sections();
         let mut groups: Vec<(String, Vec<_>)> = vec![(tl!("My calendars").to_string(), Vec::new())];
+        let mut at: HashMap<String, usize> = HashMap::from([(tl!("My calendars").to_lowercase(), 0)]);
         let mut shared = Vec::new();
         // Each account's in the order the user gave them (the server's for the others).
         for a in &s.accounts {
@@ -29,6 +32,15 @@ pub fn nav(s: &Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action>) {
                         if let Some((_, list)) = groups.first_mut() {
                             list.push((a, c));
                         }
+                    } else if !c.group.is_empty() {
+                        let key = c.group.to_lowercase();
+                        match at.get(&key) {
+                            Some(&i) => groups[i].1.push((a, c)),
+                            None => {
+                                groups.push((c.group.clone(), vec![(a, c)]));
+                                at.insert(key, groups.len() - 1);
+                            }
+                        }
                     } else {
                         shared.push((a, c));
                     }
@@ -37,13 +49,40 @@ pub fn nav(s: &Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action>) {
                         list.push((a, c));
                     }
                 } else {
-                    match groups.iter_mut().find(|(g, _)| *g == c.group) {
-                        Some((_, list)) => list.push((a, c)),
-                        None => groups.push((c.group.clone(), vec![(a, c)])),
+                    let key = c.group.to_lowercase();
+                    match at.get(&key) {
+                        Some(&i) => groups[i].1.push((a, c)),
+                        None => {
+                            groups.push((c.group.clone(), vec![(a, c)]));
+                            at.insert(key, groups.len() - 1);
+                        }
                     }
                 }
             }
         }
+        // The groups the server keeps, in its order: one with no calendar left still has its
+        // header, as in Outlook; groups the server didn't name come after, in the order met.
+        let mut order: Vec<String> = Vec::new();
+        for a in &s.accounts {
+            if let Some(p) = s.pim.get(&a.config.id) {
+                for g in &p.calendar_groups {
+                    if !g.is_empty() && !order.iter().any(|x| x.eq_ignore_ascii_case(g)) {
+                        order.push(g.clone());
+                    }
+                }
+            }
+        }
+        for g in &order {
+            let key = g.to_lowercase();
+            at.entry(key).or_insert_with(|| {
+                groups.push((g.clone(), Vec::new()));
+                groups.len() - 1
+            });
+        }
+        let order_at: HashMap<String, usize> = order.iter().enumerate().map(|(i, g)| (g.to_lowercase(), i)).collect();
+        let mut middle = groups.split_off(1.min(groups.len()));
+        middle.sort_by_key(|(name, _)| order_at.get(&name.to_lowercase()).copied().unwrap_or(usize::MAX));
+        groups.extend(middle);
         groups.push((tl!("Shared calendars").to_string(), shared));
         // An account with calendars removed from the list and none of its own left in My
         // calendars keeps its heading there: they're brought back from its menu.
@@ -58,13 +97,65 @@ pub fn nav(s: &Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action>) {
             })
             .collect();
         for (n, (title, list)) in groups.iter().enumerate() {
-            if list.is_empty() && (n > 0 || bare.is_empty()) {
+            let from_server = order.iter().any(|g| g.eq_ignore_ascii_case(title));
+            if list.is_empty() && !from_server && (n > 0 || bare.is_empty()) {
                 continue;
             }
-            let group = egui::CollapsingHeader::new(RichText::new(title).font(theme::bold(13.0)).color(t.text))
-                .id_salt(("calendar-group", title))
-                .default_open(true)
-                .show(ui, |ui| {
+            let account_key = list.first().map(|(a, _)| a.config.id.as_str()).unwrap_or("");
+            let fold_key = if n == 0 {
+                "calendar:my".to_string()
+            } else if from_server {
+                format!("{account_key}/{title}")
+            } else {
+                "calendar:shared".to_string()
+            };
+            let open = !s.prefs.folded_calendar_groups.contains(&fold_key);
+            let shown: Vec<bool> = list.iter().map(|(a, c)| s.calendar_shown(&a.config.id, &c.id)).collect();
+            let all = !shown.is_empty() && shown.iter().all(|x| *x);
+            let some = shown.iter().any(|x| *x);
+            let mut show_all = false;
+            let header = ui.horizontal(|ui| {
+                let tick = group_tick(ui, all, some, &t);
+                let tip = if all { tl!("Hide") } else { tl!("Show") };
+                widgets::named(ui, &tick, tip, true, Some(all));
+                if tick.on_hover_text(tip).clicked() {
+                    show_all = true;
+                }
+                let (r, arrow) = ui.allocate_exact_size(vec2(14.0, 14.0), Sense::click());
+                widgets::named(ui, &arrow, tl!("Calendars"), true, Some(open));
+                let ink = if arrow.hovered() { t.text } else { t.dim };
+                icons::paint(ui.painter(), icons::centered(r, 11.0), if open { Icon::ChevronDown } else { Icon::ChevronRight }, ink);
+                let title_resp =
+                    ui.add(egui::Label::new(RichText::new(title).font(theme::bold(13.0)).color(t.text)).selectable(false)).interact(Sense::click());
+                (arrow, title_resp)
+            });
+            if show_all {
+                for (a, c) in list {
+                    if s.calendar_shown(&a.config.id, &c.id) != !all {
+                        acts.push(Action::Run("calendar.show", json!({"account": a.config.id, "calendar": c.id, "shown": !all})));
+                    }
+                }
+                if !list.is_empty() && !all {
+                    acts.push(Action::Run("calendar.sideBySide", json!({"on": true})));
+                }
+            }
+            if header.inner.0.clicked() || header.inner.1.clicked() {
+                acts.push(Action::Run("calendar.groupFold", json!({"group": fold_key, "folded": open})));
+            }
+            // A calendar dragged onto a group's header moves there; the header says it will take
+            // it. Only the server's groups take a calendar: My and Shared calendars are theirs.
+            if from_server {
+                if header.response.dnd_hover_payload::<DragCalendar>().is_some() {
+                    ui.painter().rect_stroke(header.response.rect, 4.0, egui::Stroke::new(2.0, t.accent), egui::StrokeKind::Inside);
+                }
+                if let Some(d) = dropped::<DragCalendar>(&header.response)
+                    && !d.group.eq_ignore_ascii_case(title)
+                {
+                    acts.push(Action::Run("calendar.moveTo", json!({"account": d.account, "calendar": d.calendar, "group": title})));
+                }
+            }
+            if open {
+                ui.indent(("calendar-group", title), |ui| {
                     let mut last: Option<String> = None;
                     for (a, c) in list {
                         if sections.len() > 1 {
@@ -74,7 +165,14 @@ pub fn nav(s: &Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action>) {
                                 last = Some(key);
                             }
                         }
-                        calendar_row(s, &t, ui, a, c, acts);
+                        let to = if from_server {
+                            Some(title.as_str())
+                        } else if n == 0 {
+                            Some("")
+                        } else {
+                            None
+                        };
+                        calendar_row(s, &t, ui, a, c, to, acts);
                     }
                     if n == 0 {
                         for a in &bare {
@@ -82,12 +180,22 @@ pub fn nav(s: &Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action>) {
                         }
                     }
                 });
+            }
             // One account, no heading of its own: My calendars has its menu.
             if n == 0
                 && sections.len() <= 1
                 && let Some(a) = list.first().map(|(a, _)| *a).or_else(|| bare.first().copied())
             {
-                group.header_response.context_menu(|ui| menu::account_menu(ui, s, a, acts));
+                header.response.context_menu(|ui| menu::account_menu(ui, s, a, acts));
+                header.inner.1.context_menu(|ui| menu::account_menu(ui, s, a, acts));
+            }
+            // A group the server keeps has its own menu.
+            let group_account = list.first().map(|(a, _)| *a).or_else(|| {
+                s.accounts.iter().find(|a| s.pim.get(&a.config.id).is_some_and(|p| p.calendar_groups.iter().any(|g| g.eq_ignore_ascii_case(title))))
+            });
+            if let Some(a) = group_account {
+                header.response.context_menu(|ui| menu::group_menu(ui, s, a, title, acts));
+                header.inner.1.context_menu(|ui| menu::group_menu(ui, s, a, title, acts));
             }
         }
         // Each in a column of its own, or all together (Outlook's side-by-side view).
@@ -113,6 +221,38 @@ pub fn nav(s: &Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action>) {
             }
         }
     });
+}
+
+/// What a calendar dragged in the side pane carries.
+struct DragCalendar {
+    account: String,
+    calendar: String,
+    group: String,
+}
+
+/// What was dropped on `resp`, if it is a `T` (asking for the wrong type loses a drop for the
+/// right one, as egui's `dnd_release_payload` takes the payload before trying its type).
+fn dropped<T: std::any::Any + Send + Sync>(resp: &egui::Response) -> Option<std::sync::Arc<T>> {
+    if egui::DragAndDrop::has_payload_of_type::<T>(&resp.ctx) { resp.dnd_release_payload::<T>() } else { None }
+}
+
+/// A tick for a group's header: all its calendars shown, some, or none. A click shows them all,
+/// or hides them all.
+fn group_tick(ui: &mut Ui, all: bool, some: bool, t: &Tokens) -> egui::Response {
+    let (r, resp) = ui.allocate_exact_size(vec2(14.0, 14.0), Sense::click());
+    if all {
+        ui.painter().rect_filled(r, 3.0, t.accent);
+        let p = |x: f32, y: f32| pos2(r.min.x + r.width() * x, r.min.y + r.height() * y);
+        ui.painter().line_segment([p(0.22, 0.52), p(0.42, 0.72)], egui::Stroke::new(1.8, egui::Color32::WHITE));
+        ui.painter().line_segment([p(0.42, 0.72), p(0.78, 0.3)], egui::Stroke::new(1.8, egui::Color32::WHITE));
+    } else if some {
+        ui.painter().rect_filled(r, 3.0, t.accent.gamma_multiply(0.45));
+        let y = r.center().y;
+        ui.painter().line_segment([pos2(r.min.x + 3.0, y), pos2(r.max.x - 3.0, y)], egui::Stroke::new(1.8, egui::Color32::WHITE));
+    } else {
+        ui.painter().rect_stroke(r.shrink(0.5), 3.0, egui::Stroke::new(1.5, t.dim), egui::StrokeKind::Inside);
+    }
+    resp
 }
 
 /// The mailbox a calendar belongs to, when it's a shared mailbox the folder pane opens
@@ -160,6 +300,7 @@ pub(super) fn calendar_row(
     ui: &mut Ui,
     a: &quatrelle_engine::AccountState,
     c: &quatrelle_engine::model::pim::CalendarInfo,
+    to: Option<&str>,
     acts: &mut Vec<Action>,
 ) {
     let shared = c.id.strip_prefix("shared:").map(str::to_string);
@@ -232,7 +373,24 @@ pub(super) fn calendar_row(
     // Opened by hand from its owner's address (a shared mailbox's comes with the mailbox).
     let opened = shared.filter(|email| s.pim.get(&a.config.id).is_some_and(|p| p.shared.iter().any(|x| x.eq_ignore_ascii_case(email))));
     let extra = menu::Extra { web: web.is_some(), opened };
-    row.response.interact(Sense::click()).context_menu(|ui| menu::calendar_menu(ui, s, a, c, &extra, acts));
+    let resp = row.response.interact(Sense::click_and_drag());
+    if resp.drag_started() {
+        resp.dnd_set_drag_payload(DragCalendar { account: a.config.id.clone(), calendar: c.id.clone(), group: c.group.clone() });
+    }
+    // A calendar dragged onto a row moves to that row's group (an empty title: My Calendars);
+    // Shared calendars aren't a group to move to.
+    if let Some(to) = to {
+        if resp.dnd_hover_payload::<DragCalendar>().is_some() {
+            ui.painter().rect_stroke(resp.rect, 3.0, egui::Stroke::new(1.5, t.accent), egui::StrokeKind::Inside);
+        }
+        if let Some(d) = dropped::<DragCalendar>(&resp) {
+            let same = if to.is_empty() { d.group.is_empty() } else { d.group.eq_ignore_ascii_case(to) };
+            if !same {
+                acts.push(Action::Run("calendar.moveTo", json!({"account": d.account, "calendar": d.calendar, "group": to})));
+            }
+        }
+    }
+    resp.context_menu(|ui| menu::calendar_menu(ui, s, a, c, &extra, acts));
 }
 
 /// The months of the side pane, one under another (Outlook's date navigator, pulled down for

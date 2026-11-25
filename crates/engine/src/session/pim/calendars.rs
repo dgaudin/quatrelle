@@ -63,6 +63,29 @@ impl RemovalRefusal {
     }
 }
 
+/// Why a calendar group can't be made, renamed, deleted or moved from here.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum GroupRefusal {
+    /// The account's server keeps no calendar groups Quatrelle changes (an IMAP, CalDAV or local
+    /// account).
+    Server,
+    /// The server keeps the groups but not an order of them (Microsoft 365).
+    Order,
+    /// The server can't move an existing calendar from one group to another (Microsoft 365).
+    Move,
+}
+
+impl GroupRefusal {
+    /// Why, for a command that's refused.
+    pub fn reason(self) -> &'static str {
+        match self {
+            GroupRefusal::Server => "this account's server doesn't keep calendar groups",
+            GroupRefusal::Order => "Microsoft 365 keeps no order for calendar groups",
+            GroupRefusal::Move => "Microsoft 365 can't move a calendar between groups",
+        }
+    }
+}
+
 /// Whether two of an account's calendars are listed together in the side pane, so one moves past
 /// the other: in the same group, and both someone else's (by address) or neither.
 fn listed_together(a: &CalendarInfo, b: &CalendarInfo) -> bool {
@@ -323,5 +346,157 @@ impl Session {
         self.write_pim(account);
         self.jobs.push(Job::Apply { account: account.to_string(), op: Op::DeleteCalendar { calendar: calendar.to_string() } });
         Ok(json!({"account": account, "calendar": calendar, "events": events}))
+    }
+
+    /// Whether the account's server keeps calendar groups Quatrelle changes, in the order it
+    /// keeps them, and whether it can move a calendar from one to another. Decided here alone:
+    /// the menu greys what this refuses.
+    pub fn calendar_groups_change(&self, account: &str) -> Result<(), GroupRefusal> {
+        match self.account(account).map(|a| (&a.config.ews, &a.config.graph)) {
+            Some((ews, _)) if ews.is_some() => Ok(()),
+            Some((_, graph)) if graph.is_some() => Ok(()),
+            _ => Err(GroupRefusal::Server),
+        }
+    }
+
+    /// Whether the server orders its groups (Microsoft 365 doesn't say one).
+    pub fn calendar_group_order(&self, account: &str) -> Result<(), GroupRefusal> {
+        self.calendar_groups_change(account)?;
+        if self.account(account).is_some_and(|a| a.config.ews.is_some()) { Ok(()) } else { Err(GroupRefusal::Order) }
+    }
+
+    /// Whether the server can move an existing calendar between groups (Graph v1.0 can't).
+    pub fn calendar_group_move(&self, account: &str) -> Result<(), GroupRefusal> {
+        self.calendar_groups_change(account)?;
+        if self.account(account).is_some_and(|a| a.config.ews.is_some()) { Ok(()) } else { Err(GroupRefusal::Move) }
+    }
+
+    /// A group of `account` by its name, or why the params don't name one.
+    fn calendar_group_named(&self, account: &str, group: &str) -> Result<(), CmdError> {
+        if self.pim.get(account).is_some_and(|p| p.calendar_groups.iter().any(|g| g.eq_ignore_ascii_case(group))) {
+            Ok(())
+        } else {
+            Err(CmdError::Params(format!("no calendar group `{group}` in `{account}`")))
+        }
+    }
+
+    /// Make a calendar group called `name`: on the server, which the calendars read again after
+    /// bring in.
+    pub fn create_calendar_group(&mut self, account: &str, name: &str) -> CmdResult {
+        if self.account(account).is_none() {
+            return Err(CmdError::Params(format!("no account `{account}`")));
+        }
+        self.calendar_groups_change(account).map_err(|r| CmdError::Disabled(r.reason().into()))?;
+        let name = typed_name(name)?;
+        if self.pim.get(account).is_some_and(|p| p.calendar_groups.iter().any(|g| g.eq_ignore_ascii_case(&name))) {
+            return Err(CmdError::Params(format!("there's a calendar group called {name} already")));
+        }
+        if let Some(p) = self.pim.get_mut(account) {
+            p.calendar_groups.push(name.clone());
+        }
+        self.pim_revision = self.pim_revision.wrapping_add(1);
+        self.write_pim(account);
+        self.jobs.push(Job::Apply { account: account.to_string(), op: Op::CreateCalendarGroup { name: name.clone() } });
+        Ok(json!({"account": account, "group": name}))
+    }
+
+    /// Rename a calendar group: here at once, on the server through the journal (the next sync
+    /// says what the server kept).
+    pub fn rename_calendar_group(&mut self, account: &str, group: &str, name: &str) -> CmdResult {
+        self.calendar_group_named(account, group)?;
+        self.calendar_groups_change(account).map_err(|r| CmdError::Disabled(r.reason().into()))?;
+        let name = typed_name(name)?;
+        if name.eq_ignore_ascii_case(group) {
+            return Ok(json!({"account": account, "group": group, "name": name}));
+        }
+        if self.pim.get(account).is_some_and(|p| p.calendar_groups.iter().any(|g| g.eq_ignore_ascii_case(&name))) {
+            return Err(CmdError::Params(format!("there's a calendar group called {name} already")));
+        }
+        let p = self.pim_mut(account);
+        for g in &mut p.calendar_groups {
+            if g.eq_ignore_ascii_case(group) {
+                g.clone_from(&name);
+            }
+        }
+        for c in &mut p.calendars {
+            if c.group.eq_ignore_ascii_case(group) {
+                c.group.clone_from(&name);
+            }
+        }
+        self.write_pim(account);
+        self.jobs.push(Job::Apply { account: account.to_string(), op: Op::RenameCalendarGroup { group: group.to_string(), name: name.clone() } });
+        Ok(json!({"account": account, "group": name, "was": group}))
+    }
+
+    /// Delete a calendar group: here at once (its calendars go back to My Calendars, or leave the
+    /// list), on the server through the journal.
+    pub fn delete_calendar_group(&mut self, account: &str, group: &str) -> CmdResult {
+        self.calendar_group_named(account, group)?;
+        self.calendar_groups_change(account).map_err(|r| CmdError::Disabled(r.reason().into()))?;
+        let p = self.pim_mut(account);
+        p.calendar_groups.retain(|g| !g.eq_ignore_ascii_case(group));
+        for c in &mut p.calendars {
+            if c.group.eq_ignore_ascii_case(group) {
+                c.group.clear();
+            }
+        }
+        self.prefs.folded_calendar_groups.remove(group);
+        self.write_pim(account);
+        self.jobs.push(Job::Apply { account: account.to_string(), op: Op::DeleteCalendarGroup { group: group.to_string() } });
+        Ok(json!({"account": account, "group": group, "deleted": true}))
+    }
+
+    /// Move a calendar group up (or down) among the groups, on the server through the journal.
+    pub fn move_calendar_group(&mut self, account: &str, group: &str, up: bool) -> CmdResult {
+        self.calendar_group_named(account, group)?;
+        self.calendar_group_order(account).map_err(|r| CmdError::Disabled(r.reason().into()))?;
+        let p = self.pim_mut(account);
+        let Some(at) = p.calendar_groups.iter().position(|g| g.eq_ignore_ascii_case(group)) else {
+            return Err(CmdError::Params(format!("no calendar group `{group}` in `{account}`")));
+        };
+        let there = if up {
+            at.checked_sub(1).ok_or_else(|| CmdError::Disabled("it's the first calendar group already".into()))?
+        } else {
+            at.checked_add(1)
+                .filter(|n| *n < p.calendar_groups.len())
+                .ok_or_else(|| CmdError::Disabled("it's the last calendar group already".into()))?
+        };
+        p.calendar_groups.swap(at, there);
+        self.write_pim(account);
+        self.jobs.push(Job::Apply { account: account.to_string(), op: Op::MoveCalendarGroup { group: group.to_string(), up } });
+        Ok(json!({"account": account, "group": group, "up": up}))
+    }
+
+    /// Put a calendar in a group (`group` empty: My Calendars): here at once, on the server
+    /// through the journal.
+    pub fn move_calendar_to_group(&mut self, account: &str, calendar: &str, group: &str) -> CmdResult {
+        let c = self.calendar_named(account, calendar)?.clone();
+        self.calendar_group_move(account).map_err(|r| CmdError::Disabled(r.reason().into()))?;
+        let to = if group.is_empty() {
+            if c.main {
+                return Ok(json!({"account": account, "calendar": calendar, "group": ""}));
+            }
+            let my = self.pim.get(account).map(|p| p.my_calendar_group.clone()).unwrap_or_default();
+            if my.is_empty() {
+                return Err(CmdError::Disabled("the server doesn't name the group My Calendars is in".into()));
+            }
+            my
+        } else {
+            self.calendar_group_named(account, group)?;
+            group.to_string()
+        };
+        if c.main {
+            return Err(CmdError::Disabled("the account's main calendar stays in My Calendars".into()));
+        }
+        if let Some(c) = self.pim_mut(account).calendars.iter_mut().find(|x| x.id == calendar) {
+            c.group = if group.is_empty() { String::new() } else { group.to_string() };
+        }
+        self.pim_revision = self.pim_revision.wrapping_add(1);
+        self.write_pim(account);
+        self.jobs.push(Job::Apply {
+            account: account.to_string(),
+            op: Op::MoveCalendarToGroup { calendar: calendar.to_string(), name: c.name, group: to },
+        });
+        Ok(json!({"account": account, "calendar": calendar, "group": group}))
     }
 }

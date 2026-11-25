@@ -301,6 +301,17 @@ pub(super) fn commands() -> Vec<CommandSpec> {
             Ok(json!({"account": account, "calendar": calendar, "shown": shown}))
         })
         .params(r#"{"account": string, "calendar": string, "shown"?: bool (default: the other way)}"#),
+        CommandSpec::new("calendar.groupFold", "Fold or unfold a calendar group", "Calendar › Calendars", |s, v| {
+            let group: String = p::req_str(v, "group")?.chars().take(quatrelle_model::pim::MAX_CALENDAR_NAME + 64).collect();
+            let folded = p::bool(v, "folded").unwrap_or(!s.prefs.folded_calendar_groups.contains(&group));
+            if folded {
+                s.prefs.folded_calendar_groups.insert(group.clone());
+            } else {
+                s.prefs.folded_calendar_groups.remove(&group);
+            }
+            Ok(json!({"group": group, "folded": folded}))
+        })
+        .params(r#"{"group": string, "folded"?: bool (default: the other way)} (kept on this computer)"#),
         CommandSpec::new("calendar.sideBySide", "Side by side", "Calendar › View", |s, v| {
             s.prefs.calendars_side_by_side = p::bool(v, "on").unwrap_or(!s.prefs.calendars_side_by_side);
             Ok(json!({"on": s.prefs.calendars_side_by_side}))
@@ -342,6 +353,32 @@ pub(super) fn commands() -> Vec<CommandSpec> {
         CommandSpec::new("calendar.delete", "Delete calendar", "Calendar › Calendars", |s, v| s.delete_calendar(p::req_str(v, "account")?, p::req_str(v, "calendar")?))
             .params(r#"{"account": string, "calendar": string} (one of the account's own, not its main one; its events go with it, into Deleted Items)"#)
             .when(calendars_made),
+        CommandSpec::new("calendar.group.create", "New calendar group", "Calendar › Calendars", |s, v| {
+            s.create_calendar_group(p::req_str(v, "account")?, p::req_str(v, "name")?)
+        })
+        .params(r#"{"account": string, "name": string (up to 255 characters)} (kept on the account's server: Exchange's navigation shortcuts, Microsoft 365's calendar groups)"#)
+        .when(calendars_made),
+        CommandSpec::new("calendar.group.rename", "Rename calendar group", "Calendar › Calendars", |s, v| {
+            s.rename_calendar_group(p::req_str(v, "account")?, p::req_str(v, "group")?, p::req_str(v, "name")?)
+        })
+        .params(r#"{"account": string, "group": string, "name": string (up to 255 characters)} (kept on the account's server)"#)
+        .when(calendars_made),
+        CommandSpec::new("calendar.group.delete", "Delete calendar group", "Calendar › Calendars", |s, v| {
+            s.delete_calendar_group(p::req_str(v, "account")?, p::req_str(v, "group")?)
+        })
+        .params(r#"{"account": string, "group": string} (the account's own calendars go back to My Calendars; other people's leave the list)"#)
+        .when(calendars_made),
+        CommandSpec::new("calendar.group.move", "Move calendar group", "Calendar › Calendars", |s, v| {
+            let up = p::bool(v, "up").ok_or_else(|| CmdError::Params("`up` is required (true: up, false: down)".into()))?;
+            s.move_calendar_group(p::req_str(v, "account")?, p::req_str(v, "group")?, up)
+        })
+        .params(r#"{"account": string, "group": string, "up": bool} (the order is the server's)"#)
+        .when(calendars_made),
+        CommandSpec::new("calendar.moveTo", "Move a calendar to a group", "Calendar › Calendars", |s, v| {
+            s.move_calendar_to_group(p::req_str(v, "account")?, p::req_str(v, "calendar")?, p::str(v, "group").unwrap_or(""))
+        })
+        .params(r#"{"account": string, "calendar": string, "group": string} (empty: My Calendars; kept on the account's server)"#)
+        .when(calendars_made),
         CommandSpec::new("calendar.remove", "Remove from the list", "Calendar › Calendars", |s, v| {
             s.remove_calendar(p::req_str(v, "account")?, p::req_str(v, "calendar")?)
         })

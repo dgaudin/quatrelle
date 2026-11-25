@@ -235,7 +235,14 @@ async fn remote(sh: &Rcs, id: &str, op: Op) {
                 }
                 Op::SetFlag { .. } | Op::SetKeyword { .. } | Op::SetFollowUp { .. } | Op::Expunge { .. } | Op::SetArchiveTag { .. } => {}
                 // Refused by JMAP: never here.
-                Op::CreateCalendar { .. } | Op::RenameCalendar { .. } | Op::DeleteCalendar { .. } => {}
+                Op::CreateCalendar { .. }
+                | Op::RenameCalendar { .. }
+                | Op::DeleteCalendar { .. }
+                | Op::CreateCalendarGroup { .. }
+                | Op::RenameCalendarGroup { .. }
+                | Op::DeleteCalendarGroup { .. }
+                | Op::MoveCalendarGroup { .. }
+                | Op::MoveCalendarToGroup { .. } => {}
             }
             touched.sort();
             touched.dedup();

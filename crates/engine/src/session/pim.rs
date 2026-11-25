@@ -37,7 +37,7 @@ mod webex;
 pub(super) fn own_calendar(id: &str) -> bool {
     quatrelle_model::pim::shared_calendar_owner(id).is_none() && !id.starts_with("public:") && !quatrelle_model::pim::is_web_calendar(id)
 }
-pub use calendars::{CalendarRefusal, PALETTE_COLOR, PALETTE_COLORS, RemovalRefusal};
+pub use calendars::{CalendarRefusal, GroupRefusal, PALETTE_COLOR, PALETTE_COLORS, RemovalRefusal};
 pub use conflicts::{CONFLICTS, ConflictWords, SYNC_ISSUES};
 pub(crate) use deleting::hold_unsent;
 pub use files::FilesComing;
