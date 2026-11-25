@@ -73,19 +73,38 @@ const FOLLOW_UP_ICON: &str = "<t:ExtendedFieldURI PropertyTag=\"0x1095\" Propert
 /// (MS-OXOFLAG 2.2.1, MS-OXPROPS 1.3.2): `PidLidTaskStartDate` and `PidLidTaskDueDate` in
 /// PSETID_Task, `PidLidReminderSet`, `PidLidReminderTime`, `PidLidReminderSignalTime` and
 /// `PidLidFlagRequest` in PSETID_Common.
-const TASK_START: &str = "<t:ExtendedFieldURI DistinguishedPropertySetId=\"Task\" PropertyId=\"33028\" PropertyType=\"SystemTime\"/>";
-const TASK_DUE: &str = "<t:ExtendedFieldURI DistinguishedPropertySetId=\"Task\" PropertyId=\"33029\" PropertyType=\"SystemTime\"/>";
-/// `PidLidCommonStart`/`PidLidCommonEnd`: set with the Task dates ([MS-OXOFLAG] 3.1.4.1.3
-/// says they MUST be), the same midnight in the user's local time zone.
-const COMMON_START: &str = "<t:ExtendedFieldURI DistinguishedPropertySetId=\"Common\" PropertyId=\"34052\" PropertyType=\"SystemTime\"/>";
-const COMMON_END: &str = "<t:ExtendedFieldURI DistinguishedPropertySetId=\"Common\" PropertyId=\"34053\" PropertyType=\"SystemTime\"/>";
-const REMINDER_SET: &str = "<t:ExtendedFieldURI DistinguishedPropertySetId=\"Common\" PropertyId=\"34051\" PropertyType=\"Boolean\"/>";
-const REMINDER_TIME: &str = "<t:ExtendedFieldURI DistinguishedPropertySetId=\"Common\" PropertyId=\"34050\" PropertyType=\"SystemTime\"/>";
-const REMINDER_SIGNAL: &str = "<t:ExtendedFieldURI DistinguishedPropertySetId=\"Common\" PropertyId=\"34144\" PropertyType=\"SystemTime\"/>";
-const FLAG_REQUEST: &str = "<t:ExtendedFieldURI DistinguishedPropertySetId=\"Common\" PropertyId=\"34096\" PropertyType=\"String\"/>";
-/// `PidLidToDoTitle`: the task's title, the flag's own property ([MS-OXOFLAG] 3.1.4.1.3), so
-/// Clear Flag takes it off too.
-const TODO_TITLE: &str = "<t:ExtendedFieldURI DistinguishedPropertySetId=\"Common\" PropertyId=\"34212\" PropertyType=\"String\"/>";
+fn task_start() -> String {
+    lid_uri("Task", PID_LID_TASK_START_DATE, "SystemTime")
+}
+fn task_due() -> String {
+    lid_uri("Task", PID_LID_TASK_DUE_DATE, "SystemTime")
+}
+/// `PidLidCommonStart`/`PidLidCommonEnd` (0x8516/0x8517 = 34070/34071, [MS-OXPROPS]): set with the
+/// Task dates ([MS-OXOFLAG] 3.1.4.1.3 says they MUST be), the same midnight in the user's
+/// local time zone.
+fn common_start() -> String {
+    lid_uri("Common", PID_LID_COMMON_START, "SystemTime")
+}
+fn common_end() -> String {
+    lid_uri("Common", PID_LID_COMMON_END, "SystemTime")
+}
+fn reminder_set() -> String {
+    lid_uri("Common", PID_LID_REMINDER_SET, "Boolean")
+}
+fn reminder_time() -> String {
+    lid_uri("Common", PID_LID_REMINDER_TIME, "SystemTime")
+}
+fn reminder_signal() -> String {
+    lid_uri("Common", PID_LID_REMINDER_SIGNAL_TIME, "SystemTime")
+}
+fn flag_request() -> String {
+    lid_uri("Common", PID_LID_FLAG_REQUEST, "String")
+}
+/// `PidLidToDoTitle` (0x85A4 = 34212): the task's title, the flag's own property
+/// ([MS-OXOFLAG] 3.1.4.1.3), so Clear Flag takes it off too.
+fn todo_title() -> String {
+    lid_uri("Common", PID_LID_TO_DO_TITLE, "String")
+}
 
 /// The follow-up title Outlook gives a plain flag ([MS-OXOFLAG] 3.1.4.1).
 const FOLLOW_UP_REQUEST: &str = "Follow up";
@@ -169,18 +188,20 @@ fn follow_up_updates(start: Option<FieldChange>, due: Option<FieldChange>, remin
     };
     let mut out = String::new();
     if let Some(c) = start {
-        out.push_str(&date_updates(TASK_START, COMMON_START, c.value()));
+        out.push_str(&date_updates(&task_start(), &common_start(), c.value()));
     }
     if let Some(c) = due {
-        out.push_str(&date_updates(TASK_DUE, COMMON_END, c.value()));
+        out.push_str(&date_updates(&task_due(), &common_end(), c.value()));
     }
     // A reminder's time of day and the moment it rings are the same moment here: Outlook keeps
     // the day it is due in `PidLidReminderTime` and the moment in `PidLidReminderSignalTime`
     // ([MS-OXOFLAG] 2.2.1), and Quatrelle has one time, which both take.
     if let Some(c) = reminder {
         match c.value() {
-            Some(at) => out.push_str(&format!("{}{}{}", set_value(REMINDER_SET, "true"), set_time(REMINDER_TIME, at), set_time(REMINDER_SIGNAL, at))),
-            None => out.push_str(&format!("{}{}{}", delete(REMINDER_SET), delete(REMINDER_TIME), delete(REMINDER_SIGNAL))),
+            Some(at) => {
+                out.push_str(&format!("{}{}{}", set_value(&reminder_set(), "true"), set_time(&reminder_time(), at), set_time(&reminder_signal(), at)))
+            }
+            None => out.push_str(&format!("{}{}{}", delete(&reminder_set()), delete(&reminder_time()), delete(&reminder_signal()))),
         }
     }
     out
@@ -231,7 +252,7 @@ pub fn apply_remote(c: &Client, st: &State, op: &Op) -> Result<()> {
                 flag_status(2),
                 delete(COMPLETE_TIME),
                 set_value(FOLLOW_UP_ICON, &RED_FLAG.to_string()),
-                set_value(FLAG_REQUEST, FOLLOW_UP_REQUEST)
+                set_value(&flag_request(), FOLLOW_UP_REQUEST)
             ),
         ),
         // Cleared, or marked complete (the engine takes the flag off first): none of the
@@ -240,7 +261,14 @@ pub fn apply_remote(c: &Client, st: &State, op: &Op) -> Result<()> {
         // (Clear Flag sends one).
         Op::SetFlag { keys, flag: Flag::Flagged, on: false, .. } => update(
             keys,
-            &format!("{}{}{}{}{}", delete(FLAG_STATUS), delete(COMPLETE_TIME), delete(FOLLOW_UP_ICON), delete(FLAG_REQUEST), delete(TODO_TITLE)),
+            &format!(
+                "{}{}{}{}{}",
+                delete(FLAG_STATUS),
+                delete(COMPLETE_TIME),
+                delete(FOLLOW_UP_ICON),
+                delete(&flag_request()),
+                delete(&todo_title())
+            ),
         ),
         // Its dates and reminder, as Follow Up › Custom… set them (and Add Reminder…): only the
         // fields the change names, the others left as the server has them.
@@ -265,9 +293,9 @@ pub fn apply_remote(c: &Client, st: &State, op: &Op) -> Result<()> {
                         "{}{time}{}{}{}{}",
                         flag_status(1),
                         delete(FOLLOW_UP_ICON),
-                        delete(REMINDER_SET),
-                        delete(REMINDER_TIME),
-                        delete(REMINDER_SIGNAL)
+                        delete(&reminder_set()),
+                        delete(&reminder_time()),
+                        delete(&reminder_signal())
                     ),
                 )
             } else {

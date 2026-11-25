@@ -646,3 +646,45 @@ fn a_start_date_goes_with_a_due_one_and_clear_flag_takes_the_title_off() {
     }
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// The Common dates a follow-up change writes go under their own property ids ([MS-OXPROPS]
+/// PSETID_Common: `PidLidCommonStart` 0x8516 = 34070, `PidLidCommonEnd` 0x8517 = 34071). The
+/// numbers are written in clear here, so a wrong id in the code fails this test.
+#[test]
+fn common_dates_are_written_under_their_own_property_ids() {
+    let mut d = Data::default();
+    let inbox = d.folder("Inbox", None, Some("inbox"), "IPF.Note");
+    let id = d.deliver(&inbox, b"From: a@x.example\r\nSubject: due\r\n\r\nx\r\n", true, "2024-05-01T09:00:00Z");
+    let server = fake_ews::serve(d);
+    let dir = std::env::temp_dir().join(format!("quatrelle-ews-common-ids-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    let store = Store::open(&dir).unwrap();
+    let user = format!("{}\\{}", fake_ews::DOMAIN, fake_ews::USER);
+    let c = Client::connect(&server.url, &user, fake_ews::PASSWORD, "riley@contoso.example").unwrap();
+    let mut st = State::default();
+    list_folders(&c, &mut st, "a1").unwrap();
+    let opts = SyncOptions { prefetch: 0, ..Default::default() };
+    sync_folder(&c, &mut st, &store, "a1", "INBOX", &opts).unwrap();
+    let m = store.load_folder("a1", "INBOX").unwrap().messages[0].clone();
+
+    let at = |text: &str| jmap::utc_date(text).unwrap();
+    apply_remote(
+        &c,
+        &st,
+        &Op::SetFollowUp {
+            keys: vec![m.key],
+            start: Some(FieldChange::Set(at("2026-12-01T00:00:00Z"))),
+            due: Some(FieldChange::Set(at("2026-12-04T00:00:00Z"))),
+            reminder: None,
+        },
+    )
+    .unwrap();
+    let d = server.data.lock().unwrap();
+    let upd = d.updates.last().expect("an UpdateItem was sent");
+    assert!(upd.contains("PropertyId=\"34070\""), "PidLidCommonStart written as 34070 (0x8516): {upd}");
+    assert!(upd.contains("PropertyId=\"34071\""), "PidLidCommonEnd written as 34071 (0x8517): {upd}");
+    assert!(!upd.contains("PropertyId=\"34052\"") && !upd.contains("PropertyId=\"34053\""), "not 0x8504/0x8505: {upd}");
+    let f = &d.items.iter().find(|i| i.id == id).unwrap().follow_up;
+    assert!(f.common_start.is_some() && f.common_end.is_some(), "the server read them under the same ids: {f:?}");
+    let _ = std::fs::remove_dir_all(&dir);
+}
