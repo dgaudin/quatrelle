@@ -240,6 +240,9 @@ pub struct Data {
     /// How each appointment created or changed asked the guests to be told
     /// (`SendMeetingInvitations`, `SendMeetingInvitationsOrCancellations`), in order.
     pub meeting_sends: Vec<String>,
+    /// How each appointment or occurrence deleted asked the guests to be told
+    /// (`SendMeetingCancellations`), with its item, in order.
+    pub cancellations: Vec<(String, String)>,
     /// Guests Exchange won't send a meeting to (`ErrorInvalidRecipients`), by address.
     pub refused_guests: Vec<String>,
     /// Meetings answered (Outlook's buttons): the item, how (`AcceptItem`…), and whether the
@@ -436,6 +439,7 @@ impl Default for Data {
             pim_given: 0,
             hidden: Vec::new(),
             meeting_sends: Vec::new(),
+            cancellations: Vec::new(),
             refused_guests: Vec::new(),
             answers: Vec::new(),
             refuse_answers: None,

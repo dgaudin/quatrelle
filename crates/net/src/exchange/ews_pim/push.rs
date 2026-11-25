@@ -67,6 +67,13 @@ pub(super) fn push_events(c: &Client, pim: &Pim, out: &mut DavSync) {
                 if let Some(why) = untold {
                     out.errors.push(format!("{}: saved, but the server wouldn't tell the guests ({}): {why}", e.event.summary, some_names(&guests)));
                 }
+                // The days taken out of a series: its fields say nothing of them, each occurrence
+                // is deleted. One that couldn't be comes back at the next read, and is said.
+                if e.event.recurrence_id.is_none()
+                    && let Err(x) = delete_days_out(c, &href, &e.event)
+                {
+                    out.errors.push(format!("{}: a day taken out of it couldn't be deleted on the server: {x}", e.event.summary));
+                }
                 out.pushed_events.push(StoredEvent {
                     calendar: if owner.is_some() || own.is_some() { e.calendar.clone() } else { CALENDAR.into() },
                     href,
@@ -160,6 +167,57 @@ pub(super) fn call_item(c: &Client, body: &str) -> Result<El> {
     gone(&m)?;
     crate::ews::check_message(&m)?;
     Ok(m)
+}
+
+/// Most days taken out of a series asked about at each change of it, the latest first.
+const DAYS_OUT_MAX: usize = 200;
+
+/// What the server answers for an occurrence it took out of its series already.
+const DELETED_ALREADY: &str = "ErrorCalendarOccurrenceIsDeletedFromRecurrence";
+
+/// The days taken out of series `master` (its item `id`) deleted on the server, each occurrence
+/// asked for by its place in the series (days taken out counted, as for [`occurrence_item_id`]):
+/// one the server took out already is done. Its guests aren't told by the server here (the
+/// cancellation of one occurrence is mailed from here). The first refusal, once the others went.
+fn delete_days_out(c: &Client, id: &str, master: &CalEvent) -> Result<()> {
+    let Some(last) = master.exdates.iter().max().filter(|_| master.rrule.is_some()) else { return Ok(()) };
+    let starts = quatrelle_model::ical::starts(master, last.saturating_add(1));
+    let mut days: Vec<i64> = master.exdates.clone();
+    days.sort_unstable_by(|a, b| b.cmp(a));
+    days.dedup();
+    let places: String = days
+        .iter()
+        .filter_map(|at| starts.iter().position(|s| s == at))
+        .take(DAYS_OUT_MAX)
+        .map(|i| format!("<t:OccurrenceItemId RecurringMasterId=\"{}\" InstanceIndex=\"{}\"/>", esc(id), i.saturating_add(1)))
+        .collect();
+    if places.is_empty() {
+        return Ok(());
+    }
+    let doc =
+        c.call(&format!("<m:GetItem><m:ItemShape><t:BaseShape>IdOnly</t:BaseShape></m:ItemShape><m:ItemIds>{places}</m:ItemIds></m:GetItem>"))?;
+    let mut items = String::new();
+    let mut refused = None;
+    for m in crate::ews::messages(&doc) {
+        if m.text_of("ResponseCode").is_some_and(|code| code.trim() == DELETED_ALREADY) {
+            continue;
+        }
+        match crate::ews::check_message(m) {
+            Ok(()) => match new_id(m) {
+                (occurrence, _) if !occurrence.is_empty() => items.push_str(&format!("<t:ItemId Id=\"{}\"/>", esc(&occurrence))),
+                _ => {}
+            },
+            Err(e) => {
+                refused.get_or_insert(e);
+            }
+        }
+    }
+    if !items.is_empty() {
+        c.call_all_present(&format!(
+            "<m:DeleteItem DeleteType=\"MoveToDeletedItems\" SendMeetingCancellations=\"SendToNone\"><m:ItemIds>{items}</m:ItemIds></m:DeleteItem>"
+        ))?;
+    }
+    refused.map_or(Ok(()), Err)
 }
 
 /// A series' item on the server and the series itself: as kept here, or as just created.

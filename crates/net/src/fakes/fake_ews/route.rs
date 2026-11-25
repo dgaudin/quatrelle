@@ -229,6 +229,10 @@ impl Data {
                     })
                     .unwrap_or_default();
                 for (master, index) in occurrences {
+                    if self.occurrence_deleted(&master, index) {
+                        out.push(err("ErrorCalendarOccurrenceIsDeletedFromRecurrence"));
+                        continue;
+                    }
                     match self.occurrence_item(&master, index) {
                         Some(id) => {
                             out.push(ok(format!("<m:Items><t:CalendarItem><t:ItemId Id=\"{id}\" ChangeKey=\"ck\"/></t:CalendarItem></m:Items>")))
@@ -605,6 +609,10 @@ impl Data {
                         continue;
                     }
                     self.take_items(op, |i| i.id == id);
+                    if self.pim.iter().any(|(i, _, el)| *i == id && el.name == "CalendarItem") {
+                        self.cancellations.push((id.clone(), op.attr("SendMeetingCancellations").unwrap_or_default().to_string()));
+                        self.delete_occurrence(&id);
+                    }
                     self.pim.retain(|(i, _, _)| *i != id);
                     out.push(ok(String::new()));
                 }

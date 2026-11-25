@@ -8,6 +8,7 @@ use super::*;
 mod contacts;
 mod files;
 mod notes;
+mod occurrences;
 mod refused_delete;
 mod removed;
 mod secondary;
