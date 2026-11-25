@@ -226,3 +226,20 @@ fn calendar_groups_are_made_renamed_and_deleted_on_microsoft_365() {
     assert!(refused(Op::MoveCalendarGroup { group: "Team".into(), up: true }).contains("keeps no order"));
     assert!(refused(Op::MoveCalendarToGroup { calendar: "CAL1".into(), name: "Calendar".into(), group: "Team".into() }).contains("can't move"));
 }
+
+/// Deleting a group that still holds calendars isn't done: what Graph makes of them on a real
+/// account isn't known, so none is risked.
+#[test]
+fn a_group_that_still_holds_calendars_is_not_deleted() {
+    let mut d = Data::default();
+    d.calendars.push(("CAL1".into(), "Calendar".into()));
+    d.calendars.push(("CAL2".into(), "Trips".into()));
+    d.groups.push(("G1".into(), "My Calendars".into(), vec!["CAL1".into()]));
+    d.groups.push(("G2".into(), "Team".into(), vec!["CAL2".into()]));
+    let server = serve(d);
+    let c = crate::graph::Client::connect(&server.base, TOKEN).unwrap();
+    let st = crate::jmap::State::default();
+    let e = crate::graph::apply_remote(&c, &st, &Op::DeleteCalendarGroup { group: "Team".into() }).unwrap_err();
+    assert!(e.to_string().contains("still holds calendars"), "{e}");
+    assert!(server.data.lock().unwrap().groups.iter().any(|(_, n, _)| n == "Team"), "the group stays");
+}

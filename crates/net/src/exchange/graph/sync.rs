@@ -428,6 +428,12 @@ pub fn apply_remote(c: &Client, st: &State, op: &Op) -> Result<()> {
         }
         Op::DeleteCalendarGroup { group } => {
             let id = graph_group(c, group)?;
+            // What Graph makes of a non-empty group's calendars on a real account isn't known:
+            // nothing is risked, as the pane refuses it too.
+            let calendars = c.all(&format!("/me/calendarGroups/{}/calendars?$top=1&$select=id", seg(&id)), 1)?;
+            if !calendars.is_empty() {
+                return Err(NetError::No("a calendar group that still holds calendars can't be deleted here".into()));
+            }
             match c.delete_item(&format!("/me/calendarGroups/{}", seg(&id))) {
                 Err(e) if crate::gone(&e) => Ok(()),
                 r => r.map(drop),

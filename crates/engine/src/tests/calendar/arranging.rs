@@ -437,3 +437,18 @@ fn without_a_main_calendar_an_unsent_appointment_stays_where_it_was() {
     assert_eq!(kept.as_deref(), Some(home), "not moved into another calendar");
     assert_eq!(s.notices.len(), said, "{:?}", s.notices);
 }
+
+/// A Microsoft 365 group that still holds a calendar isn't deleted: what the server makes of its
+/// calendars isn't known. An empty one goes.
+#[test]
+fn a_microsoft_365_group_that_still_holds_calendars_is_not_deleted() {
+    let mut s = graph_session("arranging-group-delete", true);
+    s.pim_mut("sample").calendar_groups = vec!["Team".into(), "Vide".into()];
+    s.take_jobs();
+    let e = s.run("calendar.group.delete", &json!({"account": "sample", "group": "Team"})).unwrap_err();
+    assert!(e.to_string().contains("still holds calendars"), "{e}");
+    assert!(s.pim.get("sample").unwrap().calendar_groups.iter().any(|g| g == "Team"), "the group stays");
+    assert!(s.take_jobs().is_empty(), "and nothing is sent");
+    s.run("calendar.group.delete", &json!({"account": "sample", "group": "Vide"})).unwrap();
+    assert!(applied(&mut s).iter().any(|op| matches!(op, Op::DeleteCalendarGroup { group } if group == "Vide")), "the empty group is sent");
+}
