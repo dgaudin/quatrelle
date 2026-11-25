@@ -31,9 +31,8 @@ struct Shortcut {
     address_book: Vec<u8>,
 }
 
-/// The Calendar section's shortcuts, read page by page for a write. Only the shortcuts this
-/// understands are returned; the others are left alone.
-fn read_raw(c: &Client) -> Result<Vec<Shortcut>> {
+/// The Calendar section's shortcuts' items, page by page, read whole.
+fn read_pages(c: &Client) -> Result<Vec<El>> {
     let Some(views) = super::common_views(c)? else {
         return Err(NetError::No("the server doesn't show its Common Views folder".into()));
     };
@@ -53,11 +52,7 @@ fn read_raw(c: &Client) -> Result<Vec<Shortcut>> {
         ))?;
         let batch: Vec<El> = m.find("Items").map(|i| i.kids.clone()).unwrap_or_default();
         let last = m.find("RootFolder").and_then(|r| r.attr("IncludesLastItemInRange")).is_some_and(|v| v.eq_ignore_ascii_case("true"));
-        for it in &batch {
-            if let Some(s) = shortcut_of(it) {
-                out.push(s);
-            }
-        }
+        out.extend(batch);
         if last {
             complete = true;
             break;
@@ -67,6 +62,12 @@ fn read_raw(c: &Client) -> Result<Vec<Shortcut>> {
         return Err(NetError::No("the server's navigation shortcuts weren't read whole".into()));
     }
     Ok(out)
+}
+
+/// The Calendar section's shortcuts, read page by page for a write. Only the shortcuts this
+/// understands are returned; the others are left alone.
+fn read_raw(c: &Client) -> Result<Vec<Shortcut>> {
+    Ok(read_pages(c)?.iter().filter_map(shortcut_of).collect())
 }
 
 /// Whether the production write parser reads this item as a shortcut; for the fuzz target.
@@ -157,6 +158,27 @@ fn members_of<'a>(all: &'a [Shortcut], group: &Shortcut) -> Vec<&'a Shortcut> {
         // share.
         .filter(|s| if s.group_id.is_empty() { !s.group_name.is_empty() && s.group_name == group.name } else { s.group_id == group.header_id })
         .collect()
+}
+
+/// An item the read can't parse but that still points at `header`: deleting the header would
+/// leave it behind, pointing at a group that no longer exists.
+fn unreadable_member(pages: &[El], header: &Shortcut) -> Option<String> {
+    pages.iter().find_map(|it| {
+        if shortcut_of(it).is_some() || int_prop(it, "0x6852") != Some(CALENDAR_SECTION) {
+            return None;
+        }
+        if !matches!(int_prop(it, "0x6849"), Some(WLINK_OWN | WLINK_SHARED)) {
+            return None;
+        }
+        let id = bin_prop(it, "0x6850").unwrap_or_default();
+        let group = ext_text(it, "0x6851").map(clean).unwrap_or_default();
+        let mine = if id.is_empty() { !group.is_empty() && group == header.name } else { id == header.header_id };
+        if !mine {
+            return None;
+        }
+        let shown = ext_text(it, "0x0E1D").map(clean).unwrap_or_default();
+        Some(if shown.is_empty() { "a calendar this can't read".to_string() } else { shown })
+    })
 }
 
 /// A new group's ordinal, after the last group's ([MS-OXOCFG] 2.2.9.7: a final byte other than
@@ -380,11 +402,15 @@ pub(crate) fn rename_calendar_group(c: &Client, group: &str, name: &str) -> Resu
 /// Delete the group `group`: its entries go with it (the account's own calendars stay, and come
 /// back under My Calendars; other people's leave the list).
 pub(crate) fn delete_calendar_group(c: &Client, group: &str) -> Result<()> {
-    let before = read_raw(c)?;
+    let pages = read_pages(c)?;
+    let before: Vec<Shortcut> = pages.iter().filter_map(shortcut_of).collect();
     let header = group_named(&before, group).cloned().ok_or_else(|| NetError::No("no calendar group with that name".into()))?;
     let members: Vec<Shortcut> = members_of(&before, &header).into_iter().cloned().collect();
     if !ours(c, &header) && !members.is_empty() {
         return Err(NetError::No("a calendar group Outlook made can't be deleted while it holds calendars".into()));
+    }
+    if let Some(name) = unreadable_member(&pages, &header) {
+        return Err(NetError::No(format!("the calendar group still holds {name}, which this can't read")));
     }
     let mut deleted: Vec<String> = Vec::new();
     for m in &members {

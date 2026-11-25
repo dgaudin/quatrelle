@@ -657,3 +657,29 @@ fn two_headers_with_the_same_name_can_be_renamed() {
     let names = crate::ews_pim::calendar_links(&c).unwrap().groups.into_iter().map(|g| g.name).collect::<Vec<_>>();
     assert_eq!(names, ["Équipe 2", "Équipe"], "only the header renamed: {names:?}");
 }
+
+/// A member the read can't parse is still a member: deleting its group would leave it pointing
+/// at a header that is gone, so the group is kept and the reason says so.
+#[test]
+fn a_group_holding_a_member_the_read_cannot_parse_is_not_deleted() {
+    let mut d = Data::default();
+    d.folder("Inbox", None, Some("inbox"), "IPF.Note");
+    d.folder("Calendar", None, Some("calendar"), "IPF.Appointment");
+    let server = serve(d);
+    let c = crate::ews::Client::connect(&server.url, &format!("{DOMAIN}\\{USER}"), PASSWORD, "riley@contoso.example").unwrap();
+    let stamp = c.group_stamp();
+    let link = "IPM.Microsoft.WunderBar.Link";
+    let team = guid(0x10);
+    let header = wlink_of(link, 3, 4, "Salles", &[("0x6842", "Binary", team.clone()), ("0x6847", "Integer", stamp.to_string())]);
+    let half = wlink_of(
+        link,
+        3,
+        2,
+        "Half a calendar",
+        &[("0x6850", "Binary", team), ("0x6851", "String", "Salles".into()), ("0x6852", "Integer", "3".into())],
+    );
+    server.data.lock().unwrap().wlinks = vec![header, half];
+    let e = crate::ews_pim::delete_calendar_group(&c, "Salles").unwrap_err();
+    assert!(e.to_string().contains("can't read"), "{e}");
+    assert!(server.data.lock().unwrap().wlinks.iter().any(|w| w.contains("Half a calendar")), "the unreadable member stays");
+}
