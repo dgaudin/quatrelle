@@ -718,3 +718,39 @@ fn a_calendar_in_a_group_beyond_the_cap_is_not_kept() {
         shortcuts.links.iter().map(|l| &l.group).collect::<Vec<_>>()
     );
 }
+
+/// A directory name is resolved once a session: the group's read and each move use the same
+/// answer instead of asking the directory again.
+#[test]
+fn a_directory_name_is_resolved_once_a_session() {
+    let mut d = Data::default();
+    d.folder("Inbox", None, Some("inbox"), "IPF.Note");
+    d.folder("Calendar", None, Some("calendar"), "IPF.Appointment");
+    d.directory = vec![(dn("ana"), "ana@contoso.example".into())];
+    let link = "IPM.Microsoft.WunderBar.Link";
+    let team = guid(0x10);
+    d.wlinks = vec![
+        wlink_of(link, 3, 4, "Équipe", &[("0x6842", "Binary", team.clone()), ("0x684B", "Binary", crate::imap::base64(&[0x10]))]),
+        wlink_of(
+            link,
+            3,
+            2,
+            "Ana Exemple",
+            &[
+                ("0x6850", "Binary", team),
+                ("0x6851", "String", "Équipe".into()),
+                ("0x6854", "Binary", crate::imap::base64(&address_book_eid(&dn("ana")))),
+                ("0x684B", "Binary", crate::imap::base64(&[0x11])),
+            ],
+        ),
+    ];
+    let server = serve(d);
+    let c = crate::ews::Client::connect(&server.url, &format!("{DOMAIN}\\{USER}"), PASSWORD, "riley@contoso.example").unwrap();
+    let asked = || server.data.lock().unwrap().calls.iter().filter(|c| c.contains("ResolveNames")).count();
+    let _ = crate::ews_pim::calendar_links(&c).unwrap();
+    assert_eq!(asked(), 1, "{:?}", server.data.lock().unwrap().calls);
+    let _ = crate::ews_pim::calendar_links(&c).unwrap();
+    assert_eq!(asked(), 1, "the next read asks nothing");
+    crate::ews_pim::move_calendar_to_group(&c, "shared:ana@contoso.example", "Ana Exemple", "Équipe").unwrap();
+    assert_eq!(asked(), 1, "and neither does a move");
+}

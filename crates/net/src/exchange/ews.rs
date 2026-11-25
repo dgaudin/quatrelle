@@ -127,6 +127,9 @@ pub struct Client {
     pf_mailboxes: RefCell<HashMap<String, String>>,
     /// Other people's addresses as the directory has them (see [`Client::address_of`]).
     addresses: Box<RefCell<HashMap<String, String>>>,
+    /// The directory's answer for an X.500 name, once asked: a calendar group's read and each of
+    /// its moves ask for the same people again and again otherwise (`ews_pim`'s shortcuts).
+    resolved_names: RefCell<HashMap<String, Option<String>>>,
     /// The account's public folder hierarchy mailbox (Autodiscover's PublicFolderInformation),
     /// once asked: `None` inside when there is none.
     pf_hierarchy: RefCell<Option<Option<String>>>,
@@ -406,6 +409,7 @@ impl Client {
             route: RefCell::new(None),
             pf_mailboxes: RefCell::new(HashMap::new()),
             addresses: Box::new(RefCell::new(HashMap::new())),
+            resolved_names: RefCell::new(HashMap::new()),
             pf_hierarchy: RefCell::new(None),
             pf_replicas: RefCell::new(Vec::new()),
             anchor: RefCell::new(None),
@@ -444,6 +448,7 @@ impl Client {
             route: self.route.clone(),
             pf_mailboxes: self.pf_mailboxes.clone(),
             addresses: self.addresses.clone(),
+            resolved_names: self.resolved_names.clone(),
             pf_hierarchy: self.pf_hierarchy.clone(),
             pf_replicas: self.pf_replicas.clone(),
             anchor: self.anchor.clone(),
@@ -464,6 +469,21 @@ impl Client {
             clock: self.clock.clone(),
             server_major: self.server_major.clone(),
             spent: Cell::new(Timing::default()),
+        }
+    }
+
+    /// The directory's answer for `dn`, when it was asked this session: `Some(None)` when it
+    /// didn't know the name.
+    pub(crate) fn resolved_name(&self, dn: &str) -> Option<Option<String>> {
+        self.resolved_names.borrow().get(dn).cloned()
+    }
+
+    /// Keep the directory's answer for `dn` (a bounded number of names).
+    pub(crate) fn keep_resolved_name(&self, dn: &str, email: Option<String>) {
+        const MAX_RESOLVED_NAMES: usize = 1000;
+        let mut names = self.resolved_names.borrow_mut();
+        if names.len() < MAX_RESOLVED_NAMES {
+            names.insert(dn.to_string(), email);
         }
     }
 

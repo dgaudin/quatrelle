@@ -480,25 +480,17 @@ impl Shortcut {
 }
 
 /// The shortcut of the calendar `calendar` (its id), by the name the account gives it. Someone
-/// else's is found by their address (the entry id's X.500 name, resolved once each, at most
-/// [`MAX_LOOKUPS`]), a shared name only when it is the only one; an own calendar's EWS folder id
+/// else's is found by their address (the entry id's X.500 name, resolved once a session), a
+/// shared name only when it is the only one; an own calendar's EWS folder id
 /// is not the shortcut's MAPI entry id, so it is found by its name, and only when only one
 /// shortcut has it.
 fn find_member<'a>(c: &Client, all: &'a [Shortcut], calendar: &str, name: &str) -> Option<&'a Shortcut> {
     if let Some(owner) = calendar.strip_prefix("shared:") {
-        let mut resolved: std::collections::HashMap<String, Option<String>> = std::collections::HashMap::new();
         let mut named: Vec<&Shortcut> = Vec::new();
         for s in all.iter().filter(|s| s.section == Some(CALENDAR_SECTION) && s.kind == Some(WLINK_SHARED)) {
             let mut known_other = false;
             if let Some(dn) = address_book_dn(&s.address_book) {
-                let email = match resolved.get(&dn) {
-                    Some(e) => e.clone(),
-                    None => {
-                        let e = if resolved.len() < MAX_LOOKUPS { resolve(c, &dn) } else { None };
-                        resolved.insert(dn.clone(), e.clone());
-                        e
-                    }
-                };
+                let email = resolve(c, &dn);
                 if email.as_ref().is_some_and(|e| e.eq_ignore_ascii_case(owner)) {
                     return Some(s);
                 }

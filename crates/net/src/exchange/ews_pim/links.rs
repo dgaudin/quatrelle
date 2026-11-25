@@ -316,8 +316,8 @@ fn shape(c: &Client, items: &[El], pages: usize) -> Shortcuts {
         groups.truncate(MAX_GROUPS);
     }
     let mut out: Vec<CalendarLink> = Vec::new();
-    let mut resolved: HashMap<String, Option<String>> = HashMap::new();
     let (mut found, mut unresolved, mut not_looked) = (0usize, 0usize, 0usize);
+    let mut looked = 0usize;
     for w in &wlinks {
         if w.section != Some(CALENDAR_SECTION) {
             continue;
@@ -331,26 +331,28 @@ fn shape(c: &Client, items: &[El], pages: usize) -> Shortcuts {
             String::new()
         } else {
             let Some(dn) = w.address_book_eid.as_deref().and_then(address_book_dn) else { continue };
-            let email = match resolved.get(&dn) {
-                Some(e) => e.clone(),
-                None => {
-                    let e = if resolved.len() < MAX_LOOKUPS {
-                        match resolve(c, &dn) {
-                            Some(e) => {
-                                found += 1;
-                                Some(e)
-                            }
-                            None => {
-                                unresolved += 1;
-                                None
-                            }
-                        }
+            let email = match c.resolved_name(&dn) {
+                Some(known) => {
+                    if known.is_some() {
+                        found += 1
                     } else {
-                        not_looked += 1;
-                        None
-                    };
-                    resolved.insert(dn, e.clone());
-                    e
+                        unresolved += 1
+                    }
+                    known
+                }
+                None if looked >= MAX_LOOKUPS => {
+                    not_looked += 1;
+                    None
+                }
+                None => {
+                    looked += 1;
+                    let email = resolve(c, &dn);
+                    if email.is_some() {
+                        found += 1
+                    } else {
+                        unresolved += 1
+                    }
+                    email
                 }
             };
             let Some(email) = email.filter(|e| !e.eq_ignore_ascii_case(c.email())) else { continue };
@@ -463,14 +465,19 @@ pub(crate) fn address_book_dn(b: &[u8]) -> Option<String> {
 
 /// The address behind an X.500 name, as Exchange's directory has it.
 fn resolve(c: &Client, dn: &str) -> Option<String> {
-    let m = c
+    if let Some(known) = c.resolved_name(dn) {
+        return known;
+    }
+    let email = c
         .call_one(&format!(
             "<m:ResolveNames ReturnFullContactData=\"false\" SearchScope=\"ActiveDirectory\"><m:UnresolvedEntry>{}</m:UnresolvedEntry></m:ResolveNames>",
             esc(dn)
         ))
-        .ok()?;
-    let email = m.find("Mailbox").and_then(|b| b.text_of("EmailAddress"))?.trim().to_ascii_lowercase();
-    email.contains('@').then_some(email)
+        .ok()
+        .and_then(|m| m.find("Mailbox").and_then(|b| b.text_of("EmailAddress")).map(str::trim).map(str::to_ascii_lowercase))
+        .filter(|e| e.contains('@'));
+    c.keep_resolved_name(dn, email.clone());
+    email
 }
 
 #[cfg(test)]
