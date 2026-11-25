@@ -245,6 +245,46 @@ fn a_follow_up_day_goes_to_exchange_as_its_floating_midnight() {
     done(s);
 }
 
+/// Clear Flag on a message whose server keeps its follow-up (Exchange, Graph) takes the dates
+/// and the reminder off there too, as Outlook's does — a SetFollowUp of its own, so Mark
+/// Complete (which takes the flag off without it) keeps them; Undo puts them back.
+#[test]
+fn clear_flag_takes_the_follow_up_off_the_server_too() {
+    let mut s = sample_session("clear-flag-server");
+    let account = s
+        .run("account.add", &json!({"email": "riley@contoso.example", "password": "pw", "ews": "https://ews.contoso.example/EWS/Exchange.asmx"}))
+        .unwrap()["account"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    s.take_jobs();
+    let mut m = turnaround(&s);
+    m.key.account = account.clone();
+    m.flags.flagged = true;
+    m.flags.follow_up.start = 20_000 * 86_400;
+    m.flags.follow_up.due = 20_010 * 86_400;
+    m.flags.follow_up.reminder = s.clock.now + 3600;
+    let m = std::sync::Arc::new(m);
+    // The message as the account's cache has it (`mail.flag`'s `key` reads the cache).
+    s.cache.entry((account.clone(), m.key.folder.clone())).or_default().messages.push(m.clone());
+    s.run("mail.flag", &json!({"key": m.key.to_id(), "on": false})).unwrap();
+    let jobs = s.take_jobs();
+    let cleared = jobs.iter().any(|j| matches!(j, Job::Apply { op: Op::SetFollowUp { start: None, due: None, reminder: None, .. }, .. }));
+    assert!(cleared, "a SetFollowUp taking all three off went to the server: {jobs:?}");
+    // Undo puts the server's dates and reminder back.
+    s.run("edit.undo", &json!({})).unwrap();
+    let jobs = s.take_jobs();
+    let now = s.clock.now;
+    let restored = jobs.iter().any(|j| match j {
+        Job::Apply { op: Op::SetFollowUp { start: Some(a), due: Some(b), reminder: Some(c), .. }, .. } => {
+            *a == 20_000 * 86_400 && *b == 20_010 * 86_400 && *c == now + 3600
+        }
+        _ => false,
+    });
+    assert!(restored, "the Undo's SetFollowUp puts the dates back: {jobs:?}");
+    done(s);
+}
+
 /// The days kept in the preferences come from disk: what isn't a day (out of range, as a
 /// damaged or hostile file has it, a key too long or empty) is left out as they're read, so
 /// the reading pane never labels it.

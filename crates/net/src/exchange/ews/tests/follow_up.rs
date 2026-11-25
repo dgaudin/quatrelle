@@ -366,3 +366,69 @@ fn shared_and_public_folders_have_their_ticks_read_where_they_live() {
     assert_eq!(replies, 2, "the replies asked for where each lives");
     let _ = std::fs::remove_dir_all(store.root());
 }
+
+/// Marked complete here (the flag off, then the keyword on, as the engine sends it): Exchange
+/// keeps the follow-up's dates — the list shows them struck through — and only its reminder goes
+/// with the icon. A lone flag-off write (Undo of the keyword) leaves the dates too; Clear Flag's
+/// own SetFollowUp takes them off.
+#[test]
+fn marking_complete_keeps_the_follow_up_dates_on_exchange() {
+    let mut d = Data::default();
+    let inbox = d.folder("Inbox", None, Some("inbox"), "IPF.Note");
+    let id = d.deliver(&inbox, b"From: a@x.example\r\nSubject: due\r\n\r\nx\r\n", true, "2024-05-01T09:00:00Z");
+    for i in d.items.iter_mut() {
+        i.flagged = true;
+        i.follow_up = fake_ews::FollowUp {
+            start: Some("2026-11-02T00:00:00Z".into()),
+            due: Some("2026-11-06T00:00:00Z".into()),
+            common_start: Some("2026-11-02T00:00:00Z".into()),
+            common_end: Some("2026-11-06T00:00:00Z".into()),
+            reminder_set: true,
+            reminder_time: Some("2026-11-06T09:00:00Z".into()),
+            reminder_signal: Some("2026-11-06T09:00:00Z".into()),
+            request: Some("Follow up".into()),
+        };
+    }
+    let server = fake_ews::serve(d);
+    let dir = std::env::temp_dir().join(format!("quatrelle-ews-complete-dates-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    let store = Store::open(&dir).unwrap();
+    let user = format!("{}\\{}", fake_ews::DOMAIN, fake_ews::USER);
+    let c = Client::connect(&server.url, &user, fake_ews::PASSWORD, "riley@contoso.example").unwrap();
+    let mut st = State::default();
+    list_folders(&c, &mut st, "a1").unwrap();
+    let opts = SyncOptions { prefetch: 0, ..Default::default() };
+    sync_folder(&c, &mut st, &store, "a1", "INBOX", &opts).unwrap();
+    let m = store.load_folder("a1", "INBOX").unwrap().messages[0].clone();
+    let keys = vec![m.key];
+    let at = |text: &str| jmap::utc_date(text).unwrap();
+
+    // Mark Complete: the flag off, then the keyword on.
+    let flag = |on| Op::SetFlag { keys: keys.clone(), flag: Flag::Flagged, on, all: false };
+    let complete = |on| Op::SetKeyword { keys: keys.clone(), keyword: FOLLOW_UP_COMPLETE.into(), on, name: None };
+    for op in [flag(false), complete(true)] {
+        apply_remote(&c, &st, &op).unwrap();
+    }
+    {
+        let d = server.data.lock().unwrap();
+        let f = &d.items.iter().find(|i| i.id == id).unwrap().follow_up;
+        // The dates stay, Task and Common; the reminder goes with the icon.
+        assert_eq!(f.start.as_deref().and_then(jmap::utc_date), Some(at("2026-11-02T00:00:00Z")), "{f:?}");
+        assert_eq!(f.due.as_deref().and_then(jmap::utc_date), Some(at("2026-11-06T00:00:00Z")), "{f:?}");
+        assert_eq!(f.common_start.as_deref().and_then(jmap::utc_date), Some(at("2026-11-02T00:00:00Z")), "{f:?}");
+        assert_eq!(f.common_end.as_deref().and_then(jmap::utc_date), Some(at("2026-11-06T00:00:00Z")), "{f:?}");
+        assert!(!f.reminder_set && f.reminder_time.is_none() && f.reminder_signal.is_none(), "{f:?}");
+    }
+    // And the next sync reads them back on the completed message.
+    sync_folder(&c, &mut st, &store, "a1", "INBOX", &opts).unwrap();
+    let m = store.load_folder("a1", "INBOX").unwrap().messages[0].clone();
+    assert!(m.flags.follow_up_complete());
+    assert_eq!((m.flags.follow_up.start, m.flags.follow_up.due), (at("2026-11-02T00:00:00Z"), at("2026-11-06T00:00:00Z")), "{:?}", m.flags.follow_up);
+
+    // Clear Flag's own SetFollowUp takes the dates off.
+    apply_remote(&c, &st, &Op::SetFollowUp { keys, start: None, due: None, reminder: None }).unwrap();
+    let d = server.data.lock().unwrap();
+    let f = &d.items.iter().find(|i| i.id == id).unwrap().follow_up;
+    assert!(f.start.is_none() && f.due.is_none() && f.common_start.is_none() && f.common_end.is_none(), "{f:?}");
+    let _ = std::fs::remove_dir_all(&dir);
+}

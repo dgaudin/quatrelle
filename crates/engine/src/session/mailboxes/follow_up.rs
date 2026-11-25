@@ -52,8 +52,27 @@ impl Session {
         for (a, keys) in &completed {
             self.apply_op(a, Op::SetKeyword { keys: keys.clone(), keyword: FOLLOW_UP_COMPLETE.into(), on: false, name: None });
         }
+        // Where the server keeps a follow-up's dates and reminder (Exchange, Graph): Clear Flag
+        // takes them off there too, as Outlook's does (Mark Complete, which takes the flag off
+        // the same way, keeps them: the flag-off write alone leaves them).
+        let (ews, graph) = self.mail_server_kind(sel);
+        let server_side = |a: &str| ews.contains(a) || graph.contains(a);
+        let mut clear: BTreeMap<String, Vec<MessageKey>> = BTreeMap::new();
+        let mut restore: BTreeMap<(String, i64, i64, i64), Vec<MessageKey>> = BTreeMap::new();
+        if !on {
+            for m in sel {
+                if server_side(&m.key.account) {
+                    let old = (m.flags.follow_up.start.max(0), m.flags.follow_up.due.max(0), m.flags.follow_up.reminder.max(0));
+                    clear.entry(m.key.account.clone()).or_default().push(m.key.clone());
+                    restore.entry((m.key.account.clone(), old.0, old.1, old.2)).or_default().push(m.key.clone());
+                }
+            }
+        }
         for (a, keys) in by_account {
             self.apply_op(&a, Op::SetFlag { keys, flag: Flag::Flagged, on, all: false });
+        }
+        for (a, keys) in &clear {
+            self.apply_op(a, Op::SetFollowUp { keys: keys.clone(), start: None, due: None, reminder: None });
         }
         for m in sel {
             let id = follow_up_id(m);
@@ -73,6 +92,15 @@ impl Session {
         }
         for (a, keys) in completed {
             undo.entry(a).or_default().push(Op::SetKeyword { keys, keyword: FOLLOW_UP_COMPLETE.into(), on: true, name: None });
+        }
+        // Undo of Clear Flag puts the server's dates and reminder back as they were.
+        for ((a, s, d, r), keys) in restore {
+            undo.entry(a).or_default().push(Op::SetFollowUp {
+                keys,
+                start: (s > 0).then_some(s),
+                due: (d > 0).then_some(d),
+                reminder: (r > 0).then_some(r),
+            });
         }
         undo.into_iter().collect()
     }

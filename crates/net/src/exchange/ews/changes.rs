@@ -153,8 +153,8 @@ fn date_updates(task: &str, common: &str, at: Option<i64>) -> String {
     }
 }
 
-/// The updates that take a follow-up's dates and reminder off (Cleared, or done with): each
-/// property as `None` deletes it.
+/// The updates for a follow-up's dates and reminder as a change names them: each property as
+/// `None` deletes it.
 fn follow_up_updates(start: Option<i64>, due: Option<i64>, reminder: Option<i64>) -> String {
     let mut out = date_updates(TASK_START, COMMON_START, start);
     out.push_str(&date_updates(TASK_DUE, COMMON_END, due));
@@ -216,19 +216,13 @@ pub fn apply_remote(c: &Client, st: &State, op: &Op) -> Result<()> {
                 set_value(FLAG_REQUEST, FOLLOW_UP_REQUEST)
             ),
         ),
-        // Cleared, or marked complete (the engine takes the flag off first): none of it, nor
-        // the dates and the reminder it was due by.
-        Op::SetFlag { keys, flag: Flag::Flagged, on: false, .. } => update(
-            keys,
-            &format!(
-                "{}{}{}{}{}",
-                delete(FLAG_STATUS),
-                delete(COMPLETE_TIME),
-                delete(FOLLOW_UP_ICON),
-                delete(FLAG_REQUEST),
-                follow_up_updates(None, None, None)
-            ),
-        ),
+        // Cleared, or marked complete (the engine takes the flag off first): none of the
+        // flag's own. Its dates and reminder stay — Mark Complete keeps the days it was due by,
+        // as the list shows them struck through; taking them off is a SetFollowUp of its own
+        // (Clear Flag sends one).
+        Op::SetFlag { keys, flag: Flag::Flagged, on: false, .. } => {
+            update(keys, &format!("{}{}{}{}", delete(FLAG_STATUS), delete(COMPLETE_TIME), delete(FOLLOW_UP_ICON), delete(FLAG_REQUEST)))
+        }
         // Its dates and reminder, as Follow Up › Custom… set them (and Add Reminder…).
         Op::SetFollowUp { keys, start, due, reminder } => update(keys, &follow_up_updates(*start, *due, *reminder)),
         // Outlook's Mark Complete: status 1 and the time it was done, the flag's icon gone
