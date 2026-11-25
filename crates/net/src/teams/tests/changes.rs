@@ -109,7 +109,7 @@ fn restart(r: Run) -> Run {
 #[test]
 fn an_edit_goes_as_a_patch_of_escaped_html_with_its_mentions() {
     let mut r = run(teams_with(vec![chat(CHAT, T0, 4)]));
-    let typed = Typed { text: "<b>x</b> & Ana Exemple".into(), mentions: vec![(11..19, "u-ana".into())], ..Typed::default() };
+    let typed = Typed { text: "<b>x</b> & Ana Exemple".into(), mentions: vec![(11..22, "u-ana".into())], ..Typed::default() };
     let (body, mentions) = teams_compose_typed(&typed);
     r.w.job(Job::Op { op: Op::Edit { chat: CHAT.into(), local: "1-1".into(), message: OWN.into(), created: T0 + MINUTE, body, mentions } });
     r.turns(Duration::from_secs(3));
@@ -668,7 +668,7 @@ fn a_message_with_mentions_goes_with_its_array_and_its_check_finds_it() {
         t.answer_lost.insert("post".into(), 1);
         t.lost_retry_after = Some(1);
     });
-    let typed = Typed { text: "Ana Exemple, the figures?".into(), mentions: vec![(0..8, "u-ana".into())], ..Typed::default() };
+    let typed = Typed { text: "Ana Exemple, the figures?".into(), mentions: vec![(0..11, "u-ana".into())], ..Typed::default() };
     let (body, mentions) = teams_compose_typed(&typed);
     r.w.job(Job::Op { op: Op::Send { chat: CHAT.into(), local: "1-1".into(), body, mentions, parts: Vec::new() } });
     r.turns(Duration::from_secs(10));

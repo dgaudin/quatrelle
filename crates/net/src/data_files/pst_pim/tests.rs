@@ -153,7 +153,7 @@ fn a_mistyped_named_time_hides_the_fallback() {
 fn contacts_and_appointments_map() {
     let x = Extra {
         given: "Ana".into(),
-        family: "Lima".into(),
+        family: "Exemple".into(),
         company: "Contoso".into(),
         emails: vec!["ana@contoso.example".into()],
         phones: vec![("+1 555 0100".into(), "cell")],
