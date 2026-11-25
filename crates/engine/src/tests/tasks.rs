@@ -518,3 +518,203 @@ fn the_mail_stamp_counts_only_mail_changes() {
     assert!(s.mail_stamp() > e, "a folder synced counts");
     done(s);
 }
+
+/// The address book is looked up by address through an index built once per PIM revision, not
+/// searched card by card at every call: the index is there after a lookup, and a contact added
+/// afterwards is found (the index is built again when the revision moves).
+#[test]
+fn person_by_email_uses_the_index_and_follows_the_revision() {
+    let mut s = sample_session("people-index");
+    let card = |uid: &str, name: &str, email: &str| quatrelle_model::vcard::Card {
+        uid: uid.into(),
+        name: name.into(),
+        emails: vec![quatrelle_model::vcard::Typed { value: email.into(), ..Default::default() }],
+        ..Default::default()
+    };
+    let r1 = s.create_card(None, card("c1", "Zed Probe", "zed@probe.example")).unwrap();
+    assert_eq!(r1["uid"], json!("c1"));
+    let p = s.person_by_email("ZED@probe.example").unwrap();
+    assert_eq!(p.card.display(), "Zed Probe", "any case of the address is found");
+    {
+        let g = s.people_index.lock().unwrap_or_else(|e| e.into_inner());
+        assert!(g.is_some(), "the index is built by the lookup");
+    }
+    // A card added under the same address wins when its name comes first: the index is rebuilt
+    // at the new revision, not kept stale.
+    s.create_card(None, card("c2", "Amy Probe", "zed@probe.example")).unwrap();
+    let p = s.person_by_email("zed@probe.example").unwrap();
+    assert_eq!(p.card.display(), "Amy Probe", "the first by name, as before, after the revision moved: {:?}", p.card.display());
+    assert!(s.person_by_email("nobody@probe.example").is_none());
+    done(s);
+}
+
+/// for when the bar is switched back on.
+#[test]
+fn the_todo_bar_setting_reads_and_writes_as_an_older_version_reads_it() {
+    // Saved by 1.5 (a bool) and by a version that gave the bar parts (an object): both read.
+    let p: crate::Prefs = serde_json::from_value(json!({"todoBar": false})).unwrap();
+    assert!(!p.todo_bar && p.todo_bar_parts.is_none() && !p.todo_bar().any(), "1.5's off");
+    let p: crate::Prefs = serde_json::from_value(json!({"todoBarParts": {"calendar": true, "tasks": true}})).unwrap();
+    assert!(p.todo_bar && p.todo_bar_parts.is_some_and(|b| b.calendar && b.tasks && !b.people), "the parts beside the bool");
+    // Saved here: a bool for the older version, the parts beside it.
+    let mut p = crate::Prefs::default();
+    p.set_todo_bar(crate::session::TodoBar { calendar: false, people: true, tasks: true });
+    let saved = serde_json::to_value(&p).unwrap();
+    assert_eq!(saved["todoBar"], json!(true), "a bool, as 1.5 reads it: {saved}");
+    assert_eq!(saved["todoBarParts"]["people"], json!(true));
+    assert!(serde_json::from_value::<crate::Prefs>(saved.clone()).is_ok(), "reads back");
+
+    // Off remembers the ticked parts; on restores them (not the calendar alone).
+    let mut s = sample_session("todo-bar-parts");
+    s.run("view.todoBar", &json!({"tasks": true})).unwrap();
+    let off = s.run("view.todoBar", &json!({"on": false})).unwrap();
+    assert_eq!(off["on"], json!(false));
+    assert!(!s.prefs.todo_bar, "the bool an older version reads is off");
+    let on = s.run("view.todoBar", &json!({"on": true})).unwrap();
+    assert_eq!(on["tasks"], json!(true), "the ticked part is remembered, not the calendar alone: {on}");
+    done(s);
+}
+
+/// Next 7 Days covers seven days, not eight: due in seven days is out of it, in six is in.
+#[test]
+fn next_seven_days_covers_seven_days() {
+    use quatrelle_model::pim::tasks::{TaskArrange, TaskView};
+    let mut s = sample_session("next-7");
+    let today = quatrelle_model::dates::today(&s.clock);
+    let day = |n| quatrelle_model::dates::day_string(today + n);
+    s.run("task.create", &json!({"subject": "In six", "due": day(6)})).unwrap();
+    s.run("task.create", &json!({"subject": "In seven", "due": day(7)})).unwrap();
+    s.run("task.create", &json!({"subject": "In eight", "due": day(8)})).unwrap();
+    let v = s.todo_view("todo", "", true, TaskView::NextSevenDays, TaskArrange::DueDate);
+    let names: Vec<&str> = v.iter().map(|r| r.subject()).collect();
+    assert!(names.contains(&"In six"), "{names:?}");
+    assert!(!names.contains(&"In seven") && !names.contains(&"In eight"), "seven days, not eight: {names:?}");
+    done(s);
+}
+
+/// Arrange By › Categories puts a flagged message under its category, beside the tasks of it,
+/// not under "No category".
+#[test]
+fn flagged_mail_is_arranged_by_its_categories() {
+    use quatrelle_model::pim::tasks::{TaskArrange, TaskView};
+    let mut s = sample_session("todo-categories");
+    s.run("task.create", &json!({"subject": "Plain task"})).unwrap();
+    s.run("task.create", &json!({"subject": "Work task", "categories": "Work"})).unwrap();
+    let k = key_of(&s, "Character turnarounds");
+    s.run("list.select", &k).unwrap();
+    s.run("mail.categorize", &json!({"category": "Work"})).unwrap();
+    s.run("mail.flag", &json!({"due": "2026-12-01"})).unwrap();
+    let list = s.todo_view("todo", "", true, TaskView::SimpleList, TaskArrange::Categories);
+    let names: Vec<&str> = list.iter().map(|r| r.subject()).collect();
+    let at = |n: &str| names.iter().position(|x| *x == n);
+    let (plain, work, mail) = (at("Plain task"), at("Work task"), at("Character turnarounds"));
+    assert!(
+        matches!((plain, work, mail), (Some(p), Some(w), Some(m)) if m > p && (m as i64 - w as i64).abs() == 1),
+        "the flagged message sits with the Work task: {names:?}"
+    );
+    done(s);
+}
+
+/// Favorite people read back from disk are capped (200, plausible addresses), as a damaged or
+/// hostile file may have more.
+#[test]
+fn favorite_people_read_from_disk_are_capped() {
+    let many: Vec<String> = (0..300).map(|i| format!("p{i}@x.example")).collect();
+    let p: crate::Prefs = serde_json::from_value(json!({"favoritePeople": many})).unwrap();
+    assert_eq!(p.favorite_people.len(), 200, "capped at 200");
+    let p: crate::Prefs = serde_json::from_value(json!({"favoritePeople": ["", "ok@x.example", "x".repeat(300)]})).unwrap();
+    assert_eq!(p.favorite_people, vec!["ok@x.example".to_string()], "empty and over-long addresses left out");
+}
+
+/// A folder a sync event touched is read again from the disk cache, off the interface thread:
+/// a flagged message that appears in it on disk shows in the To-Do List after the event. Before
+/// the invalidation, the list read once stayed until the restart.
+#[test]
+fn a_folder_a_sync_touched_is_read_again_from_disk() {
+    let mut s = sample_session("todo-disk-refresh");
+    s.cache_limit = 1_000_000; // keep the disk lists: only a re-read can bring the change in
+    let today = quatrelle_model::dates::today(&s.clock);
+    let folder = quatrelle_model::Folder { account: "sample".into(), path: "Projects".into(), selectable: true, ..Default::default() };
+    s.accounts[0].folders.push(folder);
+    s.store.as_ref().unwrap().save_folders("sample", &s.accounts[0].folders).unwrap();
+    let flagged = |uid: u32, subject: &str| Summary {
+        key: MessageKey { account: "sample".into(), folder: "Projects".into(), validity: 1, uid },
+        message_id: format!("{subject}@x"),
+        subject: subject.into(),
+        flags: quatrelle_model::Flags {
+            flagged: true,
+            follow_up: quatrelle_model::FollowUp { due: today.saturating_mul(86_400), ..Default::default() },
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+    let mut st = quatrelle_store::FolderState { validity: 1, ..Default::default() };
+    st.messages.push(flagged(1, "First"));
+    s.store.as_ref().unwrap().save_folder("sample", "Projects", &st).unwrap();
+    s.cache.remove(&("sample".to_string(), "Projects".to_string()));
+    s.cache_order.retain(|k| *k != ("sample".to_string(), "Projects".to_string()));
+
+    // It shows, read from the disk cache in the background.
+    let mut found = false;
+    for _ in 0..100 {
+        if s.todo("", false).iter().any(|r| r.subject() == "First") {
+            found = true;
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+    assert!(found, "the flagged message on disk shows: {:?}", s.todo("", false).iter().map(|r| r.subject().to_string()).collect::<Vec<_>>());
+
+    // The sync changes the folder on disk (another flagged message there), then says so.
+    st.messages.push(flagged(2, "Second"));
+    s.store.as_ref().unwrap().save_folder("sample", "Projects", &st).unwrap();
+    s.apply(quatrelle_model::Event::FolderChanged { account: "sample".into(), folder: "Projects".into() });
+
+    // The list is refreshed from the disk: the new one shows too.
+    let mut found = false;
+    for _ in 0..100 {
+        s.wait_disk_scan();
+        if s.todo("", false).iter().any(|r| r.subject() == "Second") {
+            found = true;
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+    assert!(found, "the folder a sync touched is read again: {:?}", s.todo("", false).iter().map(|r| r.subject().to_string()).collect::<Vec<_>>());
+    done(s);
+}
+
+/// A row of the To-Do List whose message is only in the disk cache (a folder never opened this
+/// session) can be flagged and edited by its key: `message_by_id` reads the disk-read lists too.
+#[test]
+fn a_disk_only_row_is_edited_by_its_key() {
+    let mut s = sample_session("todo-key-disk");
+    let today = quatrelle_model::dates::today(&s.clock);
+    let folder = quatrelle_model::Folder { account: "sample".into(), path: "Projects".into(), selectable: true, ..Default::default() };
+    s.accounts[0].folders.push(folder);
+    s.store.as_ref().unwrap().save_folders("sample", &s.accounts[0].folders).unwrap();
+    let mut st = quatrelle_store::FolderState { validity: 1, ..Default::default() };
+    st.messages.push(Summary {
+        key: MessageKey { account: "sample".into(), folder: "Projects".into(), validity: 1, uid: 77 },
+        message_id: "disk-only@x".into(),
+        subject: "On disk only".into(),
+        flags: quatrelle_model::Flags {
+            flagged: true,
+            follow_up: quatrelle_model::FollowUp { due: today.saturating_mul(86_400), ..Default::default() },
+            ..Default::default()
+        },
+        ..Default::default()
+    });
+    s.store.as_ref().unwrap().save_folder("sample", "Projects", &st).unwrap();
+    s.cache.remove(&("sample".to_string(), "Projects".to_string()));
+    s.cache_order.retain(|k| *k != ("sample".to_string(), "Projects".to_string()));
+    s.todo("", false);
+    s.wait_disk_scan();
+
+    let key = MessageKey { account: "sample".into(), folder: "Projects".into(), validity: 1, uid: 77 };
+    let id = key.to_id();
+    assert!(s.message_by_id(&id).is_some(), "the disk-read lists are searched too");
+    let r = s.run("mail.flag", &serde_json::json!({ "key": id, "due": "none" }));
+    assert!(r.is_ok(), "mail.flag by the key of a disk-only row: {r:?}");
+    done(s);
+}

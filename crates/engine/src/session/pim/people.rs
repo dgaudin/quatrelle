@@ -38,16 +38,41 @@ impl Session {
         if email.is_empty() {
             return None;
         }
-        let mut found: Option<(&String, &StoredCard)> = None;
+        // The books indexed by address (lower case), built once per PIM revision: a lookup, not
+        // a scan of every card of every account at every image (with 30 favorites and 20 000
+        // contacts, the bar searched them all 30 times per frame).
+        let key = email.to_lowercase();
+        let rev = self.pim_revision;
+        {
+            let g = self.people_index.lock().unwrap_or_else(|e| e.into_inner());
+            if let Some((r, index)) = g.as_ref()
+                && *r == rev
+            {
+                return index.get(&key).cloned();
+            }
+        }
+        let mut index: std::collections::HashMap<String, Person> = std::collections::HashMap::new();
         for (a, p) in &self.pim {
-            for c in p.cards.iter().filter(|c| c.card.emails.iter().any(|e| e.value.trim().eq_ignore_ascii_case(email))) {
-                let first = found.is_none_or(|(_, f)| c.card.display().to_lowercase() < f.card.display().to_lowercase());
-                if first {
-                    found = Some((a, c));
+            for c in &p.cards {
+                let person = Person { account: a.clone(), book: c.book.clone(), card: c.card.clone() };
+                for e in &c.card.emails {
+                    let k = e.value.trim().to_lowercase();
+                    if k.is_empty() {
+                        continue;
+                    }
+                    // The first by name when an address has several cards.
+                    match index.get(&k) {
+                        Some(old) if old.card.display().to_lowercase() <= person.card.display().to_lowercase() => {}
+                        _ => {
+                            index.insert(k, person.clone());
+                        }
+                    }
                 }
             }
         }
-        found.map(|(a, c)| Person { account: a.clone(), book: c.book.clone(), card: c.card.clone() })
+        let mut g = self.people_index.lock().unwrap_or_else(|e| e.into_inner());
+        *g = Some((rev, index.clone()));
+        g.as_ref().and_then(|(_, i)| i.get(&key)).cloned()
     }
 
     /// Whether this address is one of the To-Do bar's favorite people.
