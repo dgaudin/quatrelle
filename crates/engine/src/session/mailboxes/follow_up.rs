@@ -36,12 +36,10 @@ impl Session {
     /// A server that keeps one status for both (Exchange's flag status) gets the
     /// [`FOLLOW_UP_COMPLETE`] keyword taken off before the flag is set, and put on after it.
     pub(crate) fn set_flagged(&mut self, sel: &[Arc<Summary>], on: bool) -> Vec<(String, Vec<Op>)> {
-        let mut by_account: BTreeMap<String, Vec<MessageKey>> = BTreeMap::new();
         let mut changed: BTreeMap<String, Vec<MessageKey>> = BTreeMap::new();
         // Carrying the keyword: complete, or flagged again elsewhere with it left behind.
         let mut completed: BTreeMap<String, Vec<MessageKey>> = BTreeMap::new();
         for m in sel {
-            by_account.entry(m.key.account.clone()).or_default().push(m.key.clone());
             if m.flags.flagged != on {
                 changed.entry(m.key.account.clone()).or_default().push(m.key.clone());
             }
@@ -68,8 +66,12 @@ impl Session {
                 }
             }
         }
-        for (a, keys) in by_account {
-            self.apply_op(&a, Op::SetFlag { keys, flag: Flag::Flagged, on, all: false });
+        // The flag write goes only to the messages whose flag changes: one already flagged keeps
+        // the text and icon Outlook gave it ([MS-OXOFLAG] 3.1.4.1.3: `PidLidFlagRequest` is set
+        // only if it doesn't already exist — writing it again would replace a "Review" with
+        // "Follow up").
+        for (a, keys) in &changed {
+            self.apply_op(a, Op::SetFlag { keys: keys.clone(), flag: Flag::Flagged, on, all: false });
         }
         for (a, keys) in &clear {
             self.apply_op(

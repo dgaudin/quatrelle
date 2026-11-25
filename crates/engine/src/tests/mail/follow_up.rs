@@ -341,3 +341,45 @@ fn a_partial_follow_up_change_names_only_its_fields() {
     done(s);
 }
 
+/// Flagging a selection that includes an already-followed message writes the flag only on the
+/// others: the followed one keeps the text and icon Outlook gave its flag ([MS-OXOFLAG]
+/// 3.1.4.1.3 — `PidLidFlagRequest` is set only if it doesn't already exist), not "Follow up"
+/// and the plain red flag again.
+#[test]
+fn flagging_a_selection_leaves_an_already_flagged_message_s_flag_alone() {
+    let mut s = sample_session("flag-selection");
+    let account = s
+        .run("account.add", &json!({"email": "riley@contoso.example", "password": "pw", "ews": "https://ews.contoso.example/EWS/Exchange.asmx"}))
+        .unwrap()["account"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    s.take_jobs();
+    let followed = {
+        let mut m = turnaround(&s);
+        m.key.account = account.clone();
+        m.flags.flagged = true;
+        m.flags.follow_up.title = "Review".into();
+        std::sync::Arc::new(m)
+    };
+    let fresh = {
+        let mut m = turnaround(&s);
+        m.key.account = account.clone();
+        m.key.uid += 1;
+        m.subject = "Fresh".into();
+        std::sync::Arc::new(m)
+    };
+    s.set_flagged(&[followed.clone(), fresh.clone()], true);
+    let jobs = s.take_jobs();
+    let flagged_keys: Vec<u32> = jobs
+        .iter()
+        .filter_map(|j| match j {
+            Job::Apply { op: Op::SetFlag { keys, flag: Flag::Flagged, on: true, .. }, .. } => Some(keys.iter().map(|k| k.uid).collect::<Vec<_>>()),
+            _ => None,
+        })
+        .flatten()
+        .collect();
+    assert_eq!(flagged_keys, vec![fresh.key.uid], "only the message whose flag changed got the write: {jobs:?}");
+    done(s);
+}
+
