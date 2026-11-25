@@ -155,7 +155,9 @@ pub(crate) struct DiskScan {
     pub done: HashSet<(String, String)>,
     /// Counts every fill and invalidation, with the mail stamp into [`Session::todo_stamp`].
     pub stamp: u64,
-    /// Whether the background reader was started (native only).
+    /// Whether the background reader was started (native only; the web reads per call, so on
+    /// wasm it is never read).
+    #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
     pub started: bool,
 }
 
