@@ -83,6 +83,9 @@ const REMINDER_SET: &str = "<t:ExtendedFieldURI DistinguishedPropertySetId=\"Com
 const REMINDER_TIME: &str = "<t:ExtendedFieldURI DistinguishedPropertySetId=\"Common\" PropertyId=\"34050\" PropertyType=\"SystemTime\"/>";
 const REMINDER_SIGNAL: &str = "<t:ExtendedFieldURI DistinguishedPropertySetId=\"Common\" PropertyId=\"34144\" PropertyType=\"SystemTime\"/>";
 const FLAG_REQUEST: &str = "<t:ExtendedFieldURI DistinguishedPropertySetId=\"Common\" PropertyId=\"34096\" PropertyType=\"String\"/>";
+/// `PidLidToDoTitle`: the task's title, the flag's own property ([MS-OXOFLAG] 3.1.4.1.3), so
+/// Clear Flag takes it off too.
+const TODO_TITLE: &str = "<t:ExtendedFieldURI DistinguishedPropertySetId=\"Common\" PropertyId=\"34212\" PropertyType=\"String\"/>";
 
 /// The follow-up title Outlook gives a plain flag ([MS-OXOFLAG] 3.1.4.1).
 const FOLLOW_UP_REQUEST: &str = "Follow up";
@@ -157,6 +160,13 @@ fn date_updates(task: &str, common: &str, at: Option<i64>) -> String {
 /// property off, unnamed (`None`) left as the server has it — a partial change doesn't erase
 /// what this computer didn't know.
 fn follow_up_updates(start: Option<FieldChange>, due: Option<FieldChange>, reminder: Option<FieldChange>) -> String {
+    // A start date goes with a due one ([MS-OXOTASK]: the due is required with the start), so a
+    // start set without a due takes the same day for both — "No Date" clears the two together.
+    let due = match (due, start) {
+        (Some(FieldChange::Set(_)), _) => due,
+        (_, Some(FieldChange::Set(v))) => Some(FieldChange::Set(v)),
+        _ => due,
+    };
     let mut out = String::new();
     if let Some(c) = start {
         out.push_str(&date_updates(TASK_START, COMMON_START, c.value()));
@@ -228,9 +238,10 @@ pub fn apply_remote(c: &Client, st: &State, op: &Op) -> Result<()> {
         // flag's own. Its dates and reminder stay — Mark Complete keeps the days it was due by,
         // as the list shows them struck through; taking them off is a SetFollowUp of its own
         // (Clear Flag sends one).
-        Op::SetFlag { keys, flag: Flag::Flagged, on: false, .. } => {
-            update(keys, &format!("{}{}{}{}", delete(FLAG_STATUS), delete(COMPLETE_TIME), delete(FOLLOW_UP_ICON), delete(FLAG_REQUEST)))
-        }
+        Op::SetFlag { keys, flag: Flag::Flagged, on: false, .. } => update(
+            keys,
+            &format!("{}{}{}{}{}", delete(FLAG_STATUS), delete(COMPLETE_TIME), delete(FOLLOW_UP_ICON), delete(FLAG_REQUEST), delete(TODO_TITLE)),
+        ),
         // Its dates and reminder, as Follow Up › Custom… set them (and Add Reminder…): only the
         // fields the change names, the others left as the server has them.
         Op::SetFollowUp { keys, start, due, reminder } => {

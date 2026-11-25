@@ -592,3 +592,57 @@ fn the_follow_up_s_title_is_the_task_s_todo_title() {
     assert_eq!(m.flags.follow_up.title, "Review", "the flag's request when the task has no title: {:?}", m.flags.follow_up);
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// The EWS writes follow [MS-OXOTASK]/[MS-OXOFLAG]: a start date set without a due one takes
+/// the same day for both (the due is required with the start), and Clear Flag takes the task's
+/// title (`PidLidToDoTitle`) off with the rest of the flag's properties.
+#[test]
+fn a_start_date_goes_with_a_due_one_and_clear_flag_takes_the_title_off() {
+    let mut d = Data::default();
+    let inbox = d.folder("Inbox", None, Some("inbox"), "IPF.Note");
+    let id = d.deliver(&inbox, b"From: a@x.example\r\nSubject: ews writes\r\n\r\nx\r\n", true, "2024-05-01T09:00:00Z");
+    for i in d.items.iter_mut() {
+        i.flagged = true;
+        i.follow_up = fake_ews::FollowUp { request: Some("Follow up".into()), title: Some("Review".into()), ..Default::default() };
+    }
+    let server = fake_ews::serve(d);
+    let dir = std::env::temp_dir().join(format!("quatrelle-ews-writes-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    let store = Store::open(&dir).unwrap();
+    let user = format!("{}\\{}", fake_ews::DOMAIN, fake_ews::USER);
+    let c = Client::connect(&server.url, &user, fake_ews::PASSWORD, "riley@contoso.example").unwrap();
+    let mut st = State::default();
+    list_folders(&c, &mut st, "a1").unwrap();
+    let opts = SyncOptions { prefetch: 0, ..Default::default() };
+    let at = |text: &str| jmap::utc_date(text).unwrap();
+    sync_folder(&c, &mut st, &store, "a1", "INBOX", &opts).unwrap();
+    let m = store.load_folder("a1", "INBOX").unwrap().messages[0].clone();
+    let keys = vec![m.key.clone()];
+
+    // A start without a due: both land on the server, the same day.
+    let start = at("2026-12-01T00:00:00Z");
+    apply_remote(&c, &st, &Op::SetFollowUp { keys: keys.clone(), start: Some(FieldChange::Set(start)), due: None, reminder: None }).unwrap();
+    {
+        let d = server.data.lock().unwrap();
+        let f = &d.items.iter().find(|i| i.id == id).unwrap().follow_up;
+        assert_eq!(
+            (
+                f.start.as_deref().and_then(jmap::utc_date),
+                f.due.as_deref().and_then(jmap::utc_date),
+                f.common_start.is_some(),
+                f.common_end.is_some()
+            ),
+            (Some(start), Some(start), true, true),
+            "a start set without a due takes the same day for both: {f:?}"
+        );
+    }
+
+    // Clear Flag: the title goes with the rest of the flag.
+    apply_remote(&c, &st, &Op::SetFlag { keys: keys.clone(), flag: Flag::Flagged, on: false, all: false }).unwrap();
+    {
+        let d = server.data.lock().unwrap();
+        let i = d.items.iter().find(|i| i.id == id).unwrap();
+        assert!(!i.flagged && i.follow_up.request.is_none() && i.follow_up.title.is_none(), "the flag's properties all gone: {i:?}");
+    }
+    let _ = std::fs::remove_dir_all(&dir);
+}
