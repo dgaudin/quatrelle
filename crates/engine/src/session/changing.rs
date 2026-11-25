@@ -59,8 +59,8 @@ impl Session {
             Op::SetKeyword { keys, keyword, on, name } => {
                 Op::SetKeyword { keys: keys.into_iter().filter(|k| k.folder != OUTBOX).collect(), keyword, on, name }
             }
-            Op::SetFollowUp { keys, start, due, reminder } => {
-                Op::SetFollowUp { keys: keys.into_iter().filter(|k| k.folder != OUTBOX).collect(), start, due, reminder }
+            Op::SetFollowUp { keys, start, due, reminder, title } => {
+                Op::SetFollowUp { keys: keys.into_iter().filter(|k| k.folder != OUTBOX).collect(), start, due, reminder, title }
             }
             Op::Move { keys, to } => Op::Move { keys: keys.into_iter().filter(|k| k.folder != OUTBOX).collect(), to },
             Op::Expunge { keys, tidy } => Op::Expunge { keys: keys.into_iter().filter(|k| k.folder != OUTBOX).collect(), tidy },

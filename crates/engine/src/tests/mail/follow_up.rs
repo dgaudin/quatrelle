@@ -237,7 +237,8 @@ fn a_follow_up_day_goes_to_exchange_as_its_floating_midnight() {
         .take_jobs()
         .iter()
         .find_map(|j| match j {
-            Job::Apply { op: Op::SetFollowUp { due, .. }, .. } => Some(*due),
+            // the title goes with its own SetFollowUp; take the one that names the due day
+            Job::Apply { op: Op::SetFollowUp { due, .. }, .. } if due.is_some() => Some(*due),
             _ => None,
         })
         .expect("the follow-up change went to the server");
@@ -478,5 +479,76 @@ fn mail_flag_needs_a_message() {
     let k = key_of(&s, "Character turnarounds");
     s.run("mail.flag", &json!({"key": k["key"], "due": "today"})).unwrap();
     assert!(turnaround(&s).flags.flagged, "by key, without a selection: works");
+    done(s);
+}
+
+/// Mark Complete on an Exchange account keeps the flag's own text (no SetFlag off — the
+/// keyword's status covers it), and Undo puts the task's title and the reminder back.
+#[test]
+fn marking_complete_on_exchange_keeps_the_flag_text_and_undo_restores_title_and_reminder() {
+    use quatrelle_model::AccountConfig;
+    let mut s = Session::open(Some(temp("ews-complete")), quatrelle_model::dates::Clock::new(NOW, 0));
+    let config = AccountConfig {
+        name: "Riley".into(),
+        email: "riley@contoso.example".into(),
+        username: "riley".into(),
+        ews: Some("https://mail.contoso.example/EWS/Exchange.asmx".into()),
+        ..Default::default()
+    };
+    let id = s.add_account(config, Some("pw".into())).unwrap();
+    s.take_jobs();
+    s.accounts.iter_mut().find(|a| a.config.id == id).unwrap().folders.push(quatrelle_model::Folder {
+        account: id.clone(),
+        path: "INBOX".into(),
+        selectable: true,
+        ..Default::default()
+    });
+    let key = MessageKey { account: id.clone(), folder: "INBOX".into(), validity: 1, uid: 5 };
+    let mut st: quatrelle_store::FolderState<std::sync::Arc<Summary>> = quatrelle_store::FolderState { validity: 1, ..Default::default() };
+    st.messages.push(std::sync::Arc::new(Summary {
+        key: key.clone(),
+        message_id: "p@x".into(),
+        subject: "Proofs of the film".into(),
+        flags: quatrelle_model::Flags {
+            flagged: true,
+            follow_up: quatrelle_model::FollowUp { due: NOW, reminder: NOW + 3600, ..Default::default() },
+            ..Default::default()
+        },
+        ..Default::default()
+    }));
+    s.cache.insert((id.clone(), "INBOX".into()), st);
+
+    s.run("mail.flag", &serde_json::json!({ "key": key.to_id(), "complete": true })).unwrap();
+    let jobs = s.take_jobs();
+    let applies: Vec<&quatrelle_model::Op> = jobs
+        .iter()
+        .filter_map(|j| match j {
+            quatrelle_model::Job::Apply { op, .. } => Some(op),
+            _ => None,
+        })
+        .collect();
+    assert!(applies.iter().any(|o| matches!(o, quatrelle_model::Op::SetKeyword { on: true, .. })), "{applies:?}");
+    assert!(
+        !applies.iter().any(|o| matches!(o, quatrelle_model::Op::SetFlag { flag: quatrelle_model::Flag::Flagged, on: false, .. })),
+        "Mark Complete on Exchange keeps the flag's text (no SetFlag off): {applies:?}"
+    );
+
+    s.run("edit.undo", &serde_json::json!({})).unwrap();
+    let jobs = s.take_jobs();
+    let applies: Vec<&quatrelle_model::Op> = jobs
+        .iter()
+        .filter_map(|j| match j {
+            quatrelle_model::Job::Apply { op, .. } => Some(op),
+            _ => None,
+        })
+        .collect();
+    assert!(
+        applies.iter().any(|o| matches!(o, quatrelle_model::Op::SetFollowUp { title: Some(Some(t)), .. } if t == "Proofs of the film")),
+        "undo restores the title: {applies:?}"
+    );
+    assert!(
+        applies.iter().any(|o| matches!(o, quatrelle_model::Op::SetFollowUp { reminder: Some(_), .. })),
+        "undo restores the reminder: {applies:?}"
+    );
     done(s);
 }

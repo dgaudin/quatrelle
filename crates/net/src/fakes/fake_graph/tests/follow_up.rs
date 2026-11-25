@@ -114,6 +114,7 @@ fn follow_up_dates_go_both_ways_and_no_reminder_is_sent() {
             start: Some(FieldChange::Set(start)),
             due: Some(FieldChange::Set(due)),
             reminder: Some(FieldChange::Set(at("2026-12-04T08:30:00Z"))),
+            title: None,
         },
     )
     .unwrap();
@@ -134,7 +135,7 @@ fn follow_up_dates_go_both_ways_and_no_reminder_is_sent() {
     crate::graph::apply_remote(
         &c,
         &st,
-        &Op::SetFollowUp { keys, start: Some(FieldChange::Clear), due: Some(FieldChange::Clear), reminder: Some(FieldChange::Clear) },
+        &Op::SetFollowUp { keys, start: Some(FieldChange::Clear), due: Some(FieldChange::Clear), reminder: Some(FieldChange::Clear), title: None },
     )
     .unwrap();
     let d = server.data.lock().unwrap();
@@ -203,8 +204,12 @@ fn a_due_date_without_a_start_one_is_refused_by_graph_and_sent_with_one() {
 
     // A due-only change from here: accepted, with the start set to the due.
     let due = at("2026-12-04T00:00:00Z");
-    crate::graph::apply_remote(&c, &st, &Op::SetFollowUp { keys: vec![m.key], start: None, due: Some(FieldChange::Set(due)), reminder: None })
-        .unwrap();
+    crate::graph::apply_remote(
+        &c,
+        &st,
+        &Op::SetFollowUp { keys: vec![m.key], start: None, due: Some(FieldChange::Set(due)), reminder: None, title: None },
+    )
+    .unwrap();
     {
         let d = server.data.lock().unwrap();
         let mm = d.message(&id).unwrap();

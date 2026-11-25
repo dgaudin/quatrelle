@@ -73,6 +73,19 @@ impl Session {
         for (a, keys) in &changed {
             self.apply_op(a, Op::SetFlag { keys: keys.clone(), flag: Flag::Flagged, on, all: false });
         }
+        // Flagged: the task's title goes with the flag on Exchange, as Outlook sets it
+        // (`PidLidToDoTitle` with the message's subject), grouped by title.
+        if on {
+            let mut by_title: BTreeMap<(String, String), Vec<MessageKey>> = BTreeMap::new();
+            for m in sel {
+                if !m.flags.flagged && ews.contains(m.key.account.as_str()) {
+                    by_title.entry((m.key.account.clone(), m.subject.clone())).or_default().push(m.key.clone());
+                }
+            }
+            for ((a, title), keys) in by_title {
+                self.apply_op(&a, Op::SetFollowUp { keys, start: None, due: None, reminder: None, title: Some(Some(title)) });
+            }
+        }
         for (a, keys) in &clear {
             self.apply_op(
                 a,
@@ -81,6 +94,7 @@ impl Session {
                     start: Some(FieldChange::Clear),
                     due: Some(FieldChange::Clear),
                     reminder: Some(FieldChange::Clear),
+                    title: None,
                 },
             );
         }
@@ -106,7 +120,7 @@ impl Session {
         // Undo of Clear Flag puts the server's dates and reminder back as they were.
         for ((a, s, d, r), keys) in restore {
             let back = |old: i64| if old > 0 { FieldChange::Set(old) } else { FieldChange::Clear };
-            undo.entry(a).or_default().push(Op::SetFollowUp { keys, start: Some(back(s)), due: Some(back(d)), reminder: Some(back(r)) });
+            undo.entry(a).or_default().push(Op::SetFollowUp { keys, start: Some(back(s)), due: Some(back(d)), reminder: Some(back(r)), title: None });
         }
         undo.into_iter().collect()
     }
@@ -290,13 +304,19 @@ impl Session {
             if s.is_none() && d.is_none() && r.is_none() {
                 continue;
             }
-            self.apply_op(&account, Op::SetFollowUp { keys, start: s, due: d, reminder: r });
+            self.apply_op(&account, Op::SetFollowUp { keys, start: s, due: d, reminder: r, title: None });
         }
         // Undo puts the server's own back too, for the fields the change named (the days here
         // are put back by `was`): what the cache had, set or taken off.
         for ((account, s, d, r), keys) in before {
             let back = |old: i64, named: Option<FieldChange>| named.map(|_| if old > 0 { FieldChange::Set(old) } else { FieldChange::Clear });
-            undo.entry(account).or_default().push(Op::SetFollowUp { keys, start: back(s, start), due: back(d, due), reminder: back(r, reminder) });
+            undo.entry(account).or_default().push(Op::SetFollowUp {
+                keys,
+                start: back(s, start),
+                due: back(d, due),
+                reminder: back(r, reminder),
+                title: None,
+            });
         }
         self.remember_follow_up(undo.into_iter().collect(), was);
     }
@@ -330,6 +350,7 @@ impl Session {
         if sel.is_empty() {
             return Err(CmdError::Disabled("no message selected".into()));
         }
+        let (ews, _) = self.mail_server_kind(sel);
         let was = self.follow_up_days_of(sel);
         let today = quatrelle_model::dates::today(&self.clock);
         let mut flagged: BTreeMap<String, Vec<MessageKey>> = BTreeMap::new();
@@ -357,9 +378,29 @@ impl Session {
         for (a, keys) in &flagged {
             undo.entry(a.clone()).or_default().push(Op::SetFlag { keys: keys.clone(), flag: Flag::Flagged, on: true, all: false });
         }
-        // The flag off before the keyword goes on: Exchange keeps both in one status.
-        for (a, keys) in flagged {
-            self.apply_op(&a, Op::SetFlag { keys, flag: Flag::Flagged, on: false, all: false });
+        // Undo on Exchange puts the task's title and the reminder back too (the mark complete
+        // took the reminder off; the flag's text stayed).
+        for m in sel {
+            if ews.contains(m.key.account.as_str()) {
+                let title = self.follow_up_title(m).map(str::to_string).filter(|t| !t.is_empty()).unwrap_or_else(|| m.subject.clone());
+                let old_rem = m.flags.follow_up.reminder.max(0);
+                let back_r = if old_rem > 0 { FieldChange::Set(old_rem) } else { FieldChange::Clear };
+                undo.entry(m.key.account.clone()).or_default().push(Op::SetFollowUp {
+                    keys: vec![m.key.clone()],
+                    start: None,
+                    due: None,
+                    reminder: Some(back_r),
+                    title: Some(Some(title)),
+                });
+            }
+        }
+        // The flag off before the keyword goes on — except on Exchange, where Mark Complete
+        // keeps the flag's own text and title ([MS-OXOFLAG] 3.1.4.2): the keyword's status 1
+        // alone takes the flag's place, and SetFlag off would delete them.
+        for (a, keys) in &flagged {
+            if !ews.contains(a.as_str()) {
+                self.apply_op(a, Op::SetFlag { keys: keys.clone(), flag: Flag::Flagged, on: false, all: false });
+            }
         }
         for (a, keys) in marked {
             self.apply_op(&a, Op::SetKeyword { keys, keyword: FOLLOW_UP_COMPLETE.into(), on: true, name: None });
