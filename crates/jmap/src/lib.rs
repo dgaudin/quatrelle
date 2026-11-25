@@ -91,6 +91,10 @@ pub enum Error {
     /// The server named a site the account doesn't trust: nothing was sent there.
     #[error("{site} isn't allowed for this account")]
     Untrusted { site: String },
+    /// A submission went to the server whole, and its answer never came: the message may have
+    /// gone. Never sent again unless the user says so.
+    #[error("the server didn't say whether it took the message, which may have gone: {0}")]
+    Unconfirmed(String),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
@@ -98,18 +102,20 @@ pub type Result<T> = std::result::Result<T, Error>;
 impl<H: Http> Client<H> {
     /// Run a batch of method calls; the results in order. A method error fails the batch.
     async fn call(&self, using: &[&str], calls: Vec<(&str, Value)>) -> Result<Vec<Value>> {
+        self.call_as(using, calls, false).await
+    }
+
+    /// [`Client::call`]; `once`: the batch mustn't go twice (a submission, [`Request::once`]).
+    async fn call_as(&self, using: &[&str], calls: Vec<(&str, Value)>, once: bool) -> Result<Vec<Value>> {
         let method_calls: Vec<Value> = calls.iter().enumerate().map(|(i, (name, args))| json!([name, args, format!("c{i}")])).collect();
         let body = json!({ "using": using, "methodCalls": method_calls });
         let bytes = serde_json::to_vec(&body).map_err(|e| Error::Protocol(e.to_string()))?;
-        let resp = self
-            .http
-            .send(
-                Request::post(&self.api, "application/json", bytes, MAX_JSON)
-                    .header("Authorization", &self.auth)
-                    .header("Accept", "application/json")
-                    .trusting(self.trusted.clone()),
-            )
-            .await?;
+        let mut req = Request::post(&self.api, "application/json", bytes, MAX_JSON)
+            .header("Authorization", &self.auth)
+            .header("Accept", "application/json")
+            .trusting(self.trusted.clone());
+        req.once = once;
+        let resp = self.http.send(req).await?;
         check(&resp)?;
         let v = json_body(&resp)?;
         let responses = v.get("methodResponses").and_then(Value::as_array).ok_or_else(|| Error::Protocol("JMAP: no methodResponses".into()))?;
@@ -234,12 +240,13 @@ impl<H: Http> Client<H> {
         let identity = identity.as_str();
         let rcpt: Vec<Value> = recipients.iter().map(|r| json!({"email": r})).collect();
         let r = self
-            .call(
+            .call_as(
                 &using,
                 vec![(
                     "EmailSubmission/set",
                     json!({"accountId": self.account, "create": {"s": {"identityId": identity, "emailId": email, "envelope": {"mailFrom": {"email": from}, "rcptTo": rcpt}}}}),
                 )],
+                true,
             )
             .await?;
         set_error(r.first(), "notCreated").map_err(|e| Error::Send(e.to_string()))

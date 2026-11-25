@@ -44,6 +44,9 @@ pub struct Data {
     pub blobs: HashMap<String, Vec<u8>>,
     /// (email id, from, recipients)
     pub submissions: Vec<(String, String, Vec<String>)>,
+    /// The next submissions are made, then the connection closed before the answer, this many
+    /// times.
+    pub sends_cut: usize,
     pub calls: Vec<String>,
     /// The filters `Email/query` was asked, in order.
     pub queries: Vec<Value>,
@@ -477,12 +480,19 @@ fn handle(mut s: std::net::TcpStream, shared: &Arc<Mutex<Data>>, auth: &str) {
                 let req: Value = serde_json::from_slice(&body).unwrap_or(Value::Null);
                 let mut earlier = BTreeMap::new();
                 let mut out = Vec::new();
+                let mut submitted = false;
                 for call in req["methodCalls"].as_array().cloned().unwrap_or_default() {
                     let (name, args, id) =
                         (call[0].as_str().unwrap_or_default().to_string(), call[1].clone(), call[2].as_str().unwrap_or_default().to_string());
+                    submitted |= name == "EmailSubmission/set";
                     let (rname, result) = d.method(&name, &args, &earlier);
                     earlier.insert(id.clone(), result.clone());
                     out.push(json!([rname, result, id]));
+                }
+                // Submitted, and the connection closed before the answer.
+                if submitted && d.sends_cut > 0 {
+                    d.sends_cut -= 1;
+                    return;
                 }
                 respond(&mut s, 200, json!({"methodResponses": out, "sessionState": "1"}).to_string().as_bytes(), "application/json");
             } else if let Some(rest) = path.strip_prefix(&format!("/download/{ACCOUNT}/")) {

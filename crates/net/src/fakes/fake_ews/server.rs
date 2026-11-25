@@ -432,6 +432,13 @@ fn serve_connection(mut s: std::net::TcpStream, shared: &Arc<Mutex<Data>>) {
             d.anchors.push(anchor);
         }
         let (name, parts) = d.route(&op);
+        // Sent, and the connection closed before the answer.
+        let sending = op.name == "SendItem" || (op.name == "CreateItem" && op.attr("MessageDisposition").is_some_and(|m| m.starts_with("Send")));
+        if sending && take_one(&mut d.sends_cut) {
+            drop(d);
+            let _ = s.shutdown(std::net::Shutdown::Both);
+            return;
+        }
         let header = d.version_header();
         drop(d);
         // Operations Exchange answers in the response element itself, not in a list of

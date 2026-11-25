@@ -21,8 +21,11 @@ impl Client {
     /// Send on the kept connection, a new one opened when there's none (or it can't be used).
     /// `fresh` false: only on the connection there is (an NTLM answer must go on the connection
     /// that was challenged). `Err((e, again))`: `again` when the request failed on a connection
-    /// the server had already closed, before reading it — it can be sent again.
+    /// the server had already closed, before reading it — it can be sent again (never one that
+    /// carried a message whole: that fails as an answer lost on the way does).
     pub(super) fn send_on_conn(&self, req: &Request, fresh: bool) -> std::result::Result<Response, (NetError, bool)> {
+        self.lost.set(false);
+        let message = self.once.get() && !req.body.is_empty();
         let mut slot = self.conn.borrow_mut();
         if slot.as_ref().is_none_or(|k| !k.conn.usable()) {
             *slot = None;
@@ -33,9 +36,14 @@ impl Client {
         }
         let Some(kept) = slot.as_mut() else { return Err((NetError::Closed("no connection".into()), false)) };
         match kept.conn.send(req) {
-            Ok(r) => Ok(r),
+            Ok(r) => {
+                self.lost.set(message && crate::http::gateway_lost(r.status));
+                Ok(r)
+            }
             Err(e) => {
-                let again = kept.conn.failed_unanswered();
+                let lost = message && kept.conn.answer_lost();
+                self.lost.set(lost);
+                let again = kept.conn.failed_unanswered() && !lost;
                 *slot = None;
                 Err((e, again))
             }

@@ -20,11 +20,14 @@ pub struct Request {
     /// The sites (as [`quatrelle_model::addr::trust::site`] gives them) a redirect may carry
     /// this request's credentials to, besides its own URL's.
     pub trusted: Vec<String>,
+    /// Not to go twice (a message submitted): once it went out whole, an answer that doesn't come
+    /// is [`Error::Unconfirmed`](crate::Error::Unconfirmed), where the client can tell.
+    pub once: bool,
 }
 
 impl Request {
     pub fn get(url: &str, max: usize) -> Request {
-        Request { method: "GET".into(), url: url.into(), headers: Vec::new(), body: Vec::new(), max, trusted: Vec::new() }
+        Request { method: "GET".into(), url: url.into(), headers: Vec::new(), body: Vec::new(), max, trusted: Vec::new(), once: false }
     }
 
     pub fn post(url: &str, content_type: &str, body: Vec<u8>, max: usize) -> Request {
@@ -35,6 +38,7 @@ impl Request {
             body,
             max,
             trusted: Vec::new(),
+            once: false,
         }
     }
 

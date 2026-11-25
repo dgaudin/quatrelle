@@ -27,6 +27,7 @@ impl From<quatrelle_jmap::Error> for NetError {
             E::Send(m) => NetError::Smtp(m),
             E::Store(e) => NetError::Store(e),
             E::Untrusted { site } => NetError::Untrusted { site },
+            E::Unconfirmed(m) => NetError::Unconfirmed(m),
         }
     }
 }
@@ -43,7 +44,7 @@ impl From<NetError> for quatrelle_jmap::Error {
             NetError::Auth(m) => E::Auth(m),
             NetError::Closed(m) => E::Closed(m),
             NetError::Smtp(m) | NetError::Later(m) => E::Send(m),
-            e @ NetError::Unconfirmed(_) => E::Send(e.to_string()),
+            NetError::Unconfirmed(m) => E::Unconfirmed(m),
             NetError::Store(e) => E::Store(e),
             NetError::Untrusted { site } => E::Untrusted { site },
         }
@@ -55,8 +56,9 @@ pub struct Blocking;
 
 impl quatrelle_jmap::Http for Blocking {
     async fn send(&self, req: quatrelle_jmap::Request) -> quatrelle_jmap::Result<quatrelle_jmap::Response> {
+        let once = req.once;
         let r = http::Request { method: req.method, url: req.url, headers: req.headers, body: req.body, max: req.max, trusted: req.trusted };
-        let resp = http::send(&r)?;
+        let resp = if once { http::send_once(&r)? } else { http::send(&r)? };
         Ok(quatrelle_jmap::Response { status: resp.status, body: resp.body, url: resp.url })
     }
 }

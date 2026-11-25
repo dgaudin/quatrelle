@@ -112,6 +112,9 @@ pub struct Data {
     /// (`ErrorInvalidRestriction`), or met with the connection closed, unanswered, while set.
     pub kinds_refused: bool,
     pub kinds_cut: bool,
+    /// The next messages sent (`CreateItem` sending, `SendItem`) are sent, then the connection
+    /// closed before the answer (a laptop asleep, a VPN gone), this many times.
+    pub sends_cut: usize,
     /// The EWS address, for Autodiscover's answer.
     pub url: String,
     /// People whose calendars this account may change (delegates with editor rights).
@@ -378,6 +381,7 @@ impl Default for Data {
             busy: 0,
             kinds_refused: false,
             kinds_cut: false,
+            sends_cut: 0,
             url: String::new(),
             editors: Vec::new(),
             send_as: Vec::new(),

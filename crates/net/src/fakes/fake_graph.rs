@@ -58,6 +58,9 @@ pub struct Data {
     pub recoverable: Vec<Msg>,
     /// MIME sources handed to `sendMail`.
     pub sent: Vec<Vec<u8>>,
+    /// The next messages handed to `sendMail` are sent, then the connection closed before the
+    /// answer, this many times.
+    pub sends_cut: usize,
     /// Votes sent: (subject, choice).
     pub votes: Vec<(String, String)>,
     pub replies: Value,
@@ -498,17 +501,25 @@ pub fn serve(data: Data) -> Server {
                 continue;
             }
             assert!(immutable, "ids are asked for in their immutable form");
-            let (status, out, kind) = {
+            let (status, out, kind, cut) = {
                 let mut d = shared.lock().unwrap();
                 if d.throttle > 0 {
                     d.throttle -= 1;
-                    (429, br#"{"error": {"code": "TooManyRequests"}}"#.to_vec(), "application/json")
+                    (429, br#"{"error": {"code": "TooManyRequests"}}"#.to_vec(), "application/json", false)
                 } else {
                     d.asked_immutable = true;
-                    d.route(&method, &target, &body, &b)
+                    let (status, out, kind) = d.route(&method, &target, &body, &b);
+                    // Sent, and the connection closed before the answer.
+                    let cut = method == "POST" && target == "/me/sendMail" && status == 202 && d.sends_cut > 0;
+                    if cut {
+                        d.sends_cut -= 1;
+                    }
+                    (status, out, kind, cut)
                 }
             };
-            respond(&mut s, status, &out, kind, None, None, None);
+            if !cut {
+                respond(&mut s, status, &out, kind, None, None, None);
+            }
         }
     });
     Server { base, data }

@@ -418,9 +418,10 @@ impl Client {
         })
     }
 
-    /// Send a MIME message; Exchange files the copy in Sent Items.
+    /// Send a MIME message; Exchange files the copy in Sent Items. Up once: with no answer once
+    /// it went out whole, it may have gone (`Unconfirmed`).
     pub fn send_mime(&self, raw: &[u8]) -> Result<()> {
-        self.send_raw("POST", "/me/sendMail", "text/plain", crate::imap::base64(raw).into_bytes()).map(|_| ()).map_err(|e| match e {
+        self.post_once("/me/sendMail", "text/plain", crate::imap::base64(raw).into_bytes()).map(|_| ()).map_err(|e| match e {
             NetError::No(m) | NetError::Bad(m) => NetError::Smtp(m),
             e => e,
         })

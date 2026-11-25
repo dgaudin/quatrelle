@@ -175,6 +175,12 @@ pub struct Client {
     server_major: Cell<Option<u32>>,
     /// What this session's requests cost, added up.
     spent: Cell<Timing>,
+    /// The request going carries a message to send ([`Client::send_mime`]): once it went out
+    /// whole, it isn't sent again, whatever became of its answer.
+    once: Cell<bool>,
+    /// The last request carrying a message went out whole and no answer of Exchange's came (the
+    /// connection lost, a gateway's 502 or 504): it may have been sent.
+    lost: Cell<bool>,
 }
 
 /// Another mailbox the account opens (Outlook's shared mailboxes): its address and name.
@@ -416,6 +422,8 @@ impl Client {
             clock: Cell::new(None),
             server_major: Cell::new(None),
             spent: Cell::new(Timing::default()),
+            once: Cell::new(false),
+            lost: Cell::new(false),
         })
     }
 
@@ -452,6 +460,8 @@ impl Client {
             clock: self.clock.clone(),
             server_major: self.server_major.clone(),
             spent: Cell::new(Timing::default()),
+            once: Cell::new(false),
+            lost: Cell::new(false),
         }
     }
 

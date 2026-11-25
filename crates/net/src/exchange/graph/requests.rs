@@ -12,11 +12,16 @@ impl Client {
 
     /// A request; `item`: about one item, whose `ErrorItemNotFound` (HTTP 404) says it was deleted
     /// on the server (`NetError::Gone`).
-    fn request_as(&self, mut r: Request, item: bool) -> Result<Value> {
+    fn request_as(&self, r: Request, item: bool) -> Result<Value> {
+        self.request_by(r, item, http::send)
+    }
+
+    /// [`Client::request_as`], each attempt sent by `send`.
+    fn request_by(&self, mut r: Request, item: bool, send: fn(&Request) -> Result<Response>) -> Result<Value> {
         for (name, value) in [("Authorization", self.auth.as_str()), ("Accept", "application/json"), ("Prefer", PREFER)] {
             r = r.header(name, value);
         }
-        let resp = send_through_limits(&r)?;
+        let resp = through_limits(&r, send)?;
         if item && resp.status == 404 {
             let error = serde_json::from_slice::<Value>(&resp.body).ok().and_then(|v| v.get("error").cloned()).unwrap_or_default();
             if error.get("code").and_then(Value::as_str) == Some("ErrorItemNotFound") {
@@ -53,6 +58,12 @@ impl Client {
         let mut r = Request::post(&format!("{}{path}", self.base), content_type, body, MAX_JSON);
         r.method = method.into();
         self.request(r)
+    }
+
+    /// A `POST` that mustn't go twice (a message to send): once it went out whole, an answer that
+    /// doesn't come is `Unconfirmed` ([`http::send_once`]).
+    pub(crate) fn post_once(&self, path: &str, content_type: &str, body: Vec<u8>) -> Result<Value> {
+        self.request_by(Request::post(&format!("{}{path}", self.base), content_type, body, MAX_JSON), false, http::send_once)
     }
 
     /// A `POST` of a JSON body (bytes already made).
@@ -185,10 +196,15 @@ fn entry_retry_after(r: &Value) -> Option<String> {
 
 /// `http::send`, resubmitted while the answer is 429, up to [`BUSY_ROUNDS`] attempts.
 pub(super) fn send_through_limits(r: &Request) -> Result<Response> {
+    through_limits(r, http::send)
+}
+
+/// [`send_through_limits`], each attempt sent by `send` (a 429 says nothing was done).
+fn through_limits(r: &Request, send: fn(&Request) -> Result<Response>) -> Result<Response> {
     let mut round = 0;
     loop {
         round += 1;
-        let resp = http::send(r)?;
+        let resp = send(r)?;
         if resp.status != 429 || round >= BUSY_ROUNDS {
             return Ok(resp);
         }

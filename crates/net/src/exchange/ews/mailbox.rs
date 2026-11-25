@@ -616,12 +616,18 @@ impl Client {
             let name = if author.name.is_empty() { String::new() } else { format!("<t:Name>{}</t:Name>", esc(&author.name)) };
             format!("<t:From><t:Mailbox>{name}<t:EmailAddress>{}</t:EmailAddress></t:Mailbox></t:From>", esc(&author.email))
         };
-        self.call_one(&format!(
+        // Up once: on a connection opened for it (one kept may have been closed by the server
+        // meanwhile, which fails as an answer lost on the way does), and never again once it went
+        // out whole: with no answer of Exchange's, it may have gone (`Unconfirmed`).
+        *self.conn.borrow_mut() = None;
+        self.once.set(true);
+        let sent = self.call_one(&format!(
             "<m:CreateItem MessageDisposition=\"SendAndSaveCopy\"><m:SavedItemFolderId><t:DistinguishedFolderId Id=\"sentitems\"/></m:SavedItemFolderId>\
              <m:Items><t:Message><t:MimeContent CharacterSet=\"UTF-8\">{}</t:MimeContent>{verbs}{from}</t:Message></m:Items></m:CreateItem>",
             b64(&raw)
-        ))
-        .map(drop)
+        ));
+        self.once.set(false);
+        sent.map(drop).map_err(|e| if self.lost.get() { NetError::Unconfirmed(e.to_string()) } else { e })
     }
 
     /// The automatic replies.

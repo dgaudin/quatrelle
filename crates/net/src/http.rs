@@ -225,6 +225,28 @@ pub fn send(req: &Request) -> Result<Response> {
     send_to(req, false, None)
 }
 
+/// [`send`] for a request that mustn't go twice (a message to send), on a connection of its own,
+/// no redirect followed. Once it went out whole, an answer that doesn't come or comes cut, or a
+/// gateway's (502, 504: the server behind it may have taken it), is [`NetError::Unconfirmed`]:
+/// it may have been taken, and is never sent again unasked. Failing before, it never was.
+pub fn send_once(req: &Request) -> Result<Response> {
+    let url = Url::parse(&req.url)?;
+    let sock = stream::tcp(&url.host, url.port)?;
+    let mut s = if url.https { stream::tls(sock, &url.host)? } else { Stream::Plain(sock) };
+    write_request(&mut s, req, &url, false).map_err(timed_out)?;
+    let resp = read_response(&mut s, req.max, req.method == "HEAD").map_err(|e| NetError::Unconfirmed(timed_out(e).to_string()))?;
+    if gateway_lost(resp.status) {
+        return Err(NetError::Unconfirmed(format!("a gateway answered HTTP {}", resp.status)));
+    }
+    Ok(Response { url: Some(format!("{}{}", url.origin(), url.path)), ..resp })
+}
+
+/// Whether an answer is a gateway's that never heard the server's (502, 504): what was asked
+/// may or may not have been done.
+pub(crate) fn gateway_lost(status: u16) -> bool {
+    matches!(status, 502 | 504)
+}
+
 /// GET from the internet only ([`stream::tcp_public`]), every redirect included: what a message
 /// asks for (its pictures) never reaches this computer or its network.
 pub fn get_public(url: &str, max: usize) -> Result<Response> {
@@ -315,6 +337,8 @@ pub struct Conn {
     /// reused connection, before a single byte of the answer. It never reached the server, so it
     /// can be sent again on a new connection.
     unanswered: bool,
+    /// The last request went out whole and its answer didn't come in full (`unanswered` or not).
+    lost: bool,
 }
 
 impl Conn {
@@ -322,7 +346,7 @@ impl Conn {
         let url = Url::parse(url)?;
         let sock = stream::tcp(&url.host, url.port)?;
         let s = if url.https { stream::tls(sock, &url.host)? } else { Stream::Plain(sock) };
-        Ok(Conn { s, url, closing: false, last: Instant::now(), answered: 0, unanswered: false })
+        Ok(Conn { s, url, closing: false, last: Instant::now(), answered: 0, unanswered: false, lost: false })
     }
 
     /// Whether this connection reaches `url`'s server.
@@ -342,6 +366,12 @@ impl Conn {
         self.unanswered
     }
 
+    /// Whether the last request went out whole and its answer didn't come in full: the server may
+    /// have done what it asked ([`Conn::failed_unanswered`] tells the one case it can't have).
+    pub fn answer_lost(&self) -> bool {
+        self.lost
+    }
+
     /// Send a request to this server and read its answer.
     pub fn send(&mut self, req: &Request) -> Result<Response> {
         if self.closing {
@@ -356,13 +386,19 @@ impl Conn {
         // password. It's dropped rather than reused — assumed closed until a full answer is in.
         self.closing = true;
         self.unanswered = false;
+        self.lost = false;
         let mut s = Counted { s: &mut self.s, read: 0 };
-        let sent = write_request(&mut s, req, &url, true).and_then(|()| read_response(&mut s, req.max, req.method == "HEAD"));
+        let mut whole = false;
+        let sent = write_request(&mut s, req, &url, true).and_then(|()| {
+            whole = true;
+            read_response(&mut s, req.max, req.method == "HEAD")
+        });
         let nothing_read = s.read == 0;
         let resp = match sent {
             Ok(resp) => resp,
             Err(e) => {
                 self.unanswered = self.answered > 0 && nothing_read && closed_unread(&e);
+                self.lost = whole;
                 return Err(timed_out(e));
             }
         };
