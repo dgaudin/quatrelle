@@ -357,6 +357,11 @@ fn shape(c: &Client, items: &[El], pages: usize) -> Shortcuts {
             email
         };
         let group = group_of(w);
+        // A group beyond the cap isn't listed: its calendars aren't either, or the pane would
+        // make the group again from them.
+        if !group.is_empty() && !groups.iter().any(|g| g.name.eq_ignore_ascii_case(&group)) {
+            continue;
+        }
         let name = if w.name.is_empty() { email.clone() } else { w.name.clone() };
         let duplicate = if own {
             out.iter().any(|l| l.email.is_empty() && l.name.eq_ignore_ascii_case(&name) && l.group == group)

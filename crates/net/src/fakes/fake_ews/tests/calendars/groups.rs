@@ -683,3 +683,38 @@ fn a_group_holding_a_member_the_read_cannot_parse_is_not_deleted() {
     assert!(e.to_string().contains("can't read"), "{e}");
     assert!(server.data.lock().unwrap().wlinks.iter().any(|w| w.contains("Half a calendar")), "the unreadable member stays");
 }
+
+/// A calendar whose group is beyond the cap isn't kept: the pane would show a group the server
+/// list doesn't have, so the cap wouldn't bound it.
+#[test]
+fn a_calendar_in_a_group_beyond_the_cap_is_not_kept() {
+    let mut d = Data::default();
+    d.folder("Inbox", None, Some("inbox"), "IPF.Note");
+    d.folder("Calendar", None, Some("calendar"), "IPF.Appointment");
+    let link = "IPM.Microsoft.WunderBar.Link";
+    let guid2 = |i: u16| crate::imap::base64(&[(i >> 8) as u8, i as u8, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
+    let ord = |page: u8, i: u16| crate::imap::base64(&[page, (i >> 8) as u8, i as u8]);
+    let mut wlinks = Vec::new();
+    for i in 1..=301u16 {
+        wlinks.push(wlink_of(link, 3, 4, &format!("G{i:03}"), &[("0x6842", "Binary", guid2(i)), ("0x684B", "Binary", ord(0, i))]));
+    }
+    for i in 2..=301u16 {
+        wlinks.push(wlink_of(
+            link,
+            3,
+            0,
+            &format!("C{i:03}"),
+            &[("0x6850", "Binary", guid2(i)), ("0x6851", "String", format!("G{i:03}")), ("0x684B", "Binary", ord(1, i))],
+        ));
+    }
+    d.wlinks = wlinks;
+    let server = serve(d);
+    let c = crate::ews::Client::connect(&server.url, &format!("{DOMAIN}\\{USER}"), PASSWORD, "riley@contoso.example").unwrap();
+    let shortcuts = crate::ews_pim::calendar_links(&c).unwrap();
+    assert_eq!(shortcuts.groups.len(), 300, "the groups are capped");
+    assert!(
+        shortcuts.links.iter().all(|l| shortcuts.groups.iter().any(|g| g.name.eq_ignore_ascii_case(&l.group))),
+        "a link names a kept group: {:?}",
+        shortcuts.links.iter().map(|l| &l.group).collect::<Vec<_>>()
+    );
+}
