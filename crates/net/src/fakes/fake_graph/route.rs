@@ -280,6 +280,12 @@ impl Data {
             }),
             ("PATCH", ["me", "messages", id]) => match self.messages.iter_mut().find(|m| m.id == plain_id(id)) {
                 Some(m) => {
+                    // Graph refuses a due date without a start one ("To set the due date, you
+                    // must also specify the startDateTime"): the fake refuses it too.
+                    if input["flag"]["dueDateTime"].is_object() && !input["flag"]["startDateTime"].is_object() {
+                        let e = json!({"error": {"code": "BadRequest", "message": "To set the due date, you must also specify the startDateTime."}});
+                        return (400, e.to_string().into_bytes(), "application/json");
+                    }
                     if let Some(r) = input["isRead"].as_bool() {
                         m.read = r;
                     }
