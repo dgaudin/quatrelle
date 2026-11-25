@@ -2502,3 +2502,19 @@ presence	Offline	Desconectado
 	This calendar isn't in Outlook's calendar groups yet	Este calendario aún no está en ningún grupo de calendarios de Outlook
 	Outlook's own calendar group can't be changed here	Un grupo de calendarios de Outlook no se puede cambiar aquí
 	A calendar group that still holds calendars can't be deleted here	Un grupo de calendarios que aún contiene calendarios no se puede eliminar aquí
+	a calendar group that still holds calendars can't be deleted here	Un grupo de calendarios que aún contiene calendarios no se puede eliminar aquí
+	this account's server doesn't keep calendar groups	El servidor de esta cuenta no guarda grupos de calendarios
+	it's the first calendar group already	Ya es el primer grupo de calendarios
+	it's the last calendar group already	Ya es el último grupo de calendarios
+	this calendar was opened by its owner's address; it has no shortcut in Outlook's groups	Este calendario se abrió por la dirección de su propietario; no tiene acceso directo en los grupos de Outlook
+	the server doesn't name the group My Calendars is in	El servidor no nombra el grupo en el que están Mis calendarios
+	the account's main calendar stays in My Calendars	El calendario principal de la cuenta permanece en Mis calendarios
+	it's the first already	Ya es el primero
+	it's the last already	Ya es el último
+	it's removed from the list: bring it back first	Está quitado de la lista: vuelve a traerlo primero
+	the account's main calendar stays as it is	El calendario principal de la cuenta permanece como está
+	only the account's own calendars can be changed	Solo se pueden cambiar los calendarios propios de la cuenta
+	the server hasn't listed the calendars yet	El servidor aún no ha listado los calendarios
+	this account's server doesn't allow it	El servidor de esta cuenta no lo permite
+	the account's main calendar stays in the list	El calendario principal de la cuenta permanece en la lista
+	one opened by its owner's address or subscribed to by its link goes by its own Remove	El abierto por la dirección de su propietario o suscrito por su enlace se quita con su propio Quitar

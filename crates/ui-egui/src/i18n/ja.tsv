@@ -2498,3 +2498,19 @@ presence	Offline	オフライン
 	This calendar isn't in Outlook's calendar groups yet	この予定表はまだ Outlook の予定表グループにありません
 	Outlook's own calendar group can't be changed here	Outlook の予定表グループはここでは変更できません
 	A calendar group that still holds calendars can't be deleted here	予定表が残っている予定表グループはここでは削除できません
+	a calendar group that still holds calendars can't be deleted here	予定表が残っている予定表グループはここでは削除できません
+	this account's server doesn't keep calendar groups	このアカウントのサーバーは予定表グループを保持しません
+	it's the first calendar group already	すでに最初の予定表グループです
+	it's the last calendar group already	すでに最後の予定表グループです
+	this calendar was opened by its owner's address; it has no shortcut in Outlook's groups	この予定表は所有者のアドレスで開かれたため、Outlook のグループにショートカットがありません
+	the server doesn't name the group My Calendars is in	サーバーは [自分の予定表] のグループ名を返しません
+	the account's main calendar stays in My Calendars	アカウントのメイン予定表は [自分の予定表] に残ります
+	it's the first already	すでに最初です
+	it's the last already	すでに最後です
+	it's removed from the list: bring it back first	一覧から削除されています。先に戻してください
+	the account's main calendar stays as it is	アカウントのメイン予定表はそのまま残ります
+	only the account's own calendars can be changed	変更できるのはアカウント自身の予定表だけです
+	the server hasn't listed the calendars yet	サーバーはまだ予定表を一覧していません
+	this account's server doesn't allow it	このアカウントのサーバーでは許可されていません
+	the account's main calendar stays in the list	アカウントのメイン予定表は一覧に残ります
+	one opened by its owner's address or subscribed to by its link goes by its own Remove	所有者のアドレスで開いたもの、またはリンクで購読したものは、それぞれの [削除] で消えます

@@ -365,3 +365,25 @@ fn dragging_an_opened_calendar_does_not_move_it() {
     );
     let _ = std::fs::remove_dir_all(dir);
 }
+
+/// What a command refuses is shown in the interface's language: Quatrelle's wording comes from
+/// the catalogs, a server's own text would stay as it came.
+#[test]
+fn an_engine_refusal_is_shown_in_the_interfaces_language() {
+    let (mut a, dir, _ctx) = with_ews_groups("calendar-groups-french-refusal");
+    let account = a.session.accounts[0].config.id.clone();
+    crate::i18n::set_current(crate::i18n::Lang::from_code("fr").unwrap());
+    a.ui.dialog = Some(Dialog::delete_calendar_group(&account, "Équipe"));
+    a.act(crate::Action::Submit("calendar.group.delete", json!({"account": account, "group": "Équipe"})));
+    match &a.ui.dialog {
+        Some(Dialog::CalendarGroupChange(f)) => {
+            assert_eq!(
+                f.error.as_deref(),
+                Some("indisponible : un groupe de calendriers qui contient encore des calendriers ne peut pas être supprimé ici")
+            )
+        }
+        other => panic!("{other:?}"),
+    }
+    crate::i18n::set_current(crate::i18n::Lang::EN);
+    let _ = std::fs::remove_dir_all(dir);
+}

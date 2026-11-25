@@ -2502,3 +2502,19 @@ presence	Offline	Offline
 	This calendar isn't in Outlook's calendar groups yet	Dieser Kalender ist noch nicht in einer Kalendergruppe von Outlook
 	Outlook's own calendar group can't be changed here	Eine Kalendergruppe von Outlook kann hier nicht geändert werden
 	A calendar group that still holds calendars can't be deleted here	Eine Kalendergruppe mit Kalendern kann hier nicht gelöscht werden
+	a calendar group that still holds calendars can't be deleted here	Eine Kalendergruppe, die noch Kalender enthält, kann hier nicht gelöscht werden
+	this account's server doesn't keep calendar groups	Der Server dieses Kontos führt keine Kalendergruppen
+	it's the first calendar group already	Es ist bereits die erste Kalendergruppe
+	it's the last calendar group already	Es ist bereits die letzte Kalendergruppe
+	this calendar was opened by its owner's address; it has no shortcut in Outlook's groups	Dieser Kalender wurde über die Adresse seines Besitzers geöffnet; er hat keine Verknüpfung in Outlooks Gruppen
+	the server doesn't name the group My Calendars is in	Der Server benennt die Gruppe von Meine Kalender nicht
+	the account's main calendar stays in My Calendars	Der Hauptkalender des Kontos bleibt in Meine Kalender
+	it's the first already	Es ist bereits der erste
+	it's the last already	Es ist bereits der letzte
+	it's removed from the list: bring it back first	Er wurde aus der Liste entfernt: holen Sie ihn zuerst zurück
+	the account's main calendar stays as it is	Der Hauptkalender des Kontos bleibt unverändert
+	only the account's own calendars can be changed	Nur die eigenen Kalender des Kontos können geändert werden
+	the server hasn't listed the calendars yet	Der Server hat die Kalender noch nicht aufgelistet
+	this account's server doesn't allow it	Der Server dieses Kontos erlaubt es nicht
+	the account's main calendar stays in the list	Der Hauptkalender des Kontos bleibt in der Liste
+	one opened by its owner's address or subscribed to by its link goes by its own Remove	Einer, der über die Adresse seines Besitzers geöffnet oder über seinen Link abonniert wurde, geht über sein eigenes Entfernen

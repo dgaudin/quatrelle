@@ -2502,3 +2502,19 @@ presence	Offline	Hors ligne
 	This calendar isn't in Outlook's calendar groups yet	Ce calendrier n'est pas encore dans un groupe de calendriers d'Outlook
 	Outlook's own calendar group can't be changed here	Un groupe de calendriers d'Outlook ne se modifie pas ici
 	A calendar group that still holds calendars can't be deleted here	Un groupe de calendriers qui contient encore des calendriers ne peut pas être supprimé ici
+	a calendar group that still holds calendars can't be deleted here	un groupe de calendriers qui contient encore des calendriers ne peut pas être supprimé ici
+	this account's server doesn't keep calendar groups	le serveur de ce compte ne garde pas de groupes de calendriers
+	it's the first calendar group already	c'est déjà le premier groupe de calendriers
+	it's the last calendar group already	c'est déjà le dernier groupe de calendriers
+	this calendar was opened by its owner's address; it has no shortcut in Outlook's groups	ce calendrier a été ouvert par l'adresse de son propriétaire ; il n'a pas de raccourci dans les groupes d'Outlook
+	the server doesn't name the group My Calendars is in	le serveur ne nomme pas le groupe qui contient Mes calendriers
+	the account's main calendar stays in My Calendars	le calendrier principal du compte reste dans Mes calendriers
+	it's the first already	c'est déjà le premier
+	it's the last already	c'est déjà le dernier
+	it's removed from the list: bring it back first	il est retiré de la liste : ramenez-le d'abord
+	the account's main calendar stays as it is	le calendrier principal du compte reste tel quel
+	only the account's own calendars can be changed	seuls les calendriers propres au compte peuvent être modifiés
+	the server hasn't listed the calendars yet	le serveur n'a pas encore listé les calendriers
+	this account's server doesn't allow it	le serveur de ce compte ne l'autorise pas
+	the account's main calendar stays in the list	le calendrier principal du compte reste dans la liste
+	one opened by its owner's address or subscribed to by its link goes by its own Remove	celui ouvert par l'adresse de son propriétaire ou ajouté par son lien part par son propre Retirer

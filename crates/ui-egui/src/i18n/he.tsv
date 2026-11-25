@@ -2497,3 +2497,19 @@ presence	Offline	לא מחובר
 	This calendar isn't in Outlook's calendar groups yet	היומן הזה עדיין לא נמצא בקבוצת יומנים של Outlook
 	Outlook's own calendar group can't be changed here	לא ניתן לשנות כאן קבוצת יומנים של Outlook
 	A calendar group that still holds calendars can't be deleted here	לא ניתן למחוק כאן קבוצת יומנים שעדיין מכילה יומנים
+	a calendar group that still holds calendars can't be deleted here	לא ניתן למחוק כאן קבוצת יומנים שעדיין מכילה יומנים
+	this account's server doesn't keep calendar groups	השרת של חשבון זה אינו שומר קבוצות יומנים
+	it's the first calendar group already	זו כבר קבוצת היומנים הראשונה
+	it's the last calendar group already	זו כבר קבוצת היומנים האחרונה
+	this calendar was opened by its owner's address; it has no shortcut in Outlook's groups	היומן הזה נפתח בכתובת הבעלים שלו; אין לו קיצור דרך בקבוצות של Outlook
+	the server doesn't name the group My Calendars is in	השרת אינו נותן שם לקבוצה שבה נמצאים היומנים שלי
+	the account's main calendar stays in My Calendars	היומן הראשי של החשבון נשאר ביומנים שלי
+	it's the first already	זה כבר הראשון
+	it's the last already	זה כבר האחרון
+	it's removed from the list: bring it back first	הוא הוסר מהרשימה: החזירו אותו קודם
+	the account's main calendar stays as it is	היומן הראשי של החשבון נשאר כפי שהוא
+	only the account's own calendars can be changed	רק היומנים של החשבון עצמו ניתנים לשינוי
+	the server hasn't listed the calendars yet	השרת עדיין לא פירט את היומנים
+	this account's server doesn't allow it	השרת של חשבון זה אינו מאפשר זאת
+	the account's main calendar stays in the list	היומן הראשי של החשבון נשאר ברשימה
+	one opened by its owner's address or subscribed to by its link goes by its own Remove	זה שנפתח בכתובת הבעלים או שנרשם דרך הקישור שלו מוסר באמצעות ההסרה שלו

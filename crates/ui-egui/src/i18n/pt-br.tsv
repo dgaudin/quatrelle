@@ -2501,3 +2501,19 @@ presence	Offline	Offline
 	This calendar isn't in Outlook's calendar groups yet	Esta agenda ainda não está em um grupo de agendas do Outlook
 	Outlook's own calendar group can't be changed here	Um grupo de agendas do Outlook não pode ser alterado aqui
 	A calendar group that still holds calendars can't be deleted here	Um grupo de agendas que ainda contém agendas não pode ser excluído aqui
+	a calendar group that still holds calendars can't be deleted here	Um grupo de agendas que ainda contém agendas não pode ser excluído aqui
+	this account's server doesn't keep calendar groups	O servidor desta conta não mantém grupos de agendas
+	it's the first calendar group already	Já é o primeiro grupo de agendas
+	it's the last calendar group already	Já é o último grupo de agendas
+	this calendar was opened by its owner's address; it has no shortcut in Outlook's groups	Esta agenda foi aberta pelo endereço do proprietário; ela não tem atalho nos grupos do Outlook
+	the server doesn't name the group My Calendars is in	O servidor não nomeia o grupo em que ficam Minhas agendas
+	the account's main calendar stays in My Calendars	A agenda principal da conta fica em Minhas agendas
+	it's the first already	Já é a primeira
+	it's the last already	Já é a última
+	it's removed from the list: bring it back first	Ela foi removida da lista: traga-a de volta primeiro
+	the account's main calendar stays as it is	A agenda principal da conta fica como está
+	only the account's own calendars can be changed	Somente as agendas próprias da conta podem ser alteradas
+	the server hasn't listed the calendars yet	O servidor ainda não listou as agendas
+	this account's server doesn't allow it	O servidor desta conta não permite
+	the account's main calendar stays in the list	A agenda principal da conta fica na lista
+	one opened by its owner's address or subscribed to by its link goes by its own Remove	A aberta pelo endereço do proprietário ou assinada pelo link sai pelo próprio Remover

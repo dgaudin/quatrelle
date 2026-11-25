@@ -2497,3 +2497,19 @@ presence	Offline	غير متصل
 	This calendar isn't in Outlook's calendar groups yet	هذا التقويم ليس بعد في مجموعات تقويمات Outlook
 	Outlook's own calendar group can't be changed here	لا يمكن تغيير مجموعة تقويمات Outlook هنا
 	A calendar group that still holds calendars can't be deleted here	لا يمكن حذف مجموعة تقويمات لا تزال تحتوي على تقويمات هنا
+	a calendar group that still holds calendars can't be deleted here	لا يمكن حذف مجموعة تقويمات لا تزال تحتوي على تقويمات هنا
+	this account's server doesn't keep calendar groups	خادم هذا الحساب لا يحتفظ بمجموعات التقويمات
+	it's the first calendar group already	هذه بالفعل أول مجموعة تقويمات
+	it's the last calendar group already	هذه بالفعل آخر مجموعة تقويمات
+	this calendar was opened by its owner's address; it has no shortcut in Outlook's groups	فُتح هذا التقويم بعنوان مالكه؛ ليس له اختصار في مجموعات Outlook
+	the server doesn't name the group My Calendars is in	لا يسمّي الخادم المجموعة التي توجد فيها تقاويمي
+	the account's main calendar stays in My Calendars	يبقى التقويم الرئيسي للحساب في تقاويمي
+	it's the first already	هذا بالفعل الأول
+	it's the last already	هذا بالفعل الأخير
+	it's removed from the list: bring it back first	أُزيل من القائمة: أعده أولاً
+	the account's main calendar stays as it is	يبقى التقويم الرئيسي للحساب كما هو
+	only the account's own calendars can be changed	لا يمكن تغيير إلا تقويمات الحساب الخاصة
+	the server hasn't listed the calendars yet	لم يسرد الخادم التقويمات بعد
+	this account's server doesn't allow it	خادم هذا الحساب لا يسمح بذلك
+	the account's main calendar stays in the list	يبقى التقويم الرئيسي للحساب في القائمة
+	one opened by its owner's address or subscribed to by its link goes by its own Remove	التقويم المفتوح بعنوان مالكه أو المشترك عبر رابطه يزول بزر الإزالة الخاص به
