@@ -60,38 +60,6 @@ const MAX_PAGES: usize = 10;
 const MAX_LINKS: usize = 300;
 /// Most groups kept (a hostile or huge mailbox can't fill the pane).
 const MAX_GROUPS: usize = 300;
-
-/// A navigation shortcut that names a calendar in a group: its X.500 directory name, the name
-/// Outlook shows, and the group. `None` for another shortcut, or one that isn't a calendar
-/// another user owns. Read as hostile XML. For the fuzz target too.
-fn shortcut_of(it: &El) -> Option<(String, String, String)> {
-    let text = |tag: &str| ext_text(it, tag);
-    let int = |tag: &str| text(tag).and_then(|v| v.trim().parse::<i64>().ok());
-    // A calendar (section 3) another user owns (kind 2), in a group.
-    if text("0x001A") != Some(WLINK_CLASS) || int("0x6852") != Some(CALENDAR_SECTION) || int("0x6849") != Some(WLINK_SHARED) {
-        return None;
-    }
-    let dn = text("0x6854").and_then(|v| crate::ews::unb64(v.trim())).and_then(|b| address_book_dn(&b))?;
-    let name = clean(text("0x0E1D").unwrap_or_default());
-    let group = clean(text("0x6851").unwrap_or_default());
-    Some((dn, name, group))
-}
-
-/// The calendars named by navigation shortcuts in a `FindItem` answer's items, each address book
-/// entry once, at most [`MAX_LINKS`], before the directory resolves them. For the fuzz target.
-#[doc(hidden)]
-pub fn shortcuts_listed(doc: &El) -> Vec<(String, String, String)> {
-    let items: Vec<El> = doc.find("Items").map(|i| i.kids.clone()).unwrap_or_default();
-    let mut out: Vec<(String, String, String)> = Vec::new();
-    for it in items.iter().take(MAX_LINKS) {
-        let Some((dn, name, group)) = shortcut_of(it) else { continue };
-        if out.iter().any(|(d, _, _)| *d == dn) {
-            continue;
-        }
-        out.push((dn, name, group));
-    }
-    out
-}
 /// Most folders of the mailbox root probed for the Common Views folder.
 const MAX_PROBED: usize = 24;
 /// Most addresses looked up in the directory (a group has few people; a hostile server can't
@@ -229,6 +197,37 @@ struct Wlink {
     address_book_eid: Option<Vec<u8>>,
 }
 
+/// One navigation shortcut, when its message class is the shortcut's; read as hostile XML.
+fn wlink(it: &El) -> Option<Wlink> {
+    let is_link = ext_text(it, "0x001A").is_some_and(|class| class.trim().eq_ignore_ascii_case(WLINK_CLASS));
+    if !is_link {
+        return None;
+    }
+    Some(Wlink {
+        section: int_prop(it, "0x6852"),
+        kind: int_prop(it, "0x6849"),
+        name: clean(ext_text(it, "0x0E1D").unwrap_or_default()),
+        group_name: clean(ext_text(it, "0x6851").unwrap_or_default()),
+        group_id: guid_prop(it, "0x6850"),
+        header_id: guid_prop(it, "0x6842"),
+        ordinal: bin_prop(it, "0x684B").unwrap_or_default(),
+        save_stamp: int_prop(it, "0x6847"),
+        address_book_eid: bin_prop(it, "0x6854"),
+    })
+}
+
+/// The parser the fuzz target drives: the production read's shortcut parser and the write's own
+/// shortcut parser, on the same answer. Returns how many items were read.
+#[doc(hidden)]
+pub fn shortcuts_checked(doc: &El) -> usize {
+    let items: Vec<El> = doc.find("Items").map(|i| i.kids.clone()).unwrap_or_default();
+    for it in &items {
+        let _ = wlink(it);
+        let _ = write::shortcut_checked(it);
+    }
+    items.len()
+}
+
 /// The shortcuts, page after page, as the server gives them: the calendar ones kept, in the
 /// order their ordinals give.
 fn read_shortcuts(c: &Client, views: &str) -> Result<Shortcuts> {
@@ -271,21 +270,9 @@ fn shape(c: &Client, items: &[El], pages: usize) -> Shortcuts {
         if let (Some(s), Some(k)) = (section, kind) {
             *by_section.entry((s, k)).or_default() += 1;
         }
-        let is_link = ext_text(it, "0x001A").is_some_and(|class| class.trim().eq_ignore_ascii_case(WLINK_CLASS));
-        if !is_link {
-            continue;
+        if let Some(w) = wlink(it) {
+            wlinks.push(w);
         }
-        wlinks.push(Wlink {
-            section,
-            kind,
-            name: clean(ext_text(it, "0x0E1D").unwrap_or_default()),
-            group_name: clean(ext_text(it, "0x6851").unwrap_or_default()),
-            group_id: guid_prop(it, "0x6850"),
-            header_id: guid_prop(it, "0x6842"),
-            ordinal: bin_prop(it, "0x684B").unwrap_or_default(),
-            save_stamp: int_prop(it, "0x6847"),
-            address_book_eid: bin_prop(it, "0x6854"),
-        });
     }
     // The group headers name their groups, whatever the members carry ([MS-OXOCFG] 2.2.9.3:
     // the members point at the header by its id, `PidTagWlinkGroupClsid`).
@@ -479,4 +466,33 @@ fn resolve(c: &Client, dn: &str) -> Option<String> {
         .ok()?;
     let email = m.find("Mailbox").and_then(|b| b.text_of("EmailAddress"))?.trim().to_ascii_lowercase();
     email.contains('@').then_some(email)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::ews::parse;
+
+    /// A shortcut's shown name and group are bounded, whatever the server says; the production
+    /// parser is the one the fuzz target drives.
+    #[test]
+    fn a_shortcuts_name_and_group_are_bounded() {
+        let entry = "AAAAANynQMjAQhAatLkIACsv4YIAAAAAAAAAAC9vPVN0dWRpby9jbj1BbmEA";
+        let long = "n".repeat(5000);
+        let xml = format!(
+            "<m:FindItemResponseMessage><m:Items><t:Message>\
+             <t:ExtendedProperty><t:ExtendedFieldURI PropertyTag=\"0x001A\" PropertyType=\"String\"/><t:Value>IPM.Microsoft.WunderBar.Link</t:Value></t:ExtendedProperty>\
+             <t:ExtendedProperty><t:ExtendedFieldURI PropertyTag=\"0x6852\" PropertyType=\"Integer\"/><t:Value>3</t:Value></t:ExtendedProperty>\
+             <t:ExtendedProperty><t:ExtendedFieldURI PropertyTag=\"0x6849\" PropertyType=\"Integer\"/><t:Value>2</t:Value></t:ExtendedProperty>\
+             <t:ExtendedProperty><t:ExtendedFieldURI PropertyTag=\"0x6851\" PropertyType=\"String\"/><t:Value>{long}</t:Value></t:ExtendedProperty>\
+             <t:ExtendedProperty><t:ExtendedFieldURI PropertyTag=\"0x0E1D\" PropertyType=\"String\"/><t:Value>{long}</t:Value></t:ExtendedProperty>\
+             <t:ExtendedProperty><t:ExtendedFieldURI PropertyTag=\"0x6854\" PropertyType=\"Binary\"/><t:Value>{entry}</t:Value></t:ExtendedProperty>\
+             </t:Message></m:Items></m:FindItemResponseMessage>"
+        );
+        let doc = parse(&xml);
+        assert_eq!(shortcuts_checked(&doc), 1);
+        let w = wlink(doc.find("Items").and_then(|i| i.kids.first()).expect("the shortcut")).expect("a shortcut");
+        assert!(w.name.chars().count() <= 255, "{} characters in a name", w.name.chars().count());
+        assert!(w.group_name.chars().count() <= 255, "{} characters in a group", w.group_name.chars().count());
+    }
 }

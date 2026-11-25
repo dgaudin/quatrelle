@@ -69,6 +69,11 @@ fn read_raw(c: &Client) -> Result<Vec<Shortcut>> {
     Ok(out)
 }
 
+/// Whether the production write parser reads this item as a shortcut; for the fuzz target.
+pub(super) fn shortcut_checked(it: &El) -> bool {
+    shortcut_of(it).is_some()
+}
+
 /// One shortcut, when its message class is the navigation shortcut's.
 fn shortcut_of(it: &El) -> Option<Shortcut> {
     let class = ext_text(it, "0x001A")?.trim();

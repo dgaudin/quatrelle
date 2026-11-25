@@ -10,7 +10,7 @@
 
 use libfuzzer_sys::fuzz_target;
 use quatrelle_net::ews;
-use quatrelle_net::{card_of, event_of, exception_of, note_of, own_organizer, shortcuts_listed, task_of};
+use quatrelle_net::{card_of, event_of, exception_of, note_of, own_organizer, shortcuts_checked, task_of};
 
 fuzz_target!(|data: &[u8]| {
     let text = String::from_utf8_lossy(data);
@@ -47,12 +47,7 @@ fuzz_target!(|data: &[u8]| {
             }
         }
     }
-    // Outlook's grouped calendars: each shortcut names a directory entry (an X.500 name, ASCII,
-    // at most 1024 bytes) and a named group, at most the cap.
-    let shortcuts = shortcuts_listed(&root);
-    assert!(shortcuts.len() <= 300, "{} shortcuts", shortcuts.len());
-    for (dn, _name, group) in &shortcuts {
-        assert!(dn.starts_with('/') && dn.is_ascii() && dn.len() <= 1024, "{dn:?}");
-        assert!(group.chars().count() <= 4096, "{group:?}");
-    }
+    // Outlook's grouped calendars: the production read parser and the write parser, on the same
+    // answer.
+    let _ = shortcuts_checked(&root);
 });
