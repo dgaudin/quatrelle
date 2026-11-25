@@ -533,3 +533,32 @@ fn an_outlook_group_is_protected() {
     crate::ews_pim::delete_calendar_group(&c, "Autres calendriers").unwrap();
     assert!(!crate::ews_pim::calendar_links(&c).unwrap().groups.iter().any(|g| g.name == "Autres calendriers"), "an empty group may go");
 }
+
+/// One shortcut shows the calendar's name but resolves to someone else, and the owner's isn't
+/// there: nothing may be moved.
+#[test]
+fn a_shared_calendar_whose_only_name_match_is_someone_else_is_left_alone() {
+    let mut d = Data::default();
+    d.folder("Inbox", None, Some("inbox"), "IPF.Note");
+    d.folder("Calendar", None, Some("calendar"), "IPF.Appointment");
+    d.directory = vec![(dn("tom"), "tom@contoso.example".into())];
+    let link = "IPM.Microsoft.WunderBar.Link";
+    let tom = wlink_of(
+        link,
+        3,
+        2,
+        "Ana Lima",
+        &[
+            ("0x6851", "String", "Équipe".into()),
+            ("0x6854", "Binary", crate::imap::base64(&address_book_eid(&dn("tom")))),
+            ("0x684B", "Binary", crate::imap::base64(&[0x11])),
+        ],
+    );
+    let before = tom.clone();
+    d.wlinks = vec![wlink_of(link, 3, 4, "Salles", &[("0x6842", "Binary", guid(0x20)), ("0x684B", "Binary", crate::imap::base64(&[0x10]))]), tom];
+    let server = serve(d);
+    let c = crate::ews::Client::connect(&server.url, &format!("{DOMAIN}\\{USER}"), PASSWORD, "riley@contoso.example").unwrap();
+    assert!(crate::ews_pim::move_calendar_to_group(&c, "shared:ana@contoso.example", "Ana Lima", "Salles").is_err(), "no shortcut names Ana");
+    let kept = server.data.lock().unwrap();
+    assert!(kept.wlinks.contains(&before), "Tom's shortcut is untouched: {:?}", kept.wlinks);
+}

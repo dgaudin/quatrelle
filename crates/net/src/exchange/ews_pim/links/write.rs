@@ -449,6 +449,7 @@ fn find_member<'a>(c: &Client, all: &'a [Shortcut], calendar: &str, name: &str) 
         let mut resolved: std::collections::HashMap<String, Option<String>> = std::collections::HashMap::new();
         let mut named: Vec<&Shortcut> = Vec::new();
         for s in all.iter().filter(|s| s.section == Some(CALENDAR_SECTION) && s.kind == Some(WLINK_SHARED)) {
+            let mut known_other = false;
             if let Some(dn) = address_book_dn(&s.address_book) {
                 let email = match resolved.get(&dn) {
                     Some(e) => e.clone(),
@@ -458,11 +459,14 @@ fn find_member<'a>(c: &Client, all: &'a [Shortcut], calendar: &str, name: &str) 
                         e
                     }
                 };
-                if email.is_some_and(|e| e.eq_ignore_ascii_case(owner)) {
+                if email.as_ref().is_some_and(|e| e.eq_ignore_ascii_case(owner)) {
                     return Some(s);
                 }
+                // An address that resolved to someone else is never a name fallback: that
+                // would move the other person's calendar.
+                known_other = email.is_some();
             }
-            if s.name.eq_ignore_ascii_case(name) {
+            if !known_other && s.name.eq_ignore_ascii_case(name) {
                 named.push(s);
             }
         }
