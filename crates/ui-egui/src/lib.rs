@@ -321,6 +321,7 @@ impl MailApp {
                 cal_pick: None,
                 note_selected: None,
                 tasks: Default::default(),
+                todo_memo: Default::default(),
                 note_windows: Vec::new(),
                 person: None,
                 invite: Vec::new(),

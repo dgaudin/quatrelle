@@ -470,3 +470,63 @@ fn a_flagged_message_in_a_folder_never_opened_counts_too() {
     assert!(rings, "the reminders read the cache on disk too: {:?}", s.due_reminders(s.clock.now).iter().map(|r| &r.summary).collect::<Vec<_>>());
     done(s);
 }
+
+/// The look through the folders kept on disk is bounded per call: one call reads a few folders
+/// (round-robin), not them all, and the next calls come to the rest.
+#[test]
+fn the_look_through_the_disk_folders_is_bounded_per_call() {
+    let mut s = sample_session("todo-scan");
+    // Six folders on disk only, each with one flagged message, none in the memory cache.
+    for i in 0..6u32 {
+        let path = format!("Disk-{i}");
+        s.accounts[0].folders.push(quatrelle_model::Folder { account: "sample".into(), path: path.clone(), selectable: true, ..Default::default() });
+        let mut st = quatrelle_store::FolderState { validity: 1, ..Default::default() };
+        st.messages.push(Summary {
+            key: MessageKey { account: "sample".into(), folder: path.clone(), validity: 1, uid: 100 + i },
+            subject: format!("Disk {i}"),
+            flags: quatrelle_model::Flags { flagged: true, ..Default::default() },
+            ..Default::default()
+        });
+        s.store.as_ref().unwrap().save_folder("sample", &path, &st).unwrap();
+    }
+    s.store.as_ref().unwrap().save_folders("sample", &s.accounts[0].folders).unwrap();
+    for i in 0..6 {
+        let path = format!("Disk-{i}");
+        let k = ("sample".to_string(), path);
+        s.cache.remove(&k);
+        s.cache_order.retain(|o| *o != k);
+    }
+
+    // One call reads at most a few of them.
+    let first = s.todo("", false);
+    let n_first = first.iter().filter(|r| r.subject().starts_with("Disk ")).count();
+    assert!(n_first <= 2, "one call read {n_first} disk folders, not a few: bounded per call");
+    // And the next calls come to the rest: everything is seen in time.
+    let mut all = first;
+    for _ in 0..8 {
+        all = s.todo("", false);
+        if all.iter().filter(|r| r.subject().starts_with("Disk ")).count() == 6 {
+            break;
+        }
+    }
+    assert_eq!(all.iter().filter(|r| r.subject().starts_with("Disk ")).count(), 6, "every disk folder is come to in time");
+    done(s);
+}
+
+/// The mail stamp counts the changes commands, ops and events make to what the To-Do List and
+/// the reminders read: the interface rebuilds them only when it changed, not at every image.
+#[test]
+fn the_mail_stamp_counts_every_change() {
+    let mut s = sample_session("mail-stamp");
+    let a = s.mail_stamp();
+    s.run("list.select", &key_of(&s, "Character turnarounds")).unwrap();
+    assert!(s.mail_stamp() > a, "a command counts");
+    let b = s.mail_stamp();
+    let key = s.list.iter().find(|m| m.subject == "Character turnarounds").map(|m| m.key.clone()).unwrap_or_default();
+    s.apply_op("sample", Op::SetFlag { keys: vec![key], flag: Flag::Flagged, on: true, all: false });
+    assert!(s.mail_stamp() > b, "an op counts");
+    let c = s.mail_stamp();
+    s.apply(Event::Status { account: "sample".into(), status: SyncStatus::Online { at: s.clock.now } });
+    assert!(s.mail_stamp() > c, "an event counts");
+    done(s);
+}

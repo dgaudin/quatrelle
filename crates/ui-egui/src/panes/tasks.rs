@@ -18,6 +18,68 @@ use crate::{Action, UiState, i18n, widgets};
 
 mod form;
 
+/// The To-Do lists computed for the frames that follow, each with the mail stamp and the day
+/// it was computed at: rebuilt only when mail or tasks changed or the day turned, not at every
+/// image (the work of walking every folder and sorting the list is bounded that way).
+#[derive(Clone, Debug, Default)]
+pub struct TodoMemo {
+    /// The bar's list: `todo("", false)`.
+    pub bar: Option<(u64, i64, Vec<TodoRef>)>,
+    /// A list's rows: `todo_for(list, query, completed)`.
+    pub for_list: Option<(u64, i64, String, String, bool, Vec<TodoRef>)>,
+    /// A list as its view shows it: `todo_view(list, query, completed, view, arrange)`.
+    pub view: Option<(u64, i64, String, String, bool, TaskView, TaskArrange, Vec<TodoRef>)>,
+}
+
+impl TodoMemo {
+    /// The bar's list, computed again only when the mail stamp or the day changed.
+    pub(crate) fn bar_list(&mut self, s: &Session, today: i64) -> &[TodoRef] {
+        let stamp = s.mail_stamp();
+        if self.bar.as_ref().is_none_or(|(st, d, _)| *st != stamp || *d != today) {
+            self.bar = Some((stamp, today, s.todo("", false)));
+        }
+        match &self.bar {
+            Some((_, _, list)) => list,
+            None => &[],
+        }
+    }
+
+    /// A list's rows (`todo_for`), same memoizing.
+    fn for_list(&mut self, s: &Session, today: i64, list: &str, query: &str, completed: bool) -> &[TodoRef] {
+        let stamp = s.mail_stamp();
+        if self.for_list.as_ref().is_none_or(|(st, d, l, q, c, _)| *st != stamp || *d != today || l != list || q != query || *c != completed) {
+            self.for_list = Some((stamp, today, list.to_string(), query.to_string(), completed, s.todo_for(list, query, completed)));
+        }
+        match &self.for_list {
+            Some((_, _, _, _, _, rows)) => rows,
+            None => &[],
+        }
+    }
+
+    /// A list as its view shows it (`todo_view`), same memoizing.
+    fn view_list(&mut self, s: &Session, today: i64, list: &str, query: &str, completed: bool, view: TaskView, arrange: TaskArrange) -> &[TodoRef] {
+        let stamp = s.mail_stamp();
+        if self.view.as_ref().is_none_or(|(st, d, l, q, c, v, a, _)| {
+            *st != stamp || *d != today || l != list || q != query || *c != completed || *v != view || *a != arrange
+        }) {
+            self.view = Some((
+                stamp,
+                today,
+                list.to_string(),
+                query.to_string(),
+                completed,
+                view,
+                arrange,
+                s.todo_view(list, query, completed, view, arrange),
+            ));
+        }
+        match &self.view {
+            Some((_, _, _, _, _, _, _, rows)) => rows,
+            None => &[],
+        }
+    }
+}
+
 /// What Tasks keeps between frames.
 #[derive(Clone, Debug, Default)]
 pub struct TasksUi {
@@ -70,7 +132,7 @@ pub fn nav(s: &Session, st: &mut UiState, ui: &mut Ui, _acts: &mut Vec<Action>) 
     }
     ui.add_space(8.0);
     let today = dates::today(&s.clock);
-    let open = s.todo_for(&chosen, "", false);
+    let open = st.todo_memo.for_list(s, today, &chosen, "", false);
     let late = open.iter().filter(|r| !r.is_complete() && r.due().is_some_and(|d| d < today)).count();
     ui.label(RichText::new(tf!("{n} tasks to do", n = open.len())).color(t.faint).small());
     if late > 0 {
@@ -89,7 +151,12 @@ pub(crate) fn ribbon(s: &Session, st: &mut UiState, ui: &mut Ui, groups: &mut wi
     }
     groups.end(ui, &t, "New");
     let list = list_of(&st.tasks).to_string();
-    let picked = st.tasks.selected.as_deref().and_then(|u| s.todo_for(&list, "", st.tasks.completed).into_iter().find(|r| r.uid() == u));
+    let today = dates::today(&s.clock);
+    let picked = st
+        .tasks
+        .selected
+        .as_deref()
+        .and_then(|u| st.todo_memo.for_list(s, today, &list, "", st.tasks.completed).iter().find(|r| r.uid() == u).cloned());
     let delete_label = if matches!(picked, Some(TodoRef::Mail(_))) { "Remove from List" } else { "Delete" };
     if widgets::big_button(ui, Icon::Delete, delete_label, &t, picked.is_some()).clicked()
         && let Some(p) = &picked
@@ -154,7 +221,8 @@ pub fn show(s: &Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action>) 
     let list_id = list_of(&st.tasks).to_string();
     let list_ref = s.task_list(&list_id);
     let (view, arrange) = s.task_view(&list_id);
-    let list = s.todo_view(&list_id, &st.tasks.query, st.tasks.completed, view, arrange);
+    let query = st.tasks.query.clone();
+    let list = st.todo_memo.view_list(s, today, &list_id, &query, st.tasks.completed, view, arrange);
     // The one picked went (deleted, or done with the completed ones hidden): none is.
     let picked = st.tasks.selected.as_deref().and_then(|u| list.iter().find(|r| r.uid() == u)).cloned();
     if picked.is_none() {
@@ -171,7 +239,7 @@ pub fn show(s: &Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action>) 
             .show(ui, |ui| form::show(s, &mut st.tasks, &t, ui, p, today, acts));
     }
     egui::CentralPanel::default().frame(egui::Frame::new().fill(t.surface)).show(ui, |ui| {
-        list_pane(s, &mut st.tasks, &t, ui, &list, list_ref.as_ref(), view, arrange, today, acts);
+        list_pane(s, &mut st.tasks, &t, ui, list, list_ref.as_ref(), view, arrange, today, acts);
     });
 }
 
@@ -241,19 +309,24 @@ fn list_pane(
         if view == TaskView::Detailed {
             detail_header(ui, t);
         }
+        // Each heading's row count in one pass (not a scan of the whole list per group).
+        let headings: Vec<Option<(String, bool)>> = list.iter().map(|r| heading_of(s, r, arrange, today)).collect();
+        let mut counts: std::collections::HashMap<&str, usize> = std::collections::HashMap::new();
+        for h in headings.iter().flatten() {
+            *counts.entry(h.0.as_str()).or_default() += 1;
+        }
         let mut group: Option<String> = None;
-        for r in list {
+        for (r, heading) in list.iter().zip(&headings) {
             // Headings by what the list is arranged by (none by start date: the order says it).
-            let heading = heading_of(s, r, arrange, today);
             if let Some((label, danger)) = heading
                 && group.as_deref() != Some(label.as_str())
             {
                 group = Some(label.clone());
-                let n = list.iter().filter(|x| heading_of(s, x, arrange, today).is_some_and(|(l, _)| l == label)).count();
+                let n = counts.get(label.as_str()).copied().unwrap_or(0);
                 ui.add_space(8.0);
                 ui.horizontal(|ui| {
                     ui.add_space(14.0);
-                    let color = if danger { t.danger } else { t.dim };
+                    let color = if *danger { t.danger } else { t.dim };
                     ui.label(RichText::new(format!("{label}  {n}")).font(theme::bold(12.5)).color(color));
                 });
                 ui.add_space(2.0);

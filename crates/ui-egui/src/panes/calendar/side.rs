@@ -379,7 +379,7 @@ pub fn todo_bar(s: &Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Actio
         }
         if parts.tasks {
             todo_heading(ui, &t, "Tasks");
-            tasks_part(s, &t, ui, acts);
+            tasks_part(s, st, ui, acts);
         }
     });
 }
@@ -526,7 +526,8 @@ fn people_part(s: &Session, t: &Tokens, ui: &mut Ui, acts: &mut Vec<Action>) {
 /// The To-Do List small: type a new task, then the tasks and flagged messages by follow-up due
 /// day; a tick marks one done, a double click opens a message (or a task), a right-click gives
 /// the Follow Up menu.
-fn tasks_part(s: &Session, t: &Tokens, ui: &mut Ui, acts: &mut Vec<Action>) {
+fn tasks_part(s: &Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action>) {
+    let t = st.tokens;
     let id = egui::Id::unique("todo-bar-new");
     let mut text: String = ui.ctx().data(|d| d.get_temp(id)).unwrap_or_default();
     let r =
@@ -544,7 +545,8 @@ fn tasks_part(s: &Session, t: &Tokens, ui: &mut Ui, acts: &mut Vec<Action>) {
         }
     }
     let today = dates::today(&s.clock);
-    let list = s.todo("", false);
+    // Computed again only when mail or tasks changed, not at every image.
+    let list = st.todo_memo.bar_list(s, today);
     let mut group = None;
     for row in list.iter().take(40) {
         let g = row.group(today);
@@ -554,7 +556,7 @@ fn tasks_part(s: &Session, t: &Tokens, ui: &mut Ui, acts: &mut Vec<Action>) {
             let color = if g == quatrelle_engine::model::pim::tasks::DueGroup::Overdue { t.danger } else { t.faint };
             ui.label(RichText::new(tl!(g.label())).font(theme::bold(11.5)).color(color));
         }
-        todo_mini_row(s, t, ui, row, today, acts);
+        todo_mini_row(s, &t, ui, row, today, acts);
     }
 }
 

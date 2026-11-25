@@ -39,6 +39,7 @@ impl Session {
     /// Apply a change: to the in-memory list at once, then to the cache and server (through a
     /// job), or straight to the cache for local accounts.
     pub fn apply_op(&mut self, account: &str, op: Op) {
+        self.mail_stamp = self.mail_stamp.wrapping_add(1);
         if let Err(e) = self.apply_op_checked(account, op) {
             self.notice_with("Your mail couldn't be moved, so it stays where it was: {error}", &[("error", &e.to_string())], true);
         }

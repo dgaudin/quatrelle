@@ -212,11 +212,16 @@ impl TodoRef {
     }
 }
 
+/// Folders kept on disk read per call when the To-Do List or the reminders look through mail:
+/// round-robin, so every folder is come to in time and the work one call does stays bounded.
+pub(crate) const TODO_DISK_SCAN: usize = 2;
+
 impl Session {
     /// Calls `keep(account, folder, message)` for each message of each folder of each known
-    /// account: those in the cache first, then those of the folders not in it, read from the
-    /// cache on disk — so a message followed in a folder not opened this session counts too.
-    /// Each message once (its key).
+    /// account: those in the cache first, then those of the folders read from the cache on
+    /// disk into [`Session::disk_lists`] — a few a call, round-robin, so a message followed in
+    /// a folder not opened this session counts too, in time, and what is read stays (the list
+    /// doesn't rotate under the window). Each message once (its key).
     pub(crate) fn scan_mail(&self, mut keep: impl FnMut(&str, &str, &Summary)) {
         let mut seen: std::collections::HashSet<MessageKey> = std::collections::HashSet::new();
         for ((account, folder), st) in &self.cache {
@@ -230,19 +235,52 @@ impl Session {
             }
         }
         let Some(store) = &self.store else { return };
-        for a in &self.accounts {
-            for f in &a.folders {
-                let k = (a.config.id.clone(), f.path.clone());
-                if self.cache.contains_key(&k) {
-                    continue;
-                }
-                // A folder whose list can't be read is left out, not fatal.
-                if let Ok(st) = store.load_folder(&k.0, &k.1) {
-                    for m in &st.messages {
-                        if seen.insert(m.key.clone()) {
-                            keep(&a.config.id, &f.path, m);
-                        }
+        // Fill the disk lists a few folders a call, round-robin over the folders neither in
+        // the cache nor already read.
+        {
+            let mut g = self.disk_lists.lock().unwrap_or_else(|e| e.into_inner());
+            let (order, map) = &mut *g;
+            let mut candidates: Vec<(String, String)> = Vec::new();
+            for a in &self.accounts {
+                for f in &a.folders {
+                    let k = (a.config.id.clone(), f.path.clone());
+                    if !self.cache.contains_key(&k) && !map.contains_key(&k) {
+                        candidates.push(k);
                     }
+                }
+            }
+            if !candidates.is_empty() {
+                let start = self.todo_scan.fetch_add(TODO_DISK_SCAN, std::sync::atomic::Ordering::Relaxed) % candidates.len();
+                for i in 0..TODO_DISK_SCAN.min(candidates.len()) {
+                    let k = candidates[(start + i) % candidates.len()].clone();
+                    // A folder whose list can't be read is left out, not fatal.
+                    if let Ok(st) = store.load_folder(&k.0, &k.1) {
+                        let mut total: usize = map.values().map(|s| s.messages.len()).sum();
+                        let shared = st.shared();
+                        total = total.saturating_add(shared.messages.len());
+                        // The memory stays bounded: the least recently read folders go first.
+                        while total > crate::session::CACHE_MESSAGES
+                            && let Some(old) = order.first().cloned()
+                        {
+                            if let Some(st) = map.remove(&old) {
+                                total = total.saturating_sub(st.messages.len());
+                            }
+                            order.remove(0);
+                        }
+                        map.insert(k.clone(), shared);
+                        order.push(k);
+                    }
+                }
+            }
+        }
+        let g = self.disk_lists.lock().unwrap_or_else(|e| e.into_inner());
+        for ((account, folder), st) in g.1.iter() {
+            if self.account(account).is_none() {
+                continue;
+            }
+            for m in &st.messages {
+                if seen.insert(m.key.clone()) {
+                    keep(account, folder, m);
                 }
             }
         }
