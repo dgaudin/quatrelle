@@ -262,7 +262,7 @@ fn sign_in_needs_both_ids() {
     assert!(teams_jobs(&mut s).is_empty());
     // Who signed in goes into the settings.
     s.apply(teams_event(teams::Event::Account {
-        name: "Ana\u{202E} Lima".into(),
+        name: "Ana\u{202E} Exemple".into(),
         address: "ana@contoso.example".into(),
         object_id: "u-1".into(),
         tenant_id: "t-1".into(),

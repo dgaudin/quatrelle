@@ -187,7 +187,7 @@ fn a_change_record_past_its_rules_is_passed_over() {
     let kind = |what: OutKind| OpRecord { what, ..delete(1) };
     let at = |created: i64| (OutKind::Delete { message: "m-1".into(), created }, created);
     let many: Vec<Mention> = (0..=MAX_MENTIONS as u32).map(|i| mention(i, Some("u-ana"), "Ana")).collect();
-    let name_line = "Ana\nLima";
+    let name_line = "Ana\nExemple";
     let broken = [
         ("a reaction of a name, not an emoji", react(1, "like")),
         ("a reaction with a bidi mark", react(1, "\u{1F44D}\u{202E}")),

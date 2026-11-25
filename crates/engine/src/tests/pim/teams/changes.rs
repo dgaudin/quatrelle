@@ -419,7 +419,7 @@ fn no_last_own_message_while_one_is_going_out() {
 fn mentions_name_members_of_the_organisation() {
     let mut s = opened();
     let send = |s: &mut Session, text: &str, mentions: Value| s.run("teams.send", &json!({"chat": CHAT, "text": text, "mentions": mentions}));
-    send(&mut s, "hi Ana Exemple", json!([[3, 11, "u-ana"]])).unwrap();
+    send(&mut s, "hi Ana Exemple", json!([[3, 14, "u-ana"]])).unwrap();
     let jobs = teams_jobs(&mut s);
     let [teams::Job::Op { op: Op::Send { mentions, body, .. } }] = &jobs[..] else { panic!("{jobs:?}") };
     assert_eq!(mentions, &[Mention { id: 0, text: "Ana Exemple".into(), user_id: Some("u-ana".into()) }]);
@@ -434,22 +434,22 @@ fn mentions_name_members_of_the_organisation() {
     // Someone of another organisation, a stranger: refused.
     let stranger = Err(CmdError::Params("a mention names a member of the conversation".into()));
     assert_eq!(send(&mut s, "hi Sam Roe", json!([[3, 10, "u-sam"]])), stranger);
-    assert_eq!(send(&mut s, "hi Ana Exemple", json!([[3, 11, "u-nobody"]])), stranger);
+    assert_eq!(send(&mut s, "hi Ana Exemple", json!([[3, 14, "u-nobody"]])), stranger);
     // Ranges that overlap, hold a line break, aren't one line as they stand, are off the text or
     // inside a character, or a mention that isn't [from, to, id]: refused.
     for (text, bad) in [
-        ("hi Ana Exemple", json!([[3, 11, "u-ana"], [7, 11, "u-ana"]])),
-        ("hi Ana Exemple", json!([[7, 11, "u-ana"], [3, 8, "u-ana"]])),
+        ("hi Ana Exemple", json!([[3, 14, "u-ana"], [7, 14, "u-ana"]])),
+        ("hi Ana Exemple", json!([[7, 14, "u-ana"], [3, 8, "u-ana"]])),
         ("hi\nAna Exemple", json!([[0, 6, "u-ana"]])),
-        ("hi Ana  Lima", json!([[3, 12, "u-ana"]])),
+        ("hi Ana  Exemple", json!([[3, 12, "u-ana"]])),
         ("hi Ana Exemple", json!([[2, 11, "u-ana"]])),
         ("hi Ana Exemple", json!([[3, 3, "u-ana"]])),
         ("hi Ana Exemple", json!([[3, 99, "u-ana"]])),
         ("hé Ana", json!([[2, 6, "u-ana"]])),
-        ("hi Ana Exemple", json!([[3, 11]])),
-        ("hi Ana Exemple", json!([[3, 11, ""]])),
-        ("hi Ana Exemple", json!([[3, 11, 7]])),
-        ("hi Ana Exemple", json!([3, 11, "u-ana"])),
+        ("hi Ana Exemple", json!([[3, 14]])),
+        ("hi Ana Exemple", json!([[3, 14, ""]])),
+        ("hi Ana Exemple", json!([[3, 14, 7]])),
+        ("hi Ana Exemple", json!([3, 14, "u-ana"])),
         ("hi Ana Exemple", json!("u-ana")),
     ] {
         assert!(matches!(send(&mut s, text, bad.clone()), Err(CmdError::Params(_))), "{text:?} {bad}");
@@ -462,7 +462,7 @@ fn mentions_name_members_of_the_organisation() {
     send(&mut s, &text, ranges(50)).unwrap();
     assert!(matches!(&teams_jobs(&mut s)[..], [teams::Job::Op { op: Op::Send { mentions, .. } }] if mentions.len() == 50));
     // To a chat not open: its members aren't known here, so no mention.
-    let elsewhere = s.run("teams.send", &json!({"chat": OTHER, "text": "hi Ana Exemple", "mentions": [[3, 11, "u-ana"]]}));
+    let elsewhere = s.run("teams.send", &json!({"chat": OTHER, "text": "hi Ana Exemple", "mentions": [[3, 14, "u-ana"]]}));
     assert_eq!(elsewhere, stranger);
     s.run("teams.send", &json!({"chat": OTHER, "text": "hi Ana Exemple", "mentions": []})).unwrap();
     assert_eq!(teams_jobs(&mut s).len(), 1);

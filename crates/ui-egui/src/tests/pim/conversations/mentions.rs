@@ -92,7 +92,7 @@ fn at_offers_the_organisations_members_and_enter_picks() {
 fn a_name_with_a_bidi_mark_goes_in_as_one_line_and_stays_a_mention() {
     let (mut a, dir) = writing_app("teams-at-bidi", vec![]);
     let mut people = members();
-    people[1].name = "Ana\u{202E}  Lima".into();
+    people[1].name = "Ana\u{202E}  Exemple".into();
     a.session.teams_apply(teams::Event::Members { chat: CHAT.into(), members: people, web_url: Some(TEAMS_LINK.into()), first: true });
     let ctx = egui::Context::default();
     focus_box(&ctx, &mut a);
@@ -102,7 +102,7 @@ fn a_name_with_a_bidi_mark_goes_in_as_one_line_and_stays_a_mention() {
     typed(&ctx, &mut a, vec![enter()]);
     assert_eq!(in_box(&a), "Ana Exemple ");
     let acts = typed(&ctx, &mut a, vec![enter()]);
-    assert_eq!(sends(&acts).iter().map(mentions_of).collect::<Vec<_>>(), vec![json!([[0, 8, "u-ana"]])]);
+    assert_eq!(sends(&acts).iter().map(mentions_of).collect::<Vec<_>>(), vec![json!([[0, 11, "u-ana"]])]);
     run_all(&mut a, acts);
     let sent = a.session.teams.outgoing.last().expect("taken by the engine");
     assert_eq!(sent.mentions, vec![Mention { id: 0, text: "Ana Exemple".into(), user_id: Some("u-ana".into()) }]);

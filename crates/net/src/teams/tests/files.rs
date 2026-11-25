@@ -529,7 +529,7 @@ fn people_come_clean_and_few() {
     assert!(seen[1].contains("\r\nConsistencyLevel: eventual\r\n"), "{}", seen[1]);
 
     // One read alone: an id that is a GUID, a name on one line, a guest by its type.
-    let p = person_of(&json!({"id": ANA, "displayName": " Ana\n Lima ", "mail": " ana@contoso.example ", "userType": "guest"})).unwrap();
+    let p = person_of(&json!({"id": ANA, "displayName": " Ana\n Exemple ", "mail": " ana@contoso.example ", "userType": "guest"})).unwrap();
     assert_eq!(p, Person { id: ANA.into(), name: "Ana Exemple".into(), address: "ana@contoso.example".into(), guest: true });
     assert_eq!(person_of(&json!({"id": ANA, "mail": "ana@contoso.example"})).unwrap().name, "ana@contoso.example");
     for odd in

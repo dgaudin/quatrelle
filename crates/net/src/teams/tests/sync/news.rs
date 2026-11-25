@@ -186,7 +186,7 @@ fn names_and_text_carry_no_bidi_or_control() {
     // A member's name as a damaged or hostile copy may hold it.
     let mut kept = r.record(GROUP);
     for m in kept.chat.members.iter_mut().filter(|m| m.user_id == "u-ana") {
-        m.name = "Ana\u{202E} Lima\u{7}".into();
+        m.name = "Ana\u{202E} Exemple\u{7}".into();
     }
     r.w.copy.as_ref().unwrap().put_chat(&kept).unwrap();
     let from = r.events().len();

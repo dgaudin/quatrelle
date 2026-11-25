@@ -592,7 +592,7 @@ fn a_person_is_a_guid_a_line_and_an_address() {
     for id in ["u-ana", "a/b", "x')"] {
         assert!(!with(&|p| p.id = id.into()), "{id}");
     }
-    for name in ["", "Ana  Lima", "Ana\u{202E}"] {
+    for name in ["", "Ana  Exemple", "Ana\u{202E}"] {
         assert!(!with(&|p| p.name = name.into()), "{name:?}");
     }
     assert!(!with(&|p| p.address = "ana @contoso.example".into()));

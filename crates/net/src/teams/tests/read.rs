@@ -192,7 +192,7 @@ fn a_deleted_message_keeps_only_its_id_times_and_sender() {
 #[test]
 fn members_say_their_kind_tenant_and_roles() {
     let m = member_of(&json!({
-        "@odata.type": "#microsoft.graph.aadUserConversationMember", "userId": "u-ana", "displayName": "Ana\n\u{202E}Lima",
+        "@odata.type": "#microsoft.graph.aadUserConversationMember", "userId": "u-ana", "displayName": "Ana\n\u{202E}Exemple",
         "email": "ana@contoso.example", "tenantId": TENANT, "roles": ["owner"],
     }))
     .unwrap();

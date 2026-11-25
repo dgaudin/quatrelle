@@ -403,11 +403,11 @@ fn pane_control(w: &mut Win, a: &mut MailApp, label: &str) -> Option<egui::Pos2>
 #[test]
 fn a_name_with_markup_or_bidi_is_drawn_plain() {
     let (mut a, dir, mut w, _) = Win::app("teams-new-markup", vec![], true);
-    let hostile = person(ANA, "Ana\n<b>Lima</b>\u{202E}", "ana@contoso.example\u{202E}", false);
+    let hostile = person(ANA, "Ana\n<b>Exemple</b>\u{202E}", "ana@contoso.example\u{202E}", false);
     a.ui.conversations.new_chat.as_mut().expect("open").to = "ana".into();
     a.session.teams.people = Some(TeamsPeople { query: "ana".into(), people: vec![hostile], failed: false, waiting: false });
     let check = |texts: &[(String, egui::Rect)], with_address: bool| {
-        let name = rect_of(texts, |t| t == "Ana <b>Lima</b>").unwrap_or_else(|| panic!("the name as its text: {texts:?}"));
+        let name = rect_of(texts, |t| t == "Ana <b>Exemple</b>").unwrap_or_else(|| panic!("the name as its text: {texts:?}"));
         assert!(name.height() < 24.0, "on one line: {name:?}");
         assert!(!texts.iter().any(|(t, _)| t.contains('\u{202E}') || t.contains('\n')), "{texts:?}");
         assert_eq!(has_text(texts, "ana@contoso.example"), with_address, "{texts:?}");
