@@ -375,7 +375,7 @@ fn logs_carry_no_name_address_or_query() {
             "wallaby",
             "bilby",
             "ana",
-            "lima",
+            "exemple",
             "contoso",
             "fabrikam",
             "@thread.v2",

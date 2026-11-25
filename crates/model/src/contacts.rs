@@ -330,7 +330,7 @@ mod tests {
         assert_eq!(remove_recipient(f, f.chars().count()).unwrap().0, "", "a comma in a quoted name isn't a separator");
         assert_eq!(remove_recipient("ana@x.example; ", 15).unwrap().0, "");
         // Half-typed, or inside an address: an ordinary backspace.
-        assert_eq!(remove_recipient("Ana Exemple <ana@x.example>, zo", 28), None);
+        assert_eq!(remove_recipient("Ana Exemple <ana@x.example>, zo", 31), None);
         assert_eq!(remove_recipient("Ana <ana@x.exa", 14), None);
         assert_eq!(remove_recipient("", 0), None);
         assert_eq!(remove_recipient(", ", 2), None);

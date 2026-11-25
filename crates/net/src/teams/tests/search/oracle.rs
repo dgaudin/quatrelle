@@ -71,7 +71,7 @@ fn oracle(taken: &HashMap<String, ChatMessage>, query: &str) -> Vec<(String, Str
         .values()
         .filter(|m| m.deleted.is_none())
         .filter(|m| {
-            let words: Vec<&str> = text_of(m).into_iter().chain(["ana", "lima"]).collect();
+            let words: Vec<&str> = text_of(m).into_iter().chain(["ana", "exemple"]).collect();
             terms.iter().all(|t| words.iter().any(|w| w.starts_with(t)))
         })
         .map(|m| (m.created, m.id.as_str()))
