@@ -144,9 +144,15 @@ pub struct Prefs {
     pub compact: bool,
     /// Cards, a table, or whichever suits where the reading pane is.
     pub list_layout: ListLayout,
-    /// What the To-Do bar beside the mail holds (Outlook's): the calendar, People, Tasks, or
-    /// none of them; `{"on": true}` from before it had parts means the calendar alone.
-    pub todo_bar: TodoBar,
+    /// Whether the To-Do bar beside the mail shows at all, as the version before it had parts
+    /// kept it — a bool, so an older Quatrelle reads what this one saved: any part on. (As a
+    /// version with parts wrote it, the object, reads as any part on.)
+    #[serde(default = "yes", deserialize_with = "bar_on")]
+    pub todo_bar: bool,
+    /// The To-Do bar's parts (`View › To-Do Bar`), each remembered even while the bar is off, so
+    /// switching it back on restores them. None until set: the bool alone, as before.
+    #[serde(default, rename = "todoBarParts", skip_serializing_if = "Option::is_none")]
+    pub todo_bar_parts: Option<TodoBar>,
     /// Ask before deleting permanently.
     pub confirm_permanent_delete: bool,
     /// Desktop notifications for new mail in an Inbox.
@@ -386,7 +392,8 @@ impl Default for Prefs {
             show_preview: true,
             compact: false,
             list_layout: ListLayout::Auto,
-            todo_bar: TodoBar::default(),
+            todo_bar: true,
+            todo_bar_parts: None,
             confirm_permanent_delete: true,
             favorites: None,
             notify: true,
@@ -614,6 +621,42 @@ fn checked_days<'de, D: serde::Deserializer<'de>>(d: D) -> Result<BTreeMap<Strin
 /// A setting that was on before it existed.
 fn yes() -> bool {
     true
+}
+
+/// The To-Do bar's on/off as saved: a bool, or (as a version that gave it parts wrote it) the
+/// parts object, read as any part on.
+fn bar_on<'de, D: serde::Deserializer<'de>>(d: D) -> Result<bool, D::Error> {
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum Raw {
+        On(bool),
+        Parts {
+            #[serde(default)]
+            calendar: bool,
+            #[serde(default)]
+            people: bool,
+            #[serde(default)]
+            tasks: bool,
+        },
+    }
+    Ok(match Raw::deserialize(d)? {
+        Raw::On(on) => on,
+        Raw::Parts { calendar, people, tasks } => calendar || people || tasks,
+    })
+}
+
+impl Prefs {
+    /// The To-Do bar's parts as they are drawn: off, none (the parts stay remembered in
+    /// `todo_bar_parts`); on, those remembered, else the calendar alone as before it had parts.
+    pub fn todo_bar(&self) -> TodoBar {
+        if self.todo_bar { self.todo_bar_parts.unwrap_or_default() } else { TodoBar { calendar: false, people: false, tasks: false } }
+    }
+
+    /// Set the bar's parts (and the bool an older version reads: any part on).
+    pub fn set_todo_bar(&mut self, bar: TodoBar) {
+        self.todo_bar = bar.any();
+        self.todo_bar_parts = Some(bar);
+    }
 }
 
 /// Reminder times and answers read from disk: only what are Unix times (a key empty or too

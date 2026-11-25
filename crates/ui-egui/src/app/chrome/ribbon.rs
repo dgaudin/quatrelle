@@ -481,7 +481,7 @@ impl MailApp {
                         // To-Do Bar: its parts, each ticked or not, or Off, as Outlook's menu.
                         let r = widgets::big_more(ui, "To-Do bar", &t);
                         egui::Popup::menu(&r).show(|ui| {
-                            let bar = s.prefs.todo_bar;
+                            let bar = s.prefs.todo_bar();
                             for (label, on, part) in
                                 [("Calendar", bar.calendar, "calendar"), ("People", bar.people, "people"), ("Tasks", bar.tasks, "tasks")]
                             {

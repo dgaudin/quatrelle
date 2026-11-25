@@ -162,7 +162,7 @@ fn the_todo_bar_stacks_the_parts_ticked() {
     frame(&ctx, &mut a, vec![]);
     // Calendar off, People and Tasks on (each remembered).
     a.run("view.todoBar", json!({"calendar": false, "people": true, "tasks": true}));
-    assert_eq!((a.session.prefs.todo_bar.calendar, a.session.prefs.todo_bar.people, a.session.prefs.todo_bar.tasks), (false, true, true));
+    assert_eq!((a.session.prefs.todo_bar().calendar, a.session.prefs.todo_bar().people, a.session.prefs.todo_bar().tasks), (false, true, true));
     // A favorite person and a task, then a flagged message named by its follow-up title.
     a.run("contact.create", json!({"name": "Zoe Martin", "emails": "zoe@studio.example"}));
     a.run("contact.favorite", json!({"email": "zoe@studio.example"}));

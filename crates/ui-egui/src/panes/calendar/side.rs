@@ -367,7 +367,7 @@ pub(super) fn mini_month_to(s: &Session, st: &mut UiState, ui: &mut Ui, acts: &m
 /// the calendar, People (the favorite people kept here), and the To-Do List small.
 pub fn todo_bar(s: &Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action>) {
     let t = st.tokens;
-    let parts = s.prefs.todo_bar;
+    let parts = s.prefs.todo_bar();
     egui::ScrollArea::vertical().auto_shrink(false).id_salt("todo-bar").show(ui, |ui| {
         if parts.calendar {
             todo_heading(ui, &t, "Calendar");

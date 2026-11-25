@@ -521,7 +521,7 @@ impl MailApp {
             // Beside the mail, the month and the coming appointments (Outlook's To-Do bar), on
             // the far side, where the window has room for it.
             let room = if pane == ReadingPane::Right { 1100.0 } else { 800.0 };
-            if module == Module::Mail && self.session.prefs.todo_bar.any() && ui.available_width() > room {
+            if module == Module::Mail && self.session.prefs.todo_bar().any() && ui.available_width() > room {
                 let end = if rtl { egui::Panel::left("todo") } else { egui::Panel::right("todo") };
                 end.resizable(true)
                     .default_size(230.0)

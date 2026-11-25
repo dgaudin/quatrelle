@@ -41,12 +41,24 @@ pub(super) fn commands() -> Vec<CommandSpec> {
         })
         .params(r#"{"on"?: bool}"#),
         CommandSpec::new("view.todoBar", "To-Do bar", "View › Layout", |s, v| {
-            let bar = &mut s.prefs.todo_bar;
-            if p::bool(v, "on").is_some() || p::bool(v, "calendar").is_some() || p::bool(v, "people").is_some() || p::bool(v, "tasks").is_some() {
-                if let Some(on) = p::bool(v, "on") {
-                    // What before it had parts meant: on, the calendar alone; off, nothing.
-                    *bar = crate::session::TodoBar { calendar: on, people: false, tasks: false };
+            let answer = |bar: crate::session::TodoBar, on: bool| json!({"on": on, "calendar": bar.calendar, "people": bar.people, "tasks": bar.tasks});
+            if let Some(on) = p::bool(v, "on") {
+                if on {
+                    // The old switch on: the parts as they were remembered, else the calendar.
+                    let bar = s.prefs.todo_bar_parts.unwrap_or_default();
+                    s.prefs.set_todo_bar(bar);
+                    return Ok(answer(bar, bar.any()));
                 }
+                // Off: the bar hides; the parts stay remembered, so switching on restores them.
+                let bar = s.prefs.todo_bar();
+                s.prefs.todo_bar = false;
+                if s.prefs.todo_bar_parts.is_none() {
+                    s.prefs.todo_bar_parts = Some(bar);
+                }
+                return Ok(answer(bar, false));
+            }
+            let mut bar = s.prefs.todo_bar();
+            if p::bool(v, "calendar").is_some() || p::bool(v, "people").is_some() || p::bool(v, "tasks").is_some() {
                 if let Some(on) = p::bool(v, "calendar") {
                     bar.calendar = on;
                 }
@@ -56,14 +68,21 @@ pub(super) fn commands() -> Vec<CommandSpec> {
                 if let Some(on) = p::bool(v, "tasks") {
                     bar.tasks = on;
                 }
+                s.prefs.set_todo_bar(bar);
             } else if bar.any() {
-                *bar = crate::session::TodoBar { calendar: false, people: false, tasks: false };
+                // The switch, off: the parts stay remembered.
+                s.prefs.todo_bar = false;
+                if s.prefs.todo_bar_parts.is_none() {
+                    s.prefs.todo_bar_parts = Some(bar);
+                }
+                return Ok(answer(bar, false));
             } else {
-                *bar = crate::session::TodoBar { calendar: true, people: false, tasks: false };
+                bar = crate::session::TodoBar::default();
+                s.prefs.set_todo_bar(bar);
             }
-            Ok(json!({"on": bar.any(), "calendar": bar.calendar, "people": bar.people, "tasks": bar.tasks}))
+            Ok(answer(bar, bar.any()))
         })
-        .params(r#"{"on"?: bool (the old switch: on, the calendar part alone; off, none), "calendar"?: bool, "people"?: bool, "tasks"?: bool (the parts shown, each remembered); none: switch the bar on (the calendar) or off}"#),
+        .params(r#"{"on"?: bool (the old switch: on, the parts as they were remembered, else the calendar; off, none shown — the parts stay remembered), "calendar"?: bool, "people"?: bool, "tasks"?: bool (the parts shown, each remembered); none: switch the bar on (the calendar) or off}"#),
         CommandSpec::new("view.listLayout", "Message list layout", "View › Layout", |s, v| {
             let value = p::req_str(v, "value")?;
             s.prefs.list_layout =

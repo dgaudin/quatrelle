@@ -548,3 +548,30 @@ fn the_mail_stamp_counts_every_change() {
     assert!(s.mail_stamp() > c, "an event counts");
     done(s);
 }
+
+/// for when the bar is switched back on.
+#[test]
+fn the_todo_bar_setting_reads_and_writes_as_an_older_version_reads_it() {
+    // Saved by 1.5 (a bool) and by a version that gave the bar parts (an object): both read.
+    let p: crate::Prefs = serde_json::from_value(json!({"todoBar": false})).unwrap();
+    assert!(!p.todo_bar && p.todo_bar_parts.is_none() && !p.todo_bar().any(), "1.5's off");
+    let p: crate::Prefs = serde_json::from_value(json!({"todoBarParts": {"calendar": true, "tasks": true}})).unwrap();
+    assert!(p.todo_bar && p.todo_bar_parts.is_some_and(|b| b.calendar && b.tasks && !b.people), "the parts beside the bool");
+    // Saved here: a bool for the older version, the parts beside it.
+    let mut p = crate::Prefs::default();
+    p.set_todo_bar(crate::session::TodoBar { calendar: false, people: true, tasks: true });
+    let saved = serde_json::to_value(&p).unwrap();
+    assert_eq!(saved["todoBar"], json!(true), "a bool, as 1.5 reads it: {saved}");
+    assert_eq!(saved["todoBarParts"]["people"], json!(true));
+    assert!(serde_json::from_value::<crate::Prefs>(saved.clone()).is_ok(), "reads back");
+
+    // Off remembers the ticked parts; on restores them (not the calendar alone).
+    let mut s = sample_session("todo-bar-parts");
+    s.run("view.todoBar", &json!({"tasks": true})).unwrap();
+    let off = s.run("view.todoBar", &json!({"on": false})).unwrap();
+    assert_eq!(off["on"], json!(false));
+    assert!(!s.prefs.todo_bar, "the bool an older version reads is off");
+    let on = s.run("view.todoBar", &json!({"on": true})).unwrap();
+    assert_eq!(on["tasks"], json!(true), "the ticked part is remembered, not the calendar alone: {on}");
+    done(s);
+}

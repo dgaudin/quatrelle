@@ -853,25 +853,28 @@ fn the_list_is_a_table_where_it_has_room() {
 #[test]
 fn the_todo_bar_is_on_until_turned_off() {
     let mut s = sample_session("todo-bar");
-    assert!(s.prefs.todo_bar.any() && s.prefs.todo_bar.calendar, "on, the calendar, as before");
+    assert!(s.prefs.todo_bar().any() && s.prefs.todo_bar().calendar, "on, the calendar, as before");
     s.run("view.todoBar", &json!({})).unwrap();
-    assert!(!s.prefs.todo_bar.any());
+    assert!(!s.prefs.todo_bar && !s.prefs.todo_bar().any(), "off: hidden, the parts remembered");
     s.run("view.todoBar", &json!({"on": true})).unwrap();
-    assert!(s.prefs.todo_bar.calendar && !s.prefs.todo_bar.people && !s.prefs.todo_bar.tasks, "the old switch: the calendar alone");
-    // Each part: People alone, then Tasks beside it; Off; and what's remembered.
+    assert!(
+        s.prefs.todo_bar && s.prefs.todo_bar().calendar && !s.prefs.todo_bar().people && !s.prefs.todo_bar().tasks,
+        "the old switch on: the parts remembered (the calendar alone)"
+    );
+    // Each part: People alone, then Tasks beside it; all off: the bar hides, the parts stay.
     let r = s.run("view.todoBar", &json!({"calendar": false, "people": true})).unwrap();
     assert_eq!((r["on"].as_bool(), r["calendar"].as_bool(), r["people"].as_bool()), (Some(true), Some(false), Some(true)));
     s.run("view.todoBar", &json!({"tasks": true})).unwrap();
-    assert!(s.prefs.todo_bar.people && s.prefs.todo_bar.tasks && !s.prefs.todo_bar.calendar);
+    assert!(s.prefs.todo_bar().people && s.prefs.todo_bar().tasks && !s.prefs.todo_bar().calendar);
     s.run("view.todoBar", &json!({"calendar": false, "people": false, "tasks": false})).unwrap();
-    assert!(!s.prefs.todo_bar.any());
+    assert!(!s.prefs.todo_bar && !s.prefs.todo_bar().any());
     // The old settings file's `todoBar: true` reads as the calendar alone, false as off.
     let p: crate::Prefs = serde_json::from_value(json!({"todoBar": true})).unwrap();
-    assert!(p.todo_bar.calendar && !p.todo_bar.people && !p.todo_bar.tasks);
+    assert!(p.todo_bar().calendar && !p.todo_bar().people && !p.todo_bar().tasks);
     let p: crate::Prefs = serde_json::from_value(json!({"todoBar": false})).unwrap();
-    assert!(!p.todo_bar.any());
+    assert!(!p.todo_bar && !p.todo_bar().any());
     let p: crate::Prefs = serde_json::from_value(json!({"todoBar": {"people": true}})).unwrap();
-    assert!(p.todo_bar.people && !p.todo_bar.calendar, "parts named alone");
+    assert!(p.todo_bar && p.todo_bar().calendar, "the parts object reads as on, the calendar (its parts are in todoBarParts)");
     done(s);
 }
 
