@@ -269,18 +269,25 @@ fn clear_flag_takes_the_follow_up_off_the_server_too() {
     s.cache.entry((account.clone(), m.key.folder.clone())).or_default().messages.push(m.clone());
     s.run("mail.flag", &json!({"key": m.key.to_id(), "on": false})).unwrap();
     let jobs = s.take_jobs();
-    let cleared = jobs
-        .iter()
-        .any(|j| matches!(j, Job::Apply { op: Op::SetFollowUp { start: Some(FieldChange::Clear), due: Some(FieldChange::Clear), reminder: Some(FieldChange::Clear), .. }, .. }));
+    let cleared = jobs.iter().any(|j| {
+        matches!(
+            j,
+            Job::Apply {
+                op: Op::SetFollowUp { start: Some(FieldChange::Clear), due: Some(FieldChange::Clear), reminder: Some(FieldChange::Clear), .. },
+                ..
+            }
+        )
+    });
     assert!(cleared, "a SetFollowUp taking all three off went to the server: {jobs:?}");
     // Undo puts the server's dates and reminder back.
     s.run("edit.undo", &json!({})).unwrap();
     let jobs = s.take_jobs();
     let now = s.clock.now;
     let restored = jobs.iter().any(|j| match j {
-        Job::Apply { op: Op::SetFollowUp { start: Some(FieldChange::Set(a)), due: Some(FieldChange::Set(b)), reminder: Some(FieldChange::Set(c)), .. }, .. } => {
-            *a == 20_000 * 86_400 && *b == 20_010 * 86_400 && *c == now + 3600
-        }
+        Job::Apply {
+            op: Op::SetFollowUp { start: Some(FieldChange::Set(a)), due: Some(FieldChange::Set(b)), reminder: Some(FieldChange::Set(c)), .. },
+            ..
+        } => *a == 20_000 * 86_400 && *b == 20_010 * 86_400 && *c == now + 3600,
         _ => false,
     });
     assert!(restored, "the Undo's SetFollowUp puts the dates back: {jobs:?}");
@@ -383,3 +390,21 @@ fn flagging_a_selection_leaves_an_already_flagged_message_s_flag_alone() {
     done(s);
 }
 
+/// Reminder times and answers kept on this computer come back from disk as the Unix times they
+/// are: read with a day count, every one of them (billions of seconds) would be refused and the
+/// reminders lost at each start. They go back as they were.
+#[test]
+fn reminder_times_kept_on_this_computer_read_back_from_disk() {
+    let at = 1_791_979_140; // 2026-11-25T09:19:00Z
+    let read = json!({
+        "followUpReminder": {"ring@x": at, "far@x": i64::MAX, "early@x": -1, "": at},
+        "reminders": {"a1|mail|k1": 0, "a1|t1|1700000000": at, "a1|t1|bad": i64::MAX},
+    });
+    let p: crate::Prefs = serde_json::from_value(read).unwrap();
+    assert_eq!(p.follow_up_reminder, std::collections::BTreeMap::from([("ring@x".to_string(), at)]));
+    assert_eq!(p.reminders, std::collections::BTreeMap::from([("a1|mail|k1".to_string(), 0), ("a1|t1|1700000000".to_string(), at)]));
+    // And they are saved as they were read.
+    let saved = serde_json::to_value(&p).unwrap();
+    assert_eq!(saved["followUpReminder"]["ring@x"], json!(at));
+    assert_eq!(saved["reminders"]["a1|t1|1700000000"], json!(at));
+}

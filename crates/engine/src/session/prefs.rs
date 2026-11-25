@@ -230,7 +230,7 @@ pub struct Prefs {
     pub follow_up_start: BTreeMap<String, i64>,
     /// When a follow-up's reminder rings: Message-ID → Unix seconds. Exchange keeps it on the
     /// item and its own wins; Graph has no reminder on a flag, so it stays here.
-    #[serde(default, skip_serializing_if = "BTreeMap::is_empty", deserialize_with = "checked_days")]
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty", deserialize_with = "checked_times")]
     pub follow_up_reminder: BTreeMap<String, i64>,
     /// When follow-ups were marked complete (Follow Up › Mark Complete): Message-ID → local day.
     /// The mark itself is the message's [`FOLLOW_UP_COMPLETE`](quatrelle_model::FOLLOW_UP_COMPLETE)
@@ -271,7 +271,7 @@ pub struct Prefs {
     pub search_folders: Vec<search_folders::SearchFolder>,
     /// Reminders answered ([`Session::due_reminders`]), by occurrence
     /// (`<account>|<uid>|<occurrence>`): 0 dismissed, else snoozed until that Unix time.
-    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty", deserialize_with = "checked_times")]
     pub reminders: BTreeMap<String, i64>,
     /// Where the search box looks unless told (its menu, as Outlook's; Current Mailbox at first).
     pub search_scope: SearchScope,
@@ -614,6 +614,20 @@ fn checked_days<'de, D: serde::Deserializer<'de>>(d: D) -> Result<BTreeMap<Strin
 /// A setting that was on before it existed.
 fn yes() -> bool {
     true
+}
+
+/// Reminder times and answers read from disk: only what are Unix times (a key empty or too
+/// long, a time before 1970 or past the end of 9999, past MAX_FOLLOW_UP are left out), as a
+/// damaged or hostile file may have them. A day count would refuse every real reminder time.
+fn checked_times<'de, D: serde::Deserializer<'de>>(d: D) -> Result<BTreeMap<String, i64>, D::Error> {
+    use quatrelle_model::dates::days_from_civil;
+    let read = <BTreeMap<String, i64> as serde::Deserialize>::deserialize(d)?;
+    let times = 0..=days_from_civil(9999, 12, 31).saturating_mul(86_400);
+    Ok(read
+        .into_iter()
+        .filter(|(id, t)| !id.trim().is_empty() && id.len() <= MAX_FOLLOW_UP_ID && times.contains(t))
+        .take(super::mailboxes::MAX_FOLLOW_UP)
+        .collect())
 }
 
 impl ListLayout {
