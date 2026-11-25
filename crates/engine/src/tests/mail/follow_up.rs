@@ -552,3 +552,66 @@ fn marking_complete_on_exchange_keeps_the_flag_text_and_undo_restores_title_and_
     );
     done(s);
 }
+
+/// A start date named alone does not rewrite the due date the server already has: the pairing
+/// rule ([MS-OXOTASK]) applies only when the server has no due yet (the message's own due in
+/// the cache counts as the server's).
+#[test]
+fn a_named_start_does_not_rewrite_the_servers_due() {
+    use quatrelle_model::AccountConfig;
+    let mut s = Session::open(Some(temp("ews-start-due")), quatrelle_model::dates::Clock::new(NOW, 0));
+    let config = AccountConfig {
+        name: "Riley".into(),
+        email: "riley@contoso.example".into(),
+        username: "riley".into(),
+        ews: Some("https://mail.contoso.example/EWS/Exchange.asmx".into()),
+        ..Default::default()
+    };
+    let id = s.add_account(config, Some("pw".into())).unwrap();
+    s.take_jobs();
+    s.accounts.iter_mut().find(|a| a.config.id == id).unwrap().folders.push(quatrelle_model::Folder {
+        account: id.clone(),
+        path: "INBOX".into(),
+        selectable: true,
+        ..Default::default()
+    });
+    let mk = |uid: u32, subject: &str, due: i64| {
+        std::sync::Arc::new(Summary {
+            key: MessageKey { account: id.clone(), folder: "INBOX".into(), validity: 1, uid },
+            message_id: format!("{uid}@x"),
+            subject: subject.into(),
+            flags: quatrelle_model::Flags { flagged: true, follow_up: quatrelle_model::FollowUp { due, ..Default::default() }, ..Default::default() },
+            ..Default::default()
+        })
+    };
+    let with_due = mk(1, "Has a due", NOW + 5 * 86_400);
+    let without_due = mk(2, "No due", 0);
+    let mut st: quatrelle_store::FolderState<std::sync::Arc<Summary>> = quatrelle_store::FolderState { validity: 1, ..Default::default() };
+    st.messages.push(with_due.clone());
+    st.messages.push(without_due.clone());
+    s.cache.insert((id.clone(), "INBOX".into()), st);
+
+    let day = quatrelle_model::dates::days_from_civil(2026, 12, 1);
+    s.follow_up_set_for(&[with_due, without_due], Some(Some(day)), None, None).unwrap();
+    let jobs = s.take_jobs();
+    let ops: Vec<&quatrelle_model::Op> = jobs
+        .iter()
+        .filter_map(|j| match j {
+            quatrelle_model::Job::Apply { op, .. } => Some(op),
+            _ => None,
+        })
+        .collect();
+    let fu: Vec<&quatrelle_model::Op> = ops.iter().copied().filter(|o| matches!(o, quatrelle_model::Op::SetFollowUp { .. })).collect();
+    // two ops (one per due state): the one for the message with a due names start alone; the
+    // one for the message without a due pairs them.
+    let start_only = fu.iter().find(|o| matches!(o, quatrelle_model::Op::SetFollowUp { start: Some(_), due: None, .. }));
+    let paired = fu.iter().find(|o| matches!(o, quatrelle_model::Op::SetFollowUp { start: Some(_), due: Some(_), .. }));
+    assert!(start_only.is_some(), "a start named alone when the server has a due: {fu:?}");
+    assert!(paired.is_some(), "paired only when the server has no due: {fu:?}");
+    assert!(
+        matches!(start_only.unwrap(), quatrelle_model::Op::SetFollowUp { keys, .. } if keys[0].uid == 1),
+        "the message with a due got start alone"
+    );
+    assert!(matches!(paired.unwrap(), quatrelle_model::Op::SetFollowUp { keys, .. } if keys[0].uid == 2), "the message without a due got both");
+    done(s);
+}

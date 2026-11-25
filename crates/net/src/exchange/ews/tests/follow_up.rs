@@ -611,7 +611,7 @@ fn the_follow_up_s_title_is_the_task_s_todo_title() {
 /// the same day for both (the due is required with the start), and Clear Flag takes the task's
 /// title (`PidLidToDoTitle`) off with the rest of the flag's properties.
 #[test]
-fn a_start_date_goes_with_a_due_one_and_clear_flag_takes_the_title_off() {
+fn a_start_date_alone_is_written_alone_and_clear_flag_takes_the_title_off() {
     let mut d = Data::default();
     let inbox = d.folder("Inbox", None, Some("inbox"), "IPF.Note");
     let id = d.deliver(&inbox, b"From: a@x.example\r\nSubject: ews writes\r\n\r\nx\r\n", true, "2024-05-01T09:00:00Z");
@@ -633,7 +633,9 @@ fn a_start_date_goes_with_a_due_one_and_clear_flag_takes_the_title_off() {
     let m = store.load_folder("a1", "INBOX").unwrap().messages[0].clone();
     let keys = vec![m.key.clone()];
 
-    // A start without a due: both land on the server, the same day.
+    // A start named alone is written alone: the pairing rule ([MS-OXOTASK] requires the due
+    // with the start) is the engine's, applied only when the server has no due yet — a named
+    // start never rewrites a due the server already has.
     let start = at("2026-12-01T00:00:00Z");
     apply_remote(&c, &st, &Op::SetFollowUp { keys: keys.clone(), start: Some(FieldChange::Set(start)), due: None, reminder: None, title: None })
         .unwrap();
@@ -647,8 +649,8 @@ fn a_start_date_goes_with_a_due_one_and_clear_flag_takes_the_title_off() {
                 f.common_start.is_some(),
                 f.common_end.is_some()
             ),
-            (Some(start), Some(start), true, true),
-            "a start set without a due takes the same day for both: {f:?}"
+            (Some(start), None, true, false),
+            "only the fields named are written: {f:?}"
         );
     }
 

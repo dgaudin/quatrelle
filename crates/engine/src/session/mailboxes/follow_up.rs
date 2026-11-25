@@ -273,8 +273,26 @@ impl Session {
             }
             let exchange = ews.contains(account.as_str());
             let graph = graph.contains(account.as_str());
+            // A start set without a due takes the due with it only when the server has none
+            // ([MS-OXOTASK] requires the due with the start); when it has one, the change names
+            // the start alone and the server's due stays — same the other way round for Graph's
+            // start. A field the change doesn't name is never rewritten from another one.
+            let mut s = start;
+            let mut d = due;
+            if let Some(FieldChange::Set(v)) = d
+                && !matches!(s, Some(FieldChange::Set(_)))
+                && m.flags.follow_up.start <= 0
+            {
+                s = Some(FieldChange::Set(v));
+            }
+            if let Some(FieldChange::Set(v)) = s
+                && d.is_none()
+                && m.flags.follow_up.due <= 0
+            {
+                d = Some(FieldChange::Set(v));
+            }
             if exchange || graph {
-                ops.entry((account.clone(), start, due, reminder)).or_default().push(m.key.clone());
+                ops.entry((account.clone(), s, d, reminder)).or_default().push(m.key.clone());
                 before.entry((account, old.0, old.1, old.2)).or_default().push(m.key.clone());
             }
             // What stays here: everything for the other servers; Graph's reminder alone (its

@@ -281,8 +281,13 @@ impl Data {
             ("PATCH", ["me", "messages", id]) => match self.messages.iter_mut().find(|m| m.id == plain_id(id)) {
                 Some(m) => {
                     // Graph refuses a due date without a start one ("To set the due date, you
-                    // must also specify the startDateTime"): the fake refuses it too.
-                    if input["flag"]["dueDateTime"].is_object() && !input["flag"]["startDateTime"].is_object() {
+                    // must also specify the startDateTime") when the message has no start yet:
+                    // the fake refuses it too. One that already has a start takes a due-only
+                    // change as it is.
+                    if input["flag"].get("dueDateTime").is_some_and(Value::is_object)
+                        && !input["flag"].get("startDateTime").is_some_and(Value::is_object)
+                        && m.start.is_none()
+                    {
                         let e = json!({"error": {"code": "BadRequest", "message": "To set the due date, you must also specify the startDateTime."}});
                         return (400, e.to_string().into_bytes(), "application/json");
                     }
@@ -298,11 +303,13 @@ impl Data {
                             m.due = None;
                         }
                     }
-                    // Its follow-up dates: a time given, or null for none.
+                    // Its follow-up dates: a time given, or an explicit null for none — a key
+                    // left out is left as the server has it (indexing a missing key gives Null,
+                    // so ask with `get`).
                     for (key, field) in [("startDateTime", &mut m.start), ("dueDateTime", &mut m.due)] {
-                        match &input["flag"][key] {
-                            Value::Null => *field = None,
-                            Value::Object(_) => {
+                        match input["flag"].get(key) {
+                            Some(Value::Null) => *field = None,
+                            Some(Value::Object(_)) => {
                                 *field = input["flag"][key]["dateTime"].as_str().map(str::to_string);
                             }
                             _ => {}

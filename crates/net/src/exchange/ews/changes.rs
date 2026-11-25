@@ -177,13 +177,9 @@ fn date_updates(task: &str, common: &str, at: Option<i64>) -> String {
 /// property off, unnamed (`None`) left as the server has it — a partial change doesn't erase
 /// what this computer didn't know.
 fn follow_up_updates(start: Option<FieldChange>, due: Option<FieldChange>, reminder: Option<FieldChange>, title: Option<Option<String>>) -> String {
-    // A start date goes with a due one ([MS-OXOTASK]: the due is required with the start), so a
-    // start set without a due takes the same day for both — "No Date" clears the two together.
-    let due = match (due, start) {
-        (Some(FieldChange::Set(_)), _) => due,
-        (_, Some(FieldChange::Set(v))) => Some(FieldChange::Set(v)),
-        _ => due,
-    };
+    // Only the fields named are written: the engine applies the "a start goes with a due"
+    // rule ([MS-OXOTASK]) itself, and only when the server has no due yet — a named start
+    // never rewrites a due the server already has.
     let mut out = String::new();
     if let Some(c) = start {
         out.push_str(&date_updates(&task_start(), &common_start(), c.value()));
