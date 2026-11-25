@@ -4,7 +4,7 @@
 //! The calendar's side pane: a month (or several) to jump around in, then the calendars in their
 //! groups; and beside the mail, Outlook's To-Do bar.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use super::*;
 
@@ -35,7 +35,11 @@ pub fn nav(s: &Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action>) {
                     } else if !c.group.is_empty() {
                         let key = c.group.to_lowercase();
                         match at.get(&key) {
-                            Some(&i) => groups[i].1.push((a, c)),
+                            Some(&i) => {
+                                if let Some((_, list)) = groups.get_mut(i) {
+                                    list.push((a, c));
+                                }
+                            }
                             None => {
                                 groups.push((c.group.clone(), vec![(a, c)]));
                                 at.insert(key, groups.len() - 1);
@@ -51,7 +55,11 @@ pub fn nav(s: &Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action>) {
                 } else {
                     let key = c.group.to_lowercase();
                     match at.get(&key) {
-                        Some(&i) => groups[i].1.push((a, c)),
+                        Some(&i) => {
+                            if let Some((_, list)) = groups.get_mut(i) {
+                                list.push((a, c));
+                            }
+                        }
                         None => {
                             groups.push((c.group.clone(), vec![(a, c)]));
                             at.insert(key, groups.len() - 1);
@@ -63,11 +71,15 @@ pub fn nav(s: &Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action>) {
         // The groups the server keeps, in its order: one with no calendar left still has its
         // header, as in Outlook; groups the server didn't name come after, in the order met.
         let mut order: Vec<String> = Vec::new();
+        let mut seen: HashSet<String> = HashSet::new();
+        let mut group_owner: HashMap<String, &quatrelle_engine::AccountState> = HashMap::new();
         for a in &s.accounts {
             if let Some(p) = s.pim.get(&a.config.id) {
                 for g in &p.calendar_groups {
-                    if !g.is_empty() && !order.iter().any(|x| x.eq_ignore_ascii_case(g)) {
+                    let key = g.to_lowercase();
+                    if !g.is_empty() && seen.insert(key.clone()) {
                         order.push(g.clone());
+                        group_owner.insert(key, a);
                     }
                 }
             }
@@ -97,7 +109,7 @@ pub fn nav(s: &Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action>) {
             })
             .collect();
         for (n, (title, list)) in groups.iter().enumerate() {
-            let from_server = order.iter().any(|g| g.eq_ignore_ascii_case(title));
+            let from_server = order_at.contains_key(&title.to_lowercase());
             if list.is_empty() && !from_server && (n > 0 || bare.is_empty()) {
                 continue;
             }
@@ -191,9 +203,7 @@ pub fn nav(s: &Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action>) {
                 header.inner.1.context_menu(|ui| menu::account_menu(ui, s, a, acts));
             }
             // A group the server keeps has its own menu.
-            let group_account = list.first().map(|(a, _)| *a).or_else(|| {
-                s.accounts.iter().find(|a| s.pim.get(&a.config.id).is_some_and(|p| p.calendar_groups.iter().any(|g| g.eq_ignore_ascii_case(title))))
-            });
+            let group_account = list.first().map(|(a, _)| *a).or_else(|| group_owner.get(&title.to_lowercase()).copied());
             if let Some(a) = group_account {
                 header.response.context_menu(|ui| menu::group_menu(ui, s, a, title, acts));
                 header.inner.1.context_menu(|ui| menu::group_menu(ui, s, a, title, acts));
