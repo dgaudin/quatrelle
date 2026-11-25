@@ -583,3 +583,77 @@ fn a_failed_common_views_probe_is_not_remembered_as_none() {
     let shortcuts = crate::ews_pim::calendar_links(&c).unwrap();
     assert_eq!(shortcuts.groups.len(), 1, "the next probe found the group: {:?}", shortcuts.groups);
 }
+
+/// Deleting a group one of whose calendars can't be deleted says what was already deleted.
+#[test]
+fn deleting_a_group_says_what_was_already_deleted() {
+    let mut d = Data::default();
+    d.folder("Inbox", None, Some("inbox"), "IPF.Note");
+    d.folder("Calendar", None, Some("calendar"), "IPF.Appointment");
+    d.directory = vec![(dn("ana"), "ana@contoso.example".into()), (dn("tom"), "tom@contoso.example".into())];
+    let server = serve(d);
+    let c = crate::ews::Client::connect(&server.url, &format!("{DOMAIN}\\{USER}"), PASSWORD, "riley@contoso.example").unwrap();
+    let stamp = c.group_stamp();
+    let link = "IPM.Microsoft.WunderBar.Link";
+    let team = guid(0x10);
+    let ordinal = |b: u8| crate::imap::base64(&[b]);
+    let header = wlink_of(
+        link,
+        3,
+        4,
+        "Salles",
+        &[("0x6842", "Binary", team.clone()), ("0x6847", "Integer", stamp.to_string()), ("0x684B", "Binary", ordinal(0x10))],
+    );
+    let member = |who: &str, ord: u8| {
+        wlink_of(
+            link,
+            3,
+            2,
+            who,
+            &[
+                ("0x6850", "Binary", team.clone()),
+                ("0x6851", "String", "Salles".into()),
+                ("0x6854", "Binary", crate::imap::base64(&address_book_eid(&dn(who)))),
+                ("0x684B", "Binary", ordinal(ord)),
+            ],
+        )
+    };
+    let ana = member("ana", 0x11);
+    let tom = member("tom", 0x12);
+    {
+        let mut data = server.data.lock().unwrap();
+        data.wlinks = vec![header, ana, tom];
+        data.delete_busy.push("Wtom".into());
+    }
+    let e = crate::ews_pim::delete_calendar_group(&c, "Salles").unwrap_err();
+    assert!(e.to_string().contains("ana"), "the already deleted calendar is named: {e}");
+    let kept = server.data.lock().unwrap();
+    assert!(!kept.wlinks.iter().any(|w| w.contains("Id=\"Wana\"")), "the first calendar was deleted");
+    assert!(kept.wlinks.iter().any(|w| w.contains("Id=\"Wtom\"")), "the one that failed stays");
+}
+
+/// Two headers may carry the same name (Outlook allows it): renaming one only changes that one.
+#[test]
+fn two_headers_with_the_same_name_can_be_renamed() {
+    let mut d = Data::default();
+    d.folder("Inbox", None, Some("inbox"), "IPF.Note");
+    d.folder("Calendar", None, Some("calendar"), "IPF.Appointment");
+    let server = serve(d);
+    let c = crate::ews::Client::connect(&server.url, &format!("{DOMAIN}\\{USER}"), PASSWORD, "riley@contoso.example").unwrap();
+    let stamp = c.group_stamp();
+    let link = "IPM.Microsoft.WunderBar.Link";
+    let ordinal = |b: u8| crate::imap::base64(&[b]);
+    let header = |id: u8, ord: u8| {
+        wlink_of(
+            link,
+            3,
+            4,
+            "Équipe",
+            &[("0x6842", "Binary", guid(id)), ("0x6847", "Integer", stamp.to_string()), ("0x684B", "Binary", ordinal(ord))],
+        )
+    };
+    server.data.lock().unwrap().wlinks = vec![header(0x10, 0x10), header(0x20, 0x20)];
+    crate::ews_pim::rename_calendar_group(&c, "Équipe", "Équipe 2").unwrap();
+    let names = crate::ews_pim::calendar_links(&c).unwrap().groups.into_iter().map(|g| g.name).collect::<Vec<_>>();
+    assert_eq!(names, ["Équipe 2", "Équipe"], "only the header renamed: {names:?}");
+}

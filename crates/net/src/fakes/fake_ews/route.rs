@@ -650,6 +650,10 @@ impl Data {
             "DeleteItem" => {
                 for id in ids(op.child("ItemIds")) {
                     // A navigation shortcut ([MS-OXOCFG] 2.2.9) goes.
+                    if self.delete_busy.contains(&id) && self.wlinks.iter().any(|w| wlink_id(w).as_deref() == Some(id.as_str())) {
+                        out.push(err("ErrorServerBusy"));
+                        continue;
+                    }
                     if let Some(pos) = self.wlinks.iter().position(|w| wlink_id(w).as_deref() == Some(id.as_str())) {
                         self.wlinks.remove(pos);
                         self.hidden_wlinks.retain(|h| h != &id);

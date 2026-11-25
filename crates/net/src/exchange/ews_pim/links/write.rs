@@ -273,7 +273,13 @@ fn groups_are(c: &Client, expected: &[String]) -> Result<()> {
             seen.push(h.name.clone());
         }
     }
-    let same = seen.len() == expected.len() && seen.iter().zip(expected).all(|(a, b)| a.eq_ignore_ascii_case(b));
+    let mut wanted: Vec<&String> = Vec::new();
+    for name in expected {
+        if !wanted.iter().any(|n| n.eq_ignore_ascii_case(name)) {
+            wanted.push(name);
+        }
+    }
+    let same = seen.len() == wanted.len() && seen.iter().zip(wanted).all(|(a, b)| a.eq_ignore_ascii_case(b));
     if same { Ok(()) } else { Err(NetError::No("the server's calendar groups aren't the ones written".into())) }
 }
 
@@ -349,12 +355,10 @@ pub(crate) fn rename_calendar_group(c: &Client, group: &str, name: &str) -> Resu
         }
         done.push(m.clone());
     }
-    let mut expected: Vec<String> = headers(&before).into_iter().map(|h| h.name.clone()).collect();
-    for n in &mut expected {
-        if n.eq_ignore_ascii_case(&header.name) {
-            *n = name.clone();
-        }
-    }
+    // A header with the same name isn't the one renamed unless it is the same header; names
+    // aren't unique in Outlook's pane.
+    let expected: Vec<String> =
+        headers(&before).into_iter().map(|h| if h.header_id == header.header_id { name.clone() } else { h.name.clone() }).collect();
     groups_are(c, &expected)?;
     // The entries read back under the new name (the header's name is what the read uses).
     let after = read_raw(c)?;
@@ -382,8 +386,13 @@ pub(crate) fn delete_calendar_group(c: &Client, group: &str) -> Result<()> {
     if !ours(c, &header) && !members.is_empty() {
         return Err(NetError::No("a calendar group Outlook made can't be deleted while it holds calendars".into()));
     }
+    let mut deleted: Vec<String> = Vec::new();
     for m in &members {
-        delete(c, m)?;
+        match delete(c, m) {
+            Ok(()) => deleted.push(m.owner_said().to_string()),
+            Err(e) if deleted.is_empty() => return Err(e),
+            Err(e) => return Err(NetError::No(format!("{} was already deleted; {e}", deleted.join(", ")))),
+        }
     }
     delete(c, &header)?;
     if group_named(&read_raw(c)?, group).is_some() {
