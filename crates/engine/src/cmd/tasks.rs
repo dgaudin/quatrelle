@@ -71,6 +71,12 @@ pub(super) fn commands() -> Vec<CommandSpec> {
                     if list.read_only {
                         return Err(CmdError::Disabled(crate::ARCHIVE_READ_ONLY.into()));
                     }
+                    // A shared mailbox's list: its tasks aren't kept in the account's own.
+                    if list.mailbox.is_some() {
+                        return Err(CmdError::Disabled(
+                            "that list is a shared mailbox's: a task made there isn't kept in it yet".into(),
+                        ));
+                    }
                     list.account
                 }
                 None => p::str(v, "account").map(str::to_string),

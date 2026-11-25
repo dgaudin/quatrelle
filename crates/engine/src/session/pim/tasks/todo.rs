@@ -33,7 +33,9 @@ impl Session {
         for a in &self.accounts {
             let name = if a.config.name.trim().is_empty() { a.config.email.clone() } else { a.config.name.clone() };
             out.push(TaskList { id: a.config.id.clone(), name, account: Some(a.config.id.clone()), read_only: false, archive: false, mailbox: None });
-            if a.config.ews.is_some() {
+            // The online archive's list only when the account has one (an archive folder among
+            // its folders), not for every Exchange account.
+            if a.folders.iter().any(|f| f.archive) {
                 out.push(TaskList {
                     id: format!("{}|archive", a.config.id),
                     name: "Online Archive".into(),
