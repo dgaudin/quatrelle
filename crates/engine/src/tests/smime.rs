@@ -67,10 +67,10 @@ fn security(s: &Session) -> crate::Security {
 /// Plays the network layer: decrypts what was asked for with Riley's key.
 fn answer_decrypt(s: &mut Session) {
     for j in s.take_jobs() {
-        if let Job::Decrypt { key, cms, .. } = j {
+        if let Job::Decrypt { key, cms, ask, .. } = j {
             let event = match smime::decrypt(&cms, &riley(), &mut rand_core::OsRng) {
-                Ok((c, authenticated)) => Event::Decrypted { key, content: Some(quatrelle_model::Private(c)), authenticated, error: None },
-                Err(e) => Event::Decrypted { key, content: None, authenticated: false, error: Some(e.to_string()) },
+                Ok((c, authenticated)) => Event::Decrypted { key, ask, content: Some(quatrelle_model::Private(c)), authenticated, error: None },
+                Err(e) => Event::Decrypted { key, ask, content: None, authenticated: false, error: Some(e.to_string()) },
             };
             s.apply(event);
         }
@@ -164,7 +164,13 @@ fn the_oldest_decrypted_message_not_shown_is_let_go_first() {
     s.apply(Event::FolderChanged { account: "sample".into(), folder: "INBOX".into() });
     let entity = b"Content-Type: text/plain\r\n\r\nElsewhere.\r\n".to_vec();
     for key in &others {
-        s.apply(Event::Decrypted { key: key.clone(), content: Some(quatrelle_model::Private(entity.clone())), authenticated: true, error: None });
+        s.apply(Event::Decrypted {
+            key: key.clone(),
+            ask: 0,
+            content: Some(quatrelle_model::Private(entity.clone())),
+            authenticated: true,
+            error: None,
+        });
     }
     assert_eq!(s.reading.as_ref().map(|r| r.key.clone()), Some(shown.clone()), "still shown");
     let asked = |s: &mut Session, key: &quatrelle_model::MessageKey| {
@@ -304,9 +310,10 @@ fn an_older_certificate_is_kept_for_reading() {
     let raw = quatrelle_mime::smime::encrypted_message(outer, &sealed, true);
     let key = open_raw(&mut s, 9100, &raw);
     let asked = s.take_jobs();
-    assert!(asked.iter().any(|j| matches!(j, Job::Decrypt { .. })));
+    let ask = asked.iter().find_map(|j| if let Job::Decrypt { ask, .. } = j { Some(*ask) } else { None }).unwrap();
     s.apply(Event::Decrypted {
         key: key.clone(),
+        ask,
         content: None,
         authenticated: false,
         error: Some("it was encrypted to a certificate Quatrelle doesn't have".into()),

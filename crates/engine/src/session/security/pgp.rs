@@ -388,7 +388,7 @@ impl Session {
         match e {
             Event::PgpKeys { account, keys, changed, error } => self.heard_pgp_keys(&account, keys, changed, error),
             Event::PgpBackedUp { account, fingerprint, error } => self.heard_pgp_backup(&account, &fingerprint, error),
-            Event::PgpDecrypted { key, content, signature, keys, error } => self.heard_pgp_decrypted(key, content, signature, keys, error),
+            Event::PgpDecrypted { key, ask, content, signature, keys, error } => self.heard_pgp_decrypted(key, ask, content, signature, keys, error),
             _ => {}
         }
     }

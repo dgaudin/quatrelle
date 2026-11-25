@@ -111,9 +111,9 @@ fn open_sent(sent: &[u8], secret: &[u8], signer: &[u8]) -> (String, pgp::Check) 
 /// Plays the network layer for [`PgpWork::Decrypt`] with `secret`.
 fn answer_decrypt_with(s: &mut Session, secret: &[u8]) {
     for j in s.take_jobs() {
-        let Job::Pgp { work: PgpWork::Decrypt { key, data, .. }, .. } = j else { continue };
+        let Job::Pgp { work: PgpWork::Decrypt { key, data, ask, .. }, .. } = j else { continue };
         let d = pgp::decrypt(&data, &[secret], &[]).unwrap();
-        s.apply(Event::PgpDecrypted { key, content: Some(Private(d.data)), signature: None, keys: Vec::new(), error: None });
+        s.apply(Event::PgpDecrypted { key, ask, content: Some(Private(d.data)), signature: None, keys: Vec::new(), error: None });
     }
 }
 

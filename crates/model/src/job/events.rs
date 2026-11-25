@@ -474,10 +474,12 @@ pub enum Event {
         raw: Option<Private>,
         error: Option<String>,
     },
-    /// What [`Job::Decrypt`] found inside (a MIME entity); `authenticated`: it was encrypted with
-    /// AES-GCM, so it can't have been changed on the way.
+    /// What [`Job::Decrypt`] found inside (a MIME entity); `ask`: the asking's number;
+    /// `authenticated`: it was encrypted with AES-GCM, so it can't have been changed on the way.
     Decrypted {
         key: MessageKey,
+        #[serde(default)]
+        ask: u64,
         content: Option<Private>,
         authenticated: bool,
         error: Option<String>,
@@ -502,9 +504,12 @@ pub enum Event {
         error: Option<String>,
     },
     /// What [`PgpWork::Decrypt`] found inside (a MIME entity), what a signature in it says, and
-    /// the public keys attached inside (binary, a few at most), to be learnt as those outside are.
+    /// the public keys attached inside (binary, a few at most), to be learnt as those outside are;
+    /// `ask`: the asking's number.
     PgpDecrypted {
         key: MessageKey,
+        #[serde(default)]
+        ask: u64,
         content: Option<Private>,
         signature: Option<PgpSignature>,
         keys: Vec<Vec<u8>>,

@@ -361,7 +361,8 @@ pub struct Session {
     smime: HashMap<String, SmimeSettings>,
     trust_roots: Vec<Vec<u8>>,
     opened: security::Opened,
-    opening: HashSet<MessageKey>,
+    /// The messages being decrypted, each with its asking's number.
+    opening: HashMap<MessageKey, u64>,
     decrypt_errors: HashMap<MessageKey, String>,
     protecting: HashMap<u64, security::Protecting>,
     revocation: security::Revocations,
@@ -578,7 +579,7 @@ impl Session {
             smime: HashMap::new(),
             trust_roots: Vec::new(),
             opened: security::Opened::default(),
-            opening: HashSet::new(),
+            opening: HashMap::new(),
             decrypt_errors: HashMap::new(),
             protecting: HashMap::new(),
             revocation: Default::default(),

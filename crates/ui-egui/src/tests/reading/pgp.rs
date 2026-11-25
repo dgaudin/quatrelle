@@ -68,7 +68,7 @@ fn signed_by_ana(autocrypt: Option<&[u8]>) -> String {
 fn answer_decrypt(a: &mut MailApp) {
     let riley = pgp::read_secret_key(&pgpdata("riley-secret.asc"), "").unwrap();
     for j in a.session.take_jobs() {
-        let quatrelle_engine::model::Job::Pgp { work: PgpWork::Decrypt { key, data, verify_with, .. }, .. } = j else { continue };
+        let quatrelle_engine::model::Job::Pgp { work: PgpWork::Decrypt { key, data, verify_with, ask, .. }, .. } = j else { continue };
         let keys: Vec<&[u8]> = verify_with.iter().map(Vec::as_slice).collect();
         let d = pgp::decrypt(&data, &[&riley.secret], &keys).unwrap();
         let signature = d.check.map(|c| match c {
@@ -76,7 +76,7 @@ fn answer_decrypt(a: &mut MailApp) {
             pgp::Check::Bad => PgpSignature::Bad,
             pgp::Check::Unknown(key_id) => PgpSignature::Unknown { key_id },
         });
-        a.session.apply(MailEvent::PgpDecrypted { key, content: Some(Private(d.data)), signature, keys: Vec::new(), error: None });
+        a.session.apply(MailEvent::PgpDecrypted { key, ask, content: Some(Private(d.data)), signature, keys: Vec::new(), error: None });
     }
 }
 

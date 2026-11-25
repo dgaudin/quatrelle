@@ -273,9 +273,9 @@ fn work(creds: &dyn Credentials, account: &AccountConfig, work: PgpWork) -> Opti
             forget(creds, account, &fingerprint);
             keys_now(creds, account, Ok(None))
         }
-        PgpWork::Decrypt { key, data, inline, charset, verify_with } => match decrypt(creds, account, &data, inline, &charset, &verify_with) {
-            Ok((entity, signature, keys)) => Event::PgpDecrypted { key, content: Some(Private(entity)), signature, keys, error: None },
-            Err(e) => Event::PgpDecrypted { key, content: None, signature: None, keys: Vec::new(), error: Some(e) },
+        PgpWork::Decrypt { key, data, inline, charset, verify_with, ask } => match decrypt(creds, account, &data, inline, &charset, &verify_with) {
+            Ok((entity, signature, keys)) => Event::PgpDecrypted { key, ask, content: Some(Private(entity)), signature, keys, error: None },
+            Err(e) => Event::PgpDecrypted { key, ask, content: None, signature: None, keys: Vec::new(), error: Some(e) },
         },
         PgpWork::Protect { id, raw, sign, encrypt_to, hide_subject } => {
             match in_use(creds, account).and_then(|s| protect(&raw.0, &s, sign, &encrypt_to, hide_subject)) {

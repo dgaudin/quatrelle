@@ -512,8 +512,15 @@ pub enum Job {
     /// [`Event::Protected`].
     Protect { account: AccountConfig, id: u64, raw: Private, sign: bool, encrypt_to: Vec<Vec<u8>>, gcm: bool, hide_subject: bool },
     /// Decrypt an encrypted message (its `smime.p7m`, `cms`) with the account's key, or the older
-    /// one it was encrypted to. Answered by [`Event::Decrypted`].
-    Decrypt { account: AccountConfig, key: MessageKey, cms: Vec<u8> },
+    /// one it was encrypted to; `ask`: this asking's own number, given back with the answer.
+    /// Answered by [`Event::Decrypted`].
+    Decrypt {
+        account: AccountConfig,
+        key: MessageKey,
+        cms: Vec<u8>,
+        #[serde(default)]
+        ask: u64,
+    },
     /// A draft of a message to be encrypted: encrypted to the account's own certificate first, so
     /// the copy in Drafts is no more readable than what will be sent, then saved as
     /// [`Job::SaveDraft`] (or kept as [`Job::KeepDraft`], `keep`).

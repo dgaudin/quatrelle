@@ -249,28 +249,32 @@ impl Session {
         if self.pgp.accounts.get(&key.account).is_none_or(|p| p.keys.is_empty()) {
             return Lock::NoKey(openpgp::recipients(&data));
         }
-        if self.opening.insert(key.clone()) {
+        if let Some(ask) = self.ask_opening(key) {
             let verify_with = self.keys_for(&key.account, from);
             self.pgp.asked.insert(key.clone(), (verify_with.clone(), from.to_string()));
-            let work = PgpWork::Decrypt { key: key.clone(), data, inline, charset: charset.to_string(), verify_with };
+            let work = PgpWork::Decrypt { key: key.clone(), data, inline, charset: charset.to_string(), verify_with, ask };
             self.jobs.push(Job::Pgp { account: config, work });
         }
         Lock::Opening
     }
 
-    /// The network layer's answer: what message `key` held, kept in memory with what its
-    /// signature says; the keys attached inside learnt as those outside are. Shown again.
+    /// The network layer's answer to asking `ask`: what message `key` held, kept in memory with
+    /// what its signature says; the keys attached inside learnt as those outside are. Shown again.
     pub(super) fn heard_pgp_decrypted(
         &mut self,
         key: MessageKey,
+        ask: u64,
         content: Option<Private>,
         signature: Option<PgpSignature>,
         keys: Vec<Vec<u8>>,
         error: Option<String>,
     ) {
-        // One no longer asked for (the Outbox's rows moved meanwhile) is another's now.
-        if !self.decrypt_awaited(&key) {
-            self.pgp.asked.remove(&key);
+        // One no longer asked for (the Outbox's rows moved meanwhile) is another's now; what the
+        // asking awaited for its key checks a signature with is that one's.
+        if !self.decrypt_awaited(&key, ask) {
+            if !self.opening.contains_key(&key) {
+                self.pgp.asked.remove(&key);
+            }
             return;
         }
         let (verify_with, from) = self.pgp.asked.remove(&key).unwrap_or_default();

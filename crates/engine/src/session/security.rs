@@ -424,8 +424,8 @@ impl Session {
         if self.identity(&key.account).is_none() && self.smime.get(&key.account).is_none_or(|s| s.older.is_empty()) {
             return Lock::Failed("this account has no certificate to decrypt it with (File › Info › Security)".into());
         }
-        if self.opening.insert(key.clone()) {
-            self.jobs.push(Job::Decrypt { account: config, key: key.clone(), cms });
+        if let Some(ask) = self.ask_opening(key) {
+            self.jobs.push(Job::Decrypt { account: config, key: key.clone(), cms, ask });
         }
         Lock::Opening
     }
@@ -694,9 +694,9 @@ impl Session {
                     (_, e) => self.send_problem(id, format!("it couldn't be signed or encrypted: {}", e.unwrap_or_default())),
                 }
             }
-            Event::Decrypted { key, content, authenticated, error } => {
+            Event::Decrypted { key, ask, content, authenticated, error } => {
                 // One no longer asked for (the Outbox's rows moved meanwhile) is another's now.
-                if !self.decrypt_awaited(&key) {
+                if !self.decrypt_awaited(&key, ask) {
                     return;
                 }
                 match (content, error) {

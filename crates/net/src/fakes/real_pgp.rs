@@ -125,7 +125,7 @@ MIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\nContent-Transfer
     for (n, raw) in [(1u32, &delivered_mc), (2, &delivered_gpg)] {
         let quatrelle_mime::pgp::Protection::Encrypted(data) = quatrelle_mime::pgp::protection(raw) else { panic!("{n}: not PGP/MIME encrypted") };
         let key = quatrelle_model::MessageKey { account: "o1".into(), folder: "INBOX".into(), validity: 1, uid: n };
-        let work = PgpWork::Decrypt { key, data, inline: false, charset: String::new(), verify_with: vec![pia_pub.clone()] };
+        let work = PgpWork::Decrypt { key, data, inline: false, charset: String::new(), verify_with: vec![pia_pub.clone()], ask: 0 };
         pool.submit(Job::Pgp { account: ole_acc.clone(), work });
         let seen = until(&pool, 30, "decrypted", |e| matches!(e, Event::PgpDecrypted { key, .. } if key.uid == n));
         let Some(Event::PgpDecrypted { content: Some(entity), error: None, signature, .. }) = seen.last() else { panic!("{n}: {seen:?}") };

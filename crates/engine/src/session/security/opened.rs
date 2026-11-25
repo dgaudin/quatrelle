@@ -30,9 +30,6 @@ fn is_encrypted(raw: &[u8]) -> bool {
     }
 }
 
-/// The most answers let pass ([`Opened::stale`]) kept count of: past it, the count starts again.
-const STALE_MAX: usize = 256;
-
 /// The most decrypted messages held in memory at once.
 pub(super) const OPENED_MAX: usize = 64;
 
@@ -43,9 +40,6 @@ pub(super) const OPENED_MAX: usize = 64;
 pub(crate) struct Opened {
     held: HashMap<MessageKey, (Vec<u8>, bool)>,
     order: VecDeque<MessageKey>,
-    /// Answers still to come for messages asked to be decrypted before their keys came to name
-    /// others (the Outbox's rows moved): how many, by key. Each is let pass.
-    stale: HashMap<MessageKey, u32>,
 }
 
 impl Opened {
@@ -76,28 +70,6 @@ impl Opened {
     fn retain(&mut self, keep: impl Fn(&MessageKey) -> bool) {
         self.held.retain(|k, _| keep(k));
         self.order.retain(|k| keep(k));
-    }
-
-    /// `asked` were asked to be decrypted before their keys came to name other messages: their
-    /// answers, when they come, are let pass.
-    fn asked_before(&mut self, asked: impl Iterator<Item = MessageKey>) {
-        if self.stale.len() > STALE_MAX {
-            self.stale.clear();
-        }
-        for k in asked {
-            *self.stale.entry(k).or_default() += 1;
-        }
-    }
-
-    /// Whether an answer for `key` is one asked for before its key named another message (it's
-    /// counted off).
-    fn stale_answer(&mut self, key: &MessageKey) -> bool {
-        let Some(n) = self.stale.get_mut(key) else { return false };
-        *n = n.saturating_sub(1);
-        if *n == 0 {
-            self.stale.remove(key);
-        }
-        true
     }
 }
 
@@ -162,22 +134,37 @@ impl Session {
         (cur, signed, encrypted)
     }
 
-    /// Whether what was decrypted for `key` is to be taken: asked for, and not an answer to an
-    /// asking from before its folder's keys moved on (those come first, in order).
-    pub(super) fn decrypt_awaited(&mut self, key: &MessageKey) -> bool {
-        if self.opened.stale_answer(key) {
-            return false;
+    /// Whether what was decrypted for `key` is to be taken: the answer to its last asking
+    /// (`ask`, that asking's number). Each is decrypted on a thread of its own, so answers come
+    /// in any order: one to an asking from before its folder's keys moved on (the Outbox's rows)
+    /// is another message's, and goes.
+    pub(super) fn decrypt_awaited(&mut self, key: &MessageKey, ask: u64) -> bool {
+        match self.opening.get(key) {
+            Some(&awaited) if awaited == ask => {
+                self.opening.remove(key);
+                true
+            }
+            Some(_) => false,
+            None => key.folder != OUTBOX,
         }
-        self.opening.remove(key) || key.folder != OUTBOX
+    }
+
+    /// The number of a new asking to decrypt `key`, if none is awaited for it.
+    pub(super) fn ask_opening(&mut self, key: &MessageKey) -> Option<u64> {
+        if self.opening.contains_key(key) {
+            return None;
+        }
+        let ask = self.fresh_id();
+        self.opening.insert(key.clone(), ask);
+        Some(ask)
     }
 
     /// What was decrypted, and what's being, of the messages in `folder` is forgotten: its keys
     /// name other messages now (the Outbox's count its rows). An answer still to come for one
-    /// asked before is that message's, not the one its key names now: it's let pass.
+    /// asked before is that message's, not the one its key names now: it goes when it comes.
     pub(crate) fn forget_opened_in(&mut self, folder: &str) {
-        self.opened.asked_before(self.opening.iter().filter(|k| k.folder == folder).cloned());
         self.opened.retain(|k| k.folder != folder);
-        self.opening.retain(|k| k.folder != folder);
+        self.opening.retain(|k, _| k.folder != folder);
         self.decrypt_errors.retain(|k, _| k.folder != folder);
         self.pgp.forget_folder(folder);
     }

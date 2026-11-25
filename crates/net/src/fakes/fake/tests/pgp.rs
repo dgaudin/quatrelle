@@ -42,7 +42,8 @@ fn protect(pool: &mut Pool, account: &AccountConfig, raw: &[u8], to: Vec<Vec<u8>
 /// checked with its public part `mine`; and Bo's key opens it too.
 fn opens(pool: &mut Pool, account: &AccountConfig, key: MessageKey, got: &[u8], mine: &[u8], bo: &pgp::Unlocked) {
     let quatrelle_mime::pgp::Protection::Encrypted(data) = quatrelle_mime::pgp::protection(got) else { panic!("not PGP/MIME encrypted") };
-    let work = PgpWork::Decrypt { key: key.clone(), data: data.clone(), inline: false, charset: String::new(), verify_with: vec![mine.to_vec()] };
+    let work =
+        PgpWork::Decrypt { key: key.clone(), data: data.clone(), inline: false, charset: String::new(), verify_with: vec![mine.to_vec()], ask: 0 };
     pool.submit(Job::Pgp { account: account.clone(), work });
     let seen = until(pool, "decrypted", |e| matches!(e, Event::PgpDecrypted { key: k, .. } if *k == key));
     let Some(Event::PgpDecrypted { content: Some(entity), error: None, .. }) = seen.last() else { panic!("{seen:?}") };

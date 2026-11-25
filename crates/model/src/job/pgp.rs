@@ -45,9 +45,17 @@ pub enum PgpWork {
     Forget { fingerprint: String },
     /// Decrypt `data` (an OpenPGP message) with the account's keys, a signature inside checked
     /// with `verify_with` (public keys); `inline`: it was a PGP block in a text (what it holds is
-    /// text in `charset`, not a MIME entity). Answered by
-    /// [`Event::PgpDecrypted`](super::Event::PgpDecrypted).
-    Decrypt { key: MessageKey, data: Vec<u8>, inline: bool, charset: String, verify_with: Vec<Vec<u8>> },
+    /// text in `charset`, not a MIME entity); `ask`: this asking's own number, given back with
+    /// the answer. Answered by [`Event::PgpDecrypted`](super::Event::PgpDecrypted).
+    Decrypt {
+        key: MessageKey,
+        data: Vec<u8>,
+        inline: bool,
+        charset: String,
+        verify_with: Vec<Vec<u8>>,
+        #[serde(default)]
+        ask: u64,
+    },
     /// Sign with the key in use (`sign`) and/or encrypt to `encrypt_to` (public keys; empty: not
     /// encrypted) message `id`, about to be sent, as PGP/MIME: signed, then encrypted, its header
     /// fields inside too, the Subject outside `[...]` with `hide_subject`. Answered by
@@ -81,7 +89,7 @@ impl PgpWork {
                 Event::PgpKeys { account, keys: Vec::new(), changed: None, error }
             }
             PgpWork::Backup { fingerprint, .. } => Event::PgpBackedUp { account, fingerprint, error },
-            PgpWork::Decrypt { key, .. } => Event::PgpDecrypted { key, content: None, signature: None, keys: Vec::new(), error },
+            PgpWork::Decrypt { key, ask, .. } => Event::PgpDecrypted { key, ask, content: None, signature: None, keys: Vec::new(), error },
             PgpWork::Protect { id, .. } => Event::Protected { account, id, raw: None, error },
             PgpWork::SealDraft { raw, folder, replaces, keep } => {
                 let notice =
@@ -139,11 +147,12 @@ mod tests {
     #[test]
     fn the_browser_answers_every_openpgp_job() {
         let key = MessageKey { account: "a1".into(), folder: "INBOX".into(), validity: 1, uid: 7 };
-        let decrypt = PgpWork::Decrypt { key: key.clone(), data: b"x".to_vec(), inline: false, charset: String::new(), verify_with: Vec::new() };
+        let decrypt =
+            PgpWork::Decrypt { key: key.clone(), data: b"x".to_vec(), inline: false, charset: String::new(), verify_with: Vec::new(), ask: 7 };
         let error = Some(NOT_IN_BROWSER.to_string());
         assert_eq!(
             decrypt.unavailable("a1", NOT_IN_BROWSER),
-            Unavailable::Answer(Event::PgpDecrypted { key, content: None, signature: None, keys: Vec::new(), error: error.clone() })
+            Unavailable::Answer(Event::PgpDecrypted { key, ask: 7, content: None, signature: None, keys: Vec::new(), error: error.clone() })
         );
         let protect = PgpWork::Protect { id: 3, raw: Private(b"m".to_vec()), sign: true, encrypt_to: vec![b"k".to_vec()], hide_subject: true };
         assert_eq!(

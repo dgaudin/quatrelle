@@ -138,14 +138,58 @@ fn what_was_decrypted_in_the_outbox_stays_with_its_message() {
     s.take_jobs();
     // The second's answer, asked under the row the third has now, comes: not the third's.
     for j in late {
-        if let Job::Decrypt { key, cms, .. } = j {
+        if let Job::Decrypt { key, cms, ask, .. } = j {
             let (c, authenticated) = smime::decrypt(&cms, &riley(), &mut rand_core::OsRng).unwrap();
-            s.apply(Event::Decrypted { key, content: Some(quatrelle_model::Private(c)), authenticated, error: None });
+            s.apply(Event::Decrypted { key, ask, content: Some(quatrelle_model::Private(c)), authenticated, error: None });
         }
     }
     s.run("list.open", &json!({"key": outbox_key(&s, 83).to_id()})).unwrap();
     assert!(!shown_text(&s).contains("The second."), "another's text: {}", shown_text(&s));
     answer_decrypt(&mut s);
     assert!(shown_text(&s).contains("The third."), "{}", shown_text(&s));
+    done(s);
+}
+
+/// Each answer is decrypted on a thread of its own, so they come in any order. A message asked
+/// for in the Outbox's first row, then sent or deleted, and the one after it asked for under the
+/// same row: the second's answer came first and was let pass as the first's, then the first's
+/// was taken for the row (its text under the other's headers, opened to be changed as it, the
+/// other's text lost). Only the answer to the last asking is the row's.
+#[test]
+fn answers_for_an_outbox_row_coming_out_of_order_stay_with_their_messages() {
+    let mut s = with_certificate("smime-outbox-order");
+    let store = s.store.clone().unwrap();
+    for (id, text) in [(91, "What Ana wrote."), (92, "What Bo wrote.")] {
+        let (_, encrypted) = signed_and_encrypted(&written(u32::try_from(id).unwrap(), text));
+        store.outbox_add("sample", &outbox_item(id), &encrypted).unwrap();
+    }
+    s.refresh_outbox();
+    s.run("folder.outbox", &json!({})).unwrap();
+    let decrypts = |s: &mut Session| -> Vec<Job> { s.take_jobs().into_iter().filter(|j| matches!(j, Job::Decrypt { .. })).collect() };
+    // The first, asked for and not answered yet; then it goes, and the second, now in its row,
+    // is asked for.
+    s.run("list.open", &json!({"key": outbox_key(&s, 91).to_id()})).unwrap();
+    let first = decrypts(&mut s);
+    s.run("mail.delete", &json!({})).unwrap();
+    let mut second = decrypts(&mut s);
+    s.run("list.open", &json!({"key": outbox_key(&s, 92).to_id()})).unwrap();
+    second.extend(decrypts(&mut s));
+    assert_eq!((first.len(), second.len()), (1, 1));
+    assert_eq!(outbox_key(&s, 92).uid, 1);
+    // The second's answer first, then the first's.
+    for j in second.into_iter().chain(first) {
+        let Job::Decrypt { key, cms, ask, .. } = j else { continue };
+        let (c, authenticated) = smime::decrypt(&cms, &riley(), &mut rand_core::OsRng).unwrap();
+        s.apply(Event::Decrypted { key, ask, content: Some(quatrelle_model::Private(c)), authenticated, error: None });
+    }
+    let key = outbox_key(&s, 92);
+    let raw = s.as_written(&key, store.outbox_raw("sample", 92).unwrap()).0;
+    let text = String::from_utf8_lossy(&raw).into_owned();
+    assert!(text.contains("What Bo wrote.") && !text.contains("What Ana wrote."), "{text}");
+    let shown = s.reading.as_ref().and_then(|r| r.parsed.as_ref()).map(|p| p.text.clone()).unwrap_or_default();
+    assert!(shown.contains("What Bo wrote."), "{shown}");
+    s.run("outbox.edit", &json!({"key": key.to_id()})).unwrap();
+    let body = s.compose.as_ref().map(|c| c.body.clone()).unwrap_or_default();
+    assert!(body.contains("What Bo wrote.") && !body.contains("What Ana wrote."), "{body}");
     done(s);
 }

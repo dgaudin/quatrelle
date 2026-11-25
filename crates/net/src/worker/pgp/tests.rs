@@ -209,12 +209,13 @@ fn encrypted_mail_is_decrypted_in_memory_only() {
         inline: false,
         charset: String::new(),
         verify_with: vec![ana.public.clone()],
+        ask: 11,
     };
     p.submit(Job::Pgp { account: a.clone(), work });
-    let Event::PgpDecrypted { content, signature, error, .. } = answer(&p, |e| matches!(e, Event::PgpDecrypted { .. })) else {
+    let Event::PgpDecrypted { content, signature, error, ask, .. } = answer(&p, |e| matches!(e, Event::PgpDecrypted { .. })) else {
         panic!("another answer")
     };
-    assert_eq!(error, None);
+    assert_eq!((error, ask), (None, 11), "given back with its asking's number");
     assert_eq!(content.unwrap().0, entity);
     assert!(matches!(signature, Some(PgpSignature::Good { key: 0, .. })), "{signature:?}");
     for f in files_under(store.root()) {

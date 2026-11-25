@@ -232,10 +232,10 @@ pub(super) fn job(sh: &Rcs, id: &str, j: Job) {
             };
             emit(sh, Event::Protected { account: id.to_string(), id: msg, raw, error });
         }
-        Job::Decrypt { key, cms, .. } => {
+        Job::Decrypt { key, cms, ask, .. } => {
             let e = match decrypt(sh, id, &cms) {
-                Ok((content, authenticated)) => Event::Decrypted { key, content: Some(Private(content)), authenticated, error: None },
-                Err(e) => Event::Decrypted { key, content: None, authenticated: false, error: Some(e) },
+                Ok((content, authenticated)) => Event::Decrypted { key, ask, content: Some(Private(content)), authenticated, error: None },
+                Err(e) => Event::Decrypted { key, ask, content: None, authenticated: false, error: Some(e) },
             };
             emit(sh, e);
         }

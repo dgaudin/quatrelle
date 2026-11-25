@@ -22,7 +22,7 @@ fn a_change_is_summed_up_without_a_subject_or_an_address() {
 fn secrets_never_print() {
     let j = Job::Start { account: AccountConfig::default(), password: Some(Secret("hunter2".into())) };
     assert!(!format!("{j:?}").contains("hunter2"));
-    let e = Event::Decrypted { key: MessageKey::default(), content: Some(Private(b"the plan".to_vec())), authenticated: true, error: None };
+    let e = Event::Decrypted { key: MessageKey::default(), ask: 0, content: Some(Private(b"the plan".to_vec())), authenticated: true, error: None };
     assert!(!format!("{e:?}").contains("the plan"), "what decrypted mail says never prints");
     let j = Job::Pgp {
         account: AccountConfig::default(),

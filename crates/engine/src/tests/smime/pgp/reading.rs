@@ -89,7 +89,7 @@ fn answer_decrypt(s: &mut Session) -> usize {
     let riley = riley_key();
     let mut n = 0;
     for j in s.take_jobs() {
-        let Job::Pgp { work: PgpWork::Decrypt { key, data, inline, charset, verify_with }, .. } = j else { continue };
+        let Job::Pgp { work: PgpWork::Decrypt { key, data, inline, charset, verify_with, ask }, .. } = j else { continue };
         n += 1;
         let keys: Vec<&[u8]> = verify_with.iter().map(Vec::as_slice).collect();
         let event = match pgp::decrypt(&data, &[&riley.secret], &keys) {
@@ -98,6 +98,7 @@ fn answer_decrypt(s: &mut Session) -> usize {
                 let inside = quatrelle_mime::pgp::key_parts(&entity).iter().flat_map(|k| pgp::public_keys(k).unwrap_or_default()).collect();
                 Event::PgpDecrypted {
                     key,
+                    ask,
                     content: Some(Private(entity)),
                     signature: d.check.map(|c| match c {
                         pgp::Check::Good { key, at, weak, until } => PgpSignature::Good { key, at, weak, until },
@@ -110,9 +111,9 @@ fn answer_decrypt(s: &mut Session) -> usize {
             }
             Err(pgp::Error::Decrypt) => {
                 let error = format!("{NOT_FOR_YOU} ({})", pgp::recipients(&data).join(", "));
-                Event::PgpDecrypted { key, content: None, signature: None, keys: Vec::new(), error: Some(error) }
+                Event::PgpDecrypted { key, ask, content: None, signature: None, keys: Vec::new(), error: Some(error) }
             }
-            Err(e) => Event::PgpDecrypted { key, content: None, signature: None, keys: Vec::new(), error: Some(e.to_string()) },
+            Err(e) => Event::PgpDecrypted { key, ask, content: None, signature: None, keys: Vec::new(), error: Some(e.to_string()) },
         };
         s.apply(event);
     }
@@ -254,6 +255,7 @@ fn mail_encrypted_to_a_key_quatrelle_doesnt_have_says_so() {
     // Another reason stays what it was.
     s.apply(Event::PgpDecrypted {
         key: s.reading.as_ref().unwrap().key.clone(),
+        ask: 0,
         content: None,
         signature: None,
         keys: Vec::new(),

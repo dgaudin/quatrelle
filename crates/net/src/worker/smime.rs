@@ -199,11 +199,11 @@ impl Pool {
                 };
                 sink.emit(Event::Protected { account: account.id, id, raw, error });
             }
-            Job::Decrypt { account, key, cms } => {
+            Job::Decrypt { account, key, cms, ask } => {
                 let done = kept::decrypt(creds.as_ref(), &account, &cms);
                 let event = match done {
-                    Ok((content, authenticated)) => Event::Decrypted { key, content: Some(Private(content)), authenticated, error: None },
-                    Err(e) => Event::Decrypted { key, content: None, authenticated: false, error: Some(e) },
+                    Ok((content, authenticated)) => Event::Decrypted { key, ask, content: Some(Private(content)), authenticated, error: None },
+                    Err(e) => Event::Decrypted { key, ask, content: None, authenticated: false, error: Some(e) },
                 };
                 sink.emit(event);
             }
