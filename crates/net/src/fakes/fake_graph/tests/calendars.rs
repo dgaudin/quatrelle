@@ -232,6 +232,7 @@ fn calendar_groups_are_made_renamed_and_deleted_on_microsoft_365() {
 #[test]
 fn a_group_that_still_holds_calendars_is_not_deleted() {
     let mut d = Data::default();
+    d.folder("Inbox", None, Some("inbox"));
     d.calendars.push(("CAL1".into(), "Calendar".into()));
     d.calendars.push(("CAL2".into(), "Trips".into()));
     d.groups.push(("G1".into(), "My Calendars".into(), vec!["CAL1".into()]));
