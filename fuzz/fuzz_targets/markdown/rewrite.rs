@@ -29,7 +29,11 @@ fuzz_target!(|input: &[u8]| {
     let answer = String::from_utf8_lossy(input);
     let (back, _) = rich::inbound(&answer, rich::Style::default(), &images, &before, &styles);
     assert_eq!(back.chars().filter(|c| *c == rich::PICTURE).count(), pictures, "every picture once: {back:?}");
-    assert!(!back.contains("QUATRELLE-IMAGE-7-"), "no sent marker left: {back:?}");
+    // Without a picture no marker was sent: the model never saw the nonce, and words of the
+    // marker's shape are its own (or the user's), kept.
+    if pictures > 0 {
+        assert!(!back.contains("QUATRELLE-IMAGE-7-"), "no sent marker left: {back:?}");
+    }
     assert!(!back.chars().any(|c| ('\u{E000}'..='\u{E06F}').contains(&c)), "no internal mark left: {back:?}");
     assert!(back.chars().count() <= mime::MARKDOWN_MAX + pictures + 8, "{} characters", back.chars().count());
 });

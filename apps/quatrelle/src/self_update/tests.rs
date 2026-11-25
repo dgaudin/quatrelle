@@ -106,7 +106,12 @@ fn helper_scripts_quote_their_paths() {
     let odd = Path::new(r"C:\Users\O'Brien\My Apps\quatrelle-0.21.0-windows-x64.msi");
     let msi = msi_step(odd);
     // The installer by its full path, never through `%SystemRoot%` (whoever starts Quatrelle may set it).
-    assert!(msi.contains("-FilePath 'C:\\Windows\\System32") && msi.contains("msiexec.exe' -ArgumentList") && !msi.contains("SystemRoot"), "{msi}");
+    // Where Windows says its folders are, in its own case (`system32` on a real Windows).
+    let lower = msi.to_lowercase();
+    assert!(
+        lower.contains("-filepath 'c:\\windows\\system32") && lower.contains("msiexec.exe' -argumentlist") && !lower.contains("systemroot"),
+        "{msi}"
+    );
     assert!(msi.contains(r#"'"C:\Users\O''Brien\My Apps\quatrelle-0.21.0-windows-x64.msi"'"#), "{msi}");
     let zip = portable_step(Path::new(r"C:\Tools\Quatrelle\x.zip"), Path::new(r"C:\Tools\Mail'Craft"));
     assert!(zip.contains(r"-Destination 'C:\Tools\Mail''Craft'"), "{zip}");
