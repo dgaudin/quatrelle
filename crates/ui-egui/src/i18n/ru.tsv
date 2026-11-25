@@ -2487,3 +2487,29 @@ presence	Offline	Не в сети
 	Maximize	Развернуть
 	Use the system title bar	Использовать системную строку заголовка
 	Applies when Quatrelle starts again	Применится при следующем запуске Quatrelle
+	Custom Follow Up	Настраиваемое отслеживание
+	Add Reminder	Добавить напоминание
+	Custom…	Настроить…
+	Add Reminder…	Добавить напоминание…
+	The reminder is a day (YYYY-MM-DD) and a time (HH:MM)	Напоминание — это день (YYYY-MM-DD) и время (HH:MM)
+	`{name}` is a day, YYYY-MM-DD	«{name}» — это день, YYYY-MM-DD
+	The start date is after the due date	Дата начала позже даты окончания
+	Remove from List	Удалить из списка
+	Add to Favorites	Добавить в избранное
+	Open contact	Открыть контакт
+	No favorite people yet: right-click a contact or a sender to add one.	Избранных людей пока нет: щёлкните правой кнопкой мыши контакт или отправителя, чтобы добавить.
+	My Tasks	Мои задачи
+	To-Do List	Список задач
+	Read-only: this list is read on the server	Только чтение: этот список читается на сервере
+	Nothing is kept here: this list is read on the server.	Здесь ничего не хранится: этот список читается на сервере.
+	Simple List	Простой список
+	Detailed	Подробно
+	Active	Активные
+	Next 7 Days	Следующие 7 дней
+	Prioritized	По важности
+	Arrange By	Упорядочить по
+	Importance	Важность
+	Type	Тип
+	No category	Без категории
+	Flagged messages	Помеченные сообщения
+	In folder	В папке

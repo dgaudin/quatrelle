@@ -61,6 +61,8 @@ pub enum Action {
     NewNote,
     /// Show a task in Tasks (from its reminder).
     OpenTask(String),
+    /// Show a contact in People (from the To-Do bar's People part).
+    OpenPerson(String),
     /// Search every folder for this (shown in the box, with the Search tab).
     Search(String),
     SetDark(Option<bool>),

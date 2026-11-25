@@ -20,12 +20,14 @@ struct Marks {
     complete_time: Option<String>,
     /// The last thing done with it (replied, forwarded), when, and its icon.
     verb: Verb,
+    /// Its follow-up's dates, reminder and title.
+    follow_up: FollowUp,
 }
 
 impl Marks {
     /// The item as a change carries it.
     fn xml(&self) -> String {
-        let flag = flag_xml(self.flagged, self.complete, self.complete_time.as_deref(), &self.verb);
+        let flag = flag_xml(self.flagged, self.complete, self.complete_time.as_deref(), &self.verb, &self.follow_up);
         format!(
             "<t:Message><t:ItemId Id=\"{}\" ChangeKey=\"ck\"/><t:IsRead>{}</t:IsRead>{flag}<t:ExtendedProperty><t:ExtendedFieldURI PropertyTag=\"0x0E07\" PropertyType=\"Integer\"/><t:Value>{}</t:Value></t:ExtendedProperty>{}</t:Message>",
             self.id,
@@ -75,6 +77,7 @@ impl Data {
                 complete: i.complete,
                 complete_time: i.complete_time.clone(),
                 verb: i.verb.clone(),
+                follow_up: i.follow_up.clone(),
             })
             .collect();
         let mut changes = Vec::new();
@@ -82,8 +85,8 @@ impl Data {
             match was.iter().find(|w| w.id == n.id) {
                 None => changes.push((format!("<t:Create>{}</t:Create>", n.xml()), n.clone(), false)),
                 Some(w)
-                    if (w.flagged, w.draft, &w.categories, w.complete, &w.complete_time, &w.verb)
-                        != (n.flagged, n.draft, &n.categories, n.complete, &n.complete_time, &n.verb) =>
+                    if (w.flagged, w.draft, &w.categories, w.complete, &w.complete_time, &w.verb, &w.follow_up)
+                        != (n.flagged, n.draft, &n.categories, n.complete, &n.complete_time, &n.verb, &n.follow_up) =>
                 {
                     changes.push((format!("<t:Update>{}</t:Update>", n.xml()), n.clone(), false))
                 }
@@ -203,7 +206,7 @@ fn sync_state(s: &[Marks]) -> String {
         .map(|m| {
             let cats: Vec<&str> = m.categories.iter().map(String::as_str).collect();
             format!(
-                "{}\t{}{}{}{}\t{}\t{}\t{}\t{}\t{}\n",
+                "{}\t{}{}{}{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\n",
                 m.id,
                 u8::from(m.read),
                 u8::from(m.flagged),
@@ -213,7 +216,13 @@ fn sync_state(s: &[Marks]) -> String {
                 m.complete_time.as_deref().unwrap_or(""),
                 m.verb.last.as_deref().unwrap_or(""),
                 m.verb.time.as_deref().unwrap_or(""),
-                m.verb.icon.as_deref().unwrap_or("")
+                m.verb.icon.as_deref().unwrap_or(""),
+                m.follow_up.start.as_deref().unwrap_or(""),
+                m.follow_up.due.as_deref().unwrap_or(""),
+                u8::from(m.follow_up.reminder_set),
+                m.follow_up.reminder_time.as_deref().unwrap_or(""),
+                m.follow_up.reminder_signal.as_deref().unwrap_or(""),
+                m.follow_up.request.as_deref().unwrap_or("")
             )
         })
         .collect();
@@ -229,13 +238,24 @@ fn sync_snapshot(state: &str) -> Option<Vec<Marks>> {
     let text = String::from_utf8(bytes).ok()?;
     text.lines()
         .map(|l| {
-            let mut parts = l.splitn(7, '\t');
+            let mut parts = l.splitn(13, '\t');
             let id = parts.next()?.to_string();
             let b: Vec<bool> = parts.next()?.chars().map(|c| c == '1').collect();
             let categories = parts.next().filter(|c| !c.is_empty()).map(|c| c.split(SEP).map(str::to_string).collect()).unwrap_or_default();
             let mut text = || parts.next().filter(|t| !t.is_empty()).map(str::to_string);
             let complete_time = text();
             let verb = Verb { last: text(), time: text(), icon: text() };
+            let follow_up = FollowUp {
+                start: text(),
+                due: text(),
+                common_start: None,
+                common_end: None,
+                reminder_set: text().is_some_and(|r| r == "1"),
+                reminder_time: text(),
+                reminder_signal: text(),
+                request: text(),
+                title: text(),
+            };
             Some(Marks {
                 id,
                 read: *b.first()?,
@@ -245,6 +265,7 @@ fn sync_snapshot(state: &str) -> Option<Vec<Marks>> {
                 complete: b.get(3).copied().unwrap_or(false),
                 complete_time,
                 verb,
+                follow_up,
             })
         })
         .collect()

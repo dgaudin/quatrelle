@@ -8,6 +8,7 @@ use super::*;
 impl Session {
     /// Apply an event from the network layer.
     pub fn apply(&mut self, e: Event) {
+        self.mail_stamp = self.mail_stamp.wrapping_add(1);
         match e {
             e @ (Event::Identity { .. }
             | Event::Protected { .. }

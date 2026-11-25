@@ -50,6 +50,8 @@ pub struct It {
     pub complete: bool,
     /// When it was (`PidTagFlagCompleteTime`), as Exchange writes it.
     pub complete_time: Option<String>,
+    /// Its follow-up's dates, reminder and title ([`fields::FollowUp`]).
+    pub follow_up: fields::FollowUp,
     /// The last thing done with it: replied, forwarded (`PidTagLastVerbExecuted`…).
     pub verb: Verb,
     pub draft: bool,
@@ -557,6 +559,7 @@ impl Data {
             flagged: false,
             complete: false,
             complete_time: None,
+            follow_up: Default::default(),
             verb: Verb::default(),
             draft: false,
             received: received.into(),
@@ -623,7 +626,7 @@ impl Data {
             use std::hash::{Hash, Hasher};
             let mut h = std::collections::hash_map::DefaultHasher::new();
             for i in self.items.iter().filter(|i| i.folder == f.id) {
-                (&i.id, i.read, i.flagged, i.complete, &i.complete_time, &i.verb, i.draft, &i.categories).hash(&mut h);
+                (&i.id, i.read, i.flagged, i.complete, &i.complete_time, &i.verb, i.draft, &i.categories, &i.follow_up).hash(&mut h);
             }
             format!(
                 "{replica}<t:ExtendedProperty><t:ExtendedFieldURI PropertyTag=\"0x670a\" PropertyType=\"SystemTime\"/><t:Value>2026-01-01T00:00:00.{:x}Z</t:Value></t:ExtendedProperty>",
@@ -711,7 +714,7 @@ impl Data {
         if text {
             x.push_str(&text_fields(it, &p));
         }
-        x.push_str(&flag_xml(it.flagged, it.complete, it.complete_time.as_deref(), &it.verb));
+        x.push_str(&flag_xml(it.flagged, it.complete, it.complete_time.as_deref(), &it.verb, &it.follow_up));
         x.push_str(&ext("0x0E07", if it.draft { 8 } else { 1 }));
         if !it.voting.is_empty() {
             x.push_str(&format!(
@@ -798,7 +801,7 @@ mod syncing;
 mod tasks;
 
 pub use archive::ArchiveBox;
-pub use fields::Verb;
+pub use fields::{FollowUp, Verb};
 use fields::{MICROSOFT_FIELDS, fields_named, flag_xml, take_flag_update, text_fields};
 pub use policy::{
     ARCHIVE_DAY, DELETE_DAY, Policy, TAG_DELETE, TAG_FIVE, TAG_HIDDEN, TAG_MARK, TAG_NEVER, TAG_OFF_ARCHIVE, TAG_OFF_DELETE, TAG_WEEK, TAG_YEAR,

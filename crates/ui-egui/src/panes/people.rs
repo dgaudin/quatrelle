@@ -282,6 +282,21 @@ fn books(s: &Session, st: &mut UiState, ui: &mut Ui) {
     ui.separator();
 }
 
+/// The To-Do bar's favorite people: add this person, or take them off (a contact's or a
+/// sender's right-click menu).
+pub(crate) fn favorite_menu(ui: &mut Ui, s: &Session, email: &str, acts: &mut Vec<Action>) {
+    let email = email.trim();
+    if email.is_empty() {
+        return;
+    }
+    let on = s.is_favorite_person(email);
+    let label = if on { "Remove from Favorites" } else { "Add to Favorites" };
+    if ui.button(tl!(label)).clicked() {
+        acts.push(Action::Run("contact.favorite", json!({"email": email, "on": !on})));
+        ui.close();
+    }
+}
+
 /// The picture to draw for a person: the one their card carries, else the one the directory
 /// keeps for their address (once it has arrived).
 fn picture<'a>(s: &'a Session, card: &'a quatrelle_engine::model::vcard::Card) -> Option<&'a quatrelle_engine::model::vcard::Photo> {
@@ -519,6 +534,11 @@ fn cards(s: &Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action>) {
                         if resp.double_clicked() && !s.person_read_only(&c.uid) {
                             acts.push(Action::Dialog(Dialog::edit_contact(c)));
                         }
+                        resp.context_menu(|ui| {
+                            if let Some(e) = c.emails.first() {
+                                favorite_menu(ui, s, &e.value, acts);
+                            }
+                        });
                     }
                 });
                 ui.add_space(gap);
@@ -625,6 +645,11 @@ fn phone_list(s: &Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action>
                 if resp.double_clicked() && !s.person_read_only(&c.uid) {
                     acts.push(Action::Dialog(Dialog::edit_contact(c)));
                 }
+                resp.context_menu(|ui| {
+                    if let Some(e) = c.emails.first() {
+                        favorite_menu(ui, s, &e.value, acts);
+                    }
+                });
             }
         });
     });

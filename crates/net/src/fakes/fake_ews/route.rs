@@ -175,6 +175,7 @@ impl Data {
                                 self.calls.push("FindItem completed".into());
                             } else {
                                 list.retain(|i| i.flagged != negated);
+                                self.calls.push("FindItem followUps".into());
                             }
                         }
                     }
@@ -205,7 +206,7 @@ impl Data {
                             "<t:Message><t:ItemId Id=\"{}\" ChangeKey=\"ck\"/><t:IsRead>{}</t:IsRead>{}{}{}</t:Message>",
                             i.id,
                             i.read,
-                            super::flag_xml(i.flagged, i.complete, i.complete_time.as_deref(), &i.verb),
+                            super::flag_xml(i.flagged, i.complete, i.complete_time.as_deref(), &i.verb, &i.follow_up),
                             super::categories_xml(&i.categories),
                             super::fields::kind_xml(i, kind_asked.0, kind_asked.1)
                         )
@@ -385,6 +386,7 @@ impl Data {
                             flagged: false,
                             complete: false,
                             complete_time: None,
+                            follow_up: Default::default(),
                             verb: super::Verb::default(),
                             draft: true,
                             received: "2026-10-15T12:00:00Z".into(),
@@ -428,6 +430,7 @@ impl Data {
                         flagged: false,
                         complete: false,
                         complete_time: None,
+                        follow_up: Default::default(),
                         verb: super::Verb::default(),
                         draft,
                         received: "2026-10-15T12:00:00Z".into(),

@@ -688,3 +688,16 @@ local-first, media-aware v1); the fuller request is
   the `teamsForBusiness` provider) and Exchange Online makes the meeting as it's saved, Teams signed
   in or not. Not yet confirmed on a real account: a create, an update, a delete, the property on
   on-premises Exchange, and a meeting Exchange Online makes.
+- **2026-11-21** — **Follow-ups on the server, the To-Do List, the To-Do Bar's three parts and
+  task lists:** Exchange keeps a flag's start and due days and its reminder as Outlook does
+  (`PidLidTaskStartDate`, `PidLidTaskDueDate`, `PidLidReminderSet`, `PidLidReminderTime`,
+  `PidLidReminderSignalTime`, with the task's title `PidLidToDoTitle` and the flag's icon), cleared and marked complete as it
+  says; Graph keeps the dates and the reminder stays here. Custom… and Add Reminder… set them,
+  and a flag's reminder rings in the Reminders window and opens its message. The Tasks module's
+  To-Do List holds every flagged message not done beside the tasks, grouped by due day, with a
+  tick, a double click and the Follow Up menu; the To-Do Bar is now Calendar, People and Tasks,
+  each ticked and remembered, People holding the favorite people kept on this computer. My Tasks
+  lists the To-Do List, each account's tasks, its online archive (read-only) and the shared
+  mailboxes opened in it (the archive's and the shared ones list, their tasks aren't read yet); Current View and Arrange By offer Simple List, Detailed, Active,
+  Completed, Next 7 Days, Overdue and Prioritized, ordered by due or start date, importance,
+  categories, folder or type, remembered per list.

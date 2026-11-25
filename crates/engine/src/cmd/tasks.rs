@@ -16,17 +16,78 @@ macro_rules! fields {
 
 pub(super) fn commands() -> Vec<CommandSpec> {
     vec![
-        CommandSpec::new("task.list", "Tasks", "Tasks", |s, v| {
-            let list: Vec<Value> =
-                s.tasks(p::str(v, "query").unwrap_or(""), p::bool(v, "completed").unwrap_or(false)).into_iter().map(|r| task_json(&r)).collect();
-            Ok(json!({"tasks": list}))
+        CommandSpec::new("task.lists", "Task lists", "Tasks", |s, _| {
+            Ok(json!(
+                s.task_lists()
+                    .iter()
+                    .map(|l| json!({
+                        "id": l.id, "name": l.name, "account": l.account, "readOnly": l.read_only,
+                        "archive": l.archive, "mailbox": l.mailbox,
+                    }))
+                    .collect::<Vec<_>>()
+            ))
         })
-        .params(r#"{"query"?: string, "completed"?: bool (the completed ones too)}"#),
+        .params("(the My Tasks lists: the To-Do List, then each account's, its archive and shared mailboxes)"),
+        CommandSpec::new("task.view", "Current View", "Tasks › View", |s, v| {
+            let list = p::str(v, "list").unwrap_or("todo").to_string();
+            if s.task_list(&list).is_none() {
+                return Err(CmdError::Params(format!("no task list `{list}`")));
+            }
+            if let Some(code) = p::str(v, "view") {
+                let view = quatrelle_model::pim::tasks::TaskView::from_code(code)
+                    .ok_or_else(|| CmdError::Params(format!("`{code}` isn't a task view")))?;
+                s.prefs.task_views.insert(list.clone(), view);
+            }
+            if let Some(code) = p::str(v, "arrange") {
+                let arrange = quatrelle_model::pim::tasks::TaskArrange::from_code(code)
+                    .ok_or_else(|| CmdError::Params(format!("`{code}` isn't a task arrangement")))?;
+                s.prefs.task_arranges.insert(list.clone(), arrange);
+            }
+            let (view, arrange) = s.task_view(&list);
+            Ok(json!({"list": list, "view": view.code(), "arrange": arrange.code()}))
+        })
+        .params(r#"{"list"?: string (a task.lists id; default the To-Do List), "view"?: "simple"|"detailed"|"active"|"completed"|"next7"|"overdue"|"prioritized", "arrange"?: "due"|"start"|"importance"|"categories"|"folder"|"type"}"#),
+        CommandSpec::new("task.list", "Tasks", "Tasks", |s, v| {
+            let list = p::str(v, "list").unwrap_or("todo");
+            if s.task_list(list).is_none() {
+                return Err(CmdError::Params(format!("no task list `{list}`")));
+            }
+            let tasks: Vec<Value> = s
+                .todo_for(list, p::str(v, "query").unwrap_or(""), p::bool(v, "completed").unwrap_or(false))
+                .iter()
+                .filter_map(|r| r.task())
+                .map(task_json)
+                .collect();
+            Ok(json!({"tasks": tasks, "list": list}))
+        })
+        .params(
+            r#"{"query"?: string, "completed"?: bool (the completed ones too), "list"?: string (a task.lists id; default the To-Do List's tasks)}"#,
+        ),
         CommandSpec::new("task.create", "New task", "Tasks", |s, v| {
             let change = change_of(v, &s.clock)?;
-            s.create_task(p::str(v, "account"), change)
+            let account = match p::str(v, "list") {
+                Some(id) => {
+                    let list = s.task_list(id).ok_or_else(|| CmdError::Params(format!("no task list `{id}`")))?;
+                    if list.read_only {
+                        return Err(CmdError::Disabled(crate::ARCHIVE_READ_ONLY.into()));
+                    }
+                    // A shared mailbox's list: its tasks aren't kept in the account's own.
+                    if list.mailbox.is_some() {
+                        return Err(CmdError::Disabled(
+                            "that list is a shared mailbox's: a task made there isn't kept in it yet".into(),
+                        ));
+                    }
+                    list.account
+                }
+                None => p::str(v, "account").map(str::to_string),
+            };
+            s.create_task(account.as_deref(), change)
         })
-        .params(concat!(r#"{"subject": string, "#, fields!(), r#", "account"?: string}"#)),
+        .params(concat!(
+            r#"{"subject": string, "#,
+            fields!(),
+            r#", "account"?: string, "list"?: string (a task.lists id; its account gets it)}"#
+        )),
         CommandSpec::new("task.update", "Edit task", "Tasks", |s, v| {
             let change = change_of(v, &s.clock)?;
             s.update_task(p::req_str(v, "uid")?, change)

@@ -69,6 +69,29 @@ const COMPLETE_TIME: &str = "<t:ExtendedFieldURI PropertyTag=\"0x1091\" Property
 /// `PidTagFollowupIcon`: the colour of a flag Outlook set.
 const FOLLOW_UP_ICON: &str = "<t:ExtendedFieldURI PropertyTag=\"0x1095\" PropertyType=\"Integer\"/>";
 
+/// The follow-up dates, its reminder and its title, in the property sets Exchange keeps them
+/// (MS-OXOFLAG 2.2.1, MS-OXPROPS 1.3.2): `PidLidTaskStartDate` and `PidLidTaskDueDate` in
+/// PSETID_Task, `PidLidReminderSet`, `PidLidReminderTime`, `PidLidReminderSignalTime` and
+/// `PidLidFlagRequest` in PSETID_Common.
+const TASK_START: &str = "<t:ExtendedFieldURI DistinguishedPropertySetId=\"Task\" PropertyId=\"33028\" PropertyType=\"SystemTime\"/>";
+const TASK_DUE: &str = "<t:ExtendedFieldURI DistinguishedPropertySetId=\"Task\" PropertyId=\"33029\" PropertyType=\"SystemTime\"/>";
+/// `PidLidCommonStart`/`PidLidCommonEnd`: set with the Task dates ([MS-OXOFLAG] 3.1.4.1.3
+/// says they MUST be), the same midnight in the user's local time zone.
+const COMMON_START: &str = "<t:ExtendedFieldURI DistinguishedPropertySetId=\"Common\" PropertyId=\"34052\" PropertyType=\"SystemTime\"/>";
+const COMMON_END: &str = "<t:ExtendedFieldURI DistinguishedPropertySetId=\"Common\" PropertyId=\"34053\" PropertyType=\"SystemTime\"/>";
+const REMINDER_SET: &str = "<t:ExtendedFieldURI DistinguishedPropertySetId=\"Common\" PropertyId=\"34051\" PropertyType=\"Boolean\"/>";
+const REMINDER_TIME: &str = "<t:ExtendedFieldURI DistinguishedPropertySetId=\"Common\" PropertyId=\"34050\" PropertyType=\"SystemTime\"/>";
+const REMINDER_SIGNAL: &str = "<t:ExtendedFieldURI DistinguishedPropertySetId=\"Common\" PropertyId=\"34144\" PropertyType=\"SystemTime\"/>";
+const FLAG_REQUEST: &str = "<t:ExtendedFieldURI DistinguishedPropertySetId=\"Common\" PropertyId=\"34096\" PropertyType=\"String\"/>";
+/// `PidLidToDoTitle`: the task's title, the flag's own property ([MS-OXOFLAG] 3.1.4.1.3), so
+/// Clear Flag takes it off too.
+const TODO_TITLE: &str = "<t:ExtendedFieldURI DistinguishedPropertySetId=\"Common\" PropertyId=\"34212\" PropertyType=\"String\"/>";
+
+/// The follow-up title Outlook gives a plain flag ([MS-OXOFLAG] 3.1.4.1).
+const FOLLOW_UP_REQUEST: &str = "Follow up";
+/// `PidTagFollowupIcon` for a plain red flag ([MS-OXOFLAG] 2.2.1).
+const RED_FLAG: i64 = 6;
+
 /// `PidTagLastVerbExecuted`: the last thing done with a message (replied, forwarded).
 const LAST_VERB: &str = "<t:ExtendedFieldURI PropertyTag=\"0x1081\" PropertyType=\"Integer\"/>";
 /// `PidTagLastVerbExecutionTime`: when.
@@ -105,9 +128,62 @@ fn flag_status(v: u8) -> String {
     )
 }
 
+/// An update setting a property of a message to `value` (already escaped).
+fn set_value(field: &str, value: &str) -> String {
+    format!(
+        "<t:SetItemField>{field}<t:Message><t:ExtendedProperty>{field}<t:Value>{value}</t:Value></t:ExtendedProperty></t:Message></t:SetItemField>"
+    )
+}
+
+/// An update setting a `SystemTime` property to `at` (Unix seconds).
+fn set_time(field: &str, at: i64) -> String {
+    set_value(field, &quatrelle_jmap::utc_date_string(at))
+}
+
 /// An update deleting a property.
 fn delete(field: &str) -> String {
     format!("<t:DeleteItemField>{field}</t:DeleteItemField>")
+}
+
+/// The updates for one follow-up date (`at`: the day's floating midnight, `day * 86_400`, as
+/// `PidLidTask*Date` takes it, [MS-OXOTASK] 2.2.2.2.4): the Task property gets it as it is,
+/// the Common one the same midnight in the local zone, both always set or both deleted
+/// ([MS-OXOFLAG] 3.1.4.1.3).
+fn date_updates(task: &str, common: &str, at: Option<i64>) -> String {
+    match at {
+        Some(at) => format!("{}{}", set_time(task, at), set_time(common, crate::system_zone().to_utc(at))),
+        None => format!("{}{}", delete(task), delete(common)),
+    }
+}
+
+/// The updates for the follow-up fields a change names: `Set` a value, `Clear` to take the
+/// property off, unnamed (`None`) left as the server has it — a partial change doesn't erase
+/// what this computer didn't know.
+fn follow_up_updates(start: Option<FieldChange>, due: Option<FieldChange>, reminder: Option<FieldChange>) -> String {
+    // A start date goes with a due one ([MS-OXOTASK]: the due is required with the start), so a
+    // start set without a due takes the same day for both — "No Date" clears the two together.
+    let due = match (due, start) {
+        (Some(FieldChange::Set(_)), _) => due,
+        (_, Some(FieldChange::Set(v))) => Some(FieldChange::Set(v)),
+        _ => due,
+    };
+    let mut out = String::new();
+    if let Some(c) = start {
+        out.push_str(&date_updates(TASK_START, COMMON_START, c.value()));
+    }
+    if let Some(c) = due {
+        out.push_str(&date_updates(TASK_DUE, COMMON_END, c.value()));
+    }
+    // A reminder's time of day and the moment it rings are the same moment here: Outlook keeps
+    // the day it is due in `PidLidReminderTime` and the moment in `PidLidReminderSignalTime`
+    // ([MS-OXOFLAG] 2.2.1), and Quatrelle has one time, which both take.
+    if let Some(c) = reminder {
+        match c.value() {
+            Some(at) => out.push_str(&format!("{}{}{}", set_value(REMINDER_SET, "true"), set_time(REMINDER_TIME, at), set_time(REMINDER_SIGNAL, at))),
+            None => out.push_str(&format!("{}{}{}", delete(REMINDER_SET), delete(REMINDER_TIME), delete(REMINDER_SIGNAL))),
+        }
+    }
+    out
 }
 
 /// Vote on a message (see [`Client::vote`]).
@@ -146,10 +222,32 @@ pub fn apply_remote(c: &Client, st: &State, op: &Op) -> Result<()> {
             keys,
             &format!("<t:SetItemField><t:FieldURI FieldURI=\"message:IsRead\"/><t:Message><t:IsRead>{on}</t:IsRead></t:Message></t:SetItemField>"),
         ),
-        // Flagged: status 2, and no time done (a follow-up completed and flagged again).
-        Op::SetFlag { keys, flag: Flag::Flagged, on: true, .. } => update(keys, &format!("{}{}", flag_status(2), delete(COMPLETE_TIME))),
-        // Cleared, or marked complete (the engine takes the flag off first): neither.
-        Op::SetFlag { keys, flag: Flag::Flagged, on: false, .. } => update(keys, &format!("{}{}", delete(FLAG_STATUS), delete(COMPLETE_TIME))),
+        // Flagged, as Outlook flags: status 2, no time done (a follow-up completed and flagged
+        // again), the plain red flag's icon, and "Follow up" its title ([MS-OXOFLAG] 3.1.4.1).
+        Op::SetFlag { keys, flag: Flag::Flagged, on: true, .. } => update(
+            keys,
+            &format!(
+                "{}{}{}{}",
+                flag_status(2),
+                delete(COMPLETE_TIME),
+                set_value(FOLLOW_UP_ICON, &RED_FLAG.to_string()),
+                set_value(FLAG_REQUEST, FOLLOW_UP_REQUEST)
+            ),
+        ),
+        // Cleared, or marked complete (the engine takes the flag off first): none of the
+        // flag's own. Its dates and reminder stay — Mark Complete keeps the days it was due by,
+        // as the list shows them struck through; taking them off is a SetFollowUp of its own
+        // (Clear Flag sends one).
+        Op::SetFlag { keys, flag: Flag::Flagged, on: false, .. } => update(
+            keys,
+            &format!("{}{}{}{}{}", delete(FLAG_STATUS), delete(COMPLETE_TIME), delete(FOLLOW_UP_ICON), delete(FLAG_REQUEST), delete(TODO_TITLE)),
+        ),
+        // Its dates and reminder, as Follow Up › Custom… set them (and Add Reminder…): only the
+        // fields the change names, the others left as the server has them.
+        Op::SetFollowUp { keys, start, due, reminder } => {
+            let change = follow_up_updates(*start, *due, *reminder);
+            if change.is_empty() { Ok(()) } else { update(keys, &change) }
+        }
         // Outlook's Mark Complete: status 1 and the time it was done, the flag's icon gone
         // ([MS-OXOFLAG] 3.1.4.2); taken off (Undo, or flagged again): none of it.
         Op::SetKeyword { keys, keyword, on, .. } if keyword.eq_ignore_ascii_case(quatrelle_model::FOLLOW_UP_COMPLETE) => {
@@ -159,7 +257,19 @@ pub fn apply_remote(c: &Client, st: &State, op: &Op) -> Result<()> {
                     "<t:SetItemField>{COMPLETE_TIME}<t:Message><t:ExtendedProperty>{COMPLETE_TIME}<t:Value>{}</t:Value></t:ExtendedProperty></t:Message></t:SetItemField>",
                     quatrelle_jmap::utc_date_string(now)
                 );
-                update(keys, &format!("{}{time}{}", flag_status(1), delete(FOLLOW_UP_ICON)))
+                // Done: its reminder goes with the icon (Outlook's Mark Complete); the days it
+                // was due stay, as the list shows them struck through.
+                update(
+                    keys,
+                    &format!(
+                        "{}{time}{}{}{}{}",
+                        flag_status(1),
+                        delete(FOLLOW_UP_ICON),
+                        delete(REMINDER_SET),
+                        delete(REMINDER_TIME),
+                        delete(REMINDER_SIGNAL)
+                    ),
+                )
             } else {
                 update(keys, &format!("{}{}", delete(FLAG_STATUS), delete(COMPLETE_TIME)))
             }

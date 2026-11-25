@@ -12,6 +12,54 @@ use crate::dialogs::{RuleCond, RuleTest, rule_field};
 use crate::look::people_field::{Piece, input_id};
 
 #[test]
+fn the_follow_up_dialog_sets_start_due_and_reminder() {
+    let (mut a, dir) = app("follow-up-dialog");
+    let ctx = egui::Context::default();
+    frame(&ctx, &mut a, vec![]);
+    let k = a.session.list[1].key.clone();
+    a.run("list.select", json!({"key": k.to_id()}));
+    // Follow Up › Custom…: the form as the message's follow-up has it (none, here).
+    let mut f = crate::dialogs::FollowUpForm::of(&a.session, true, None);
+    assert!(f.start.is_empty() && f.due.is_empty() && !f.remind, "{f:?}");
+    // Drawn, then filled in as typed.
+    a.ui.dialog = Some(Dialog::FollowUp(Box::new(f.clone())));
+    frame(&ctx, &mut a, vec![]);
+    f.start = "2026-11-20".into();
+    f.due = "2026-12-01".into();
+    f.remind = true;
+    f.remind_day = "2026-12-01".into();
+    f.remind_time = "09:30".into();
+    assert_eq!(f.check(), None);
+    a.act(crate::Action::Run("mail.flag", f.params()));
+    let m = a.session.list.iter().find(|m| m.key == k).cloned().unwrap();
+    assert!(m.flags.flagged, "{:?}", m.flags);
+    let day = |y, mo, d| quatrelle_engine::model::dates::days_from_civil(y, mo, d);
+    assert_eq!(a.session.follow_up_start(&m), Some(day(2026, 11, 20)));
+    assert_eq!(a.session.follow_up_due(&m), Some(day(2026, 12, 1)));
+    assert!(a.session.follow_up_reminder(&m).is_some());
+
+    // What isn't a day or a time is said, and nothing is set.
+    let mut bad = crate::dialogs::FollowUpForm::of(&a.session, true, None);
+    bad.start = "20/11/2026".into();
+    assert!(bad.check().is_some(), "not a day");
+    bad.start = "2026-11-20".into();
+    bad.remind = true;
+    bad.remind_day = "2026-12-01".into();
+    bad.remind_time = "9:30".into();
+    assert!(bad.check().is_some(), "not a time");
+
+    // Add Reminder… alone: the dates stay as they are.
+    let mut r = crate::dialogs::FollowUpForm::of(&a.session, false, None);
+    assert!(!r.dates && r.remind);
+    r.remind_time = "10:15".into();
+    a.act(crate::Action::Run("mail.flag", r.params()));
+    let m = a.session.list.iter().find(|m| m.key == k).cloned().unwrap();
+    assert_eq!(a.session.follow_up_start(&m), Some(day(2026, 11, 20)), "the start is kept");
+    assert_eq!(a.session.follow_up_due(&m), Some(day(2026, 12, 1)), "the due day is kept");
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
 fn organising_renders_and_rules_save() {
     let (mut a, dir) = app("organise");
     let ctx = egui::Context::default();
@@ -731,5 +779,46 @@ fn the_quick_step_form_marks_complete_and_writes() {
     assert!(a.ui.dialog.is_none() && a.session.prefs.quick_steps.len() == 1);
     let again = crate::dialogs::QuickStepForm::edit(&a.session, &a.session.prefs.quick_steps[0]);
     assert!(again.complete && again.write == crate::dialogs::StepWriting::Forward && again.to.starts_with("boss@studio.example"));
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// Custom… opened from a To-Do List row or the To-Do bar (with the row's `key`) edits that
+/// message, not the one selected in the mail list: the form is filled from it and `mail.flag`
+/// is given its key.
+#[test]
+fn the_follow_up_dialog_opened_on_a_key_edits_that_message() {
+    let (mut a, dir) = app("follow-up-dialog-key");
+    let ctx = egui::Context::default();
+    frame(&ctx, &mut a, vec![]);
+    let selected = a.session.list[0].key.clone();
+    let row = a.session.list[1].key.clone();
+    a.run("list.select", json!({"key": selected.to_id()}));
+    // The form as the row's menu opens it: filled from the row's message, carrying its key.
+    let mut f = crate::dialogs::FollowUpForm::of(&a.session, true, Some(&row.to_id()));
+    assert_eq!(f.key.as_deref(), Some(row.to_id().as_str()));
+    assert!(f.params().get("key").and_then(|k| k.as_str()) == Some(row.to_id().as_str()), "{}", f.params());
+    f.due = "2026-12-01".into();
+    assert_eq!(f.check(), None);
+    a.act(crate::Action::Run("mail.flag", f.params()));
+    let day = quatrelle_engine::model::dates::days_from_civil(2026, 12, 1);
+    let row_m = a.session.list.iter().find(|m| m.key == row).cloned().unwrap();
+    let sel_m = a.session.list.iter().find(|m| m.key == selected).cloned().unwrap();
+    assert!(row_m.flags.flagged && a.session.follow_up_due(&row_m) == Some(day), "the row's message got the due day: {:?}", row_m.flags);
+    assert!(!sel_m.flags.flagged && a.session.follow_up_due(&sel_m).is_none(), "the selected one is untouched: {:?}", sel_m.flags);
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// Follow Up › Custom… refuses a start date after the due date.
+#[test]
+fn the_follow_up_dialog_refuses_a_start_after_the_due() {
+    let (a, dir) = app("follow-up-start-after-due");
+    let mut f = crate::dialogs::FollowUpForm::of(&a.session, true, None);
+    f.start = "2026-12-05".into();
+    f.due = "2026-12-01".into();
+    assert!(f.check().is_some(), "a start after the due is refused: {:?}", f.check());
+    f.start = "2026-12-01".into();
+    assert_eq!(f.check(), None, "the same day is fine");
+    f.start = "2026-11-30".into();
+    assert_eq!(f.check(), None, "before is fine");
     let _ = std::fs::remove_dir_all(dir);
 }

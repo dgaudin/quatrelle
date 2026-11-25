@@ -2485,3 +2485,29 @@ presence	Offline	Offline
 	Maximize	Ingrandisci
 	Use the system title bar	Usa la barra del titolo del sistema
 	Applies when Quatrelle starts again	Si applica al prossimo avvio di Quatrelle
+	Custom Follow Up	Follow-up personalizzato
+	Add Reminder	Aggiungi promemoria
+	Custom…	Personalizzato…
+	Add Reminder…	Aggiungi promemoria…
+	The reminder is a day (YYYY-MM-DD) and a time (HH:MM)	Il promemoria è un giorno (YYYY-MM-DD) e un'ora (HH:MM)
+	`{name}` is a day, YYYY-MM-DD	"{name}" è un giorno, YYYY-MM-DD
+	The start date is after the due date	La data di inizio è successiva alla scadenza
+	Remove from List	Rimuovi dall'elenco
+	Add to Favorites	Aggiungi ai preferiti
+	Open contact	Apri contatto
+	No favorite people yet: right-click a contact or a sender to add one.	Nessuna persona preferita: fai clic con il tasto destro su un contatto o un mittente per aggiungerne una.
+	My Tasks	Le mie attività
+	To-Do List	Elenco attività
+	Read-only: this list is read on the server	Sola lettura: questo elenco viene letto sul server
+	Nothing is kept here: this list is read on the server.	Qui non viene conservato nulla: questo elenco viene letto sul server.
+	Simple List	Elenco semplice
+	Detailed	Dettagliato
+	Active	Attive
+	Next 7 Days	Prossimi 7 giorni
+	Prioritized	Per priorità
+	Arrange By	Disponi per
+	Importance	Importanza
+	Type	Tipo
+	No category	Nessuna categoria
+	Flagged messages	Messaggi contrassegnati
+	In folder	In cartella

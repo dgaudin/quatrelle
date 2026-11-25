@@ -44,6 +44,18 @@ impl Echoes {
             match op {
                 Op::SetFlag { flag, on, all, .. } => flag.apply(&mut m.flags, *on, *all),
                 Op::SetKeyword { keyword, on, name, .. } => m.flags.set_category(keyword, name.as_deref(), *on),
+                Op::SetFollowUp { start, due, reminder, .. } => {
+                    // Only the fields the change names: an unnamed one keeps what it had.
+                    if let Some(c) = start {
+                        m.flags.follow_up.start = c.value().unwrap_or(0);
+                    }
+                    if let Some(c) = due {
+                        m.flags.follow_up.due = c.value().unwrap_or(0);
+                    }
+                    if let Some(c) = reminder {
+                        m.flags.follow_up.reminder = c.value().unwrap_or(0);
+                    }
+                }
                 _ => {}
             }
         }
@@ -98,7 +110,7 @@ impl Session {
             self.echoes.0.remove(&k);
             return Echo::None;
         };
-        if !matches!(op, Op::SetFlag { .. } | Op::SetKeyword { .. }) {
+        if !matches!(op, Op::SetFlag { .. } | Op::SetKeyword { .. } | Op::SetFollowUp { .. }) {
             if q.is_empty() {
                 self.echoes.0.remove(&k);
             }
@@ -116,6 +128,12 @@ impl Session {
         let has = |f: &Flags| match &op {
             Op::SetFlag { flag, on, .. } => flag.get(f) == *on,
             Op::SetKeyword { keyword, on, .. } => f.has(keyword) == *on,
+            Op::SetFollowUp { start, due, reminder, .. } => {
+                // Every field the change names already has its value; unnamed ones don't count.
+                start.is_none_or(|c| f.follow_up.start == c.value().unwrap_or(0))
+                    && due.is_none_or(|c| f.follow_up.due == c.value().unwrap_or(0))
+                    && reminder.is_none_or(|c| f.follow_up.reminder == c.value().unwrap_or(0))
+            }
             _ => true,
         };
         if st.messages.iter().filter(|m| uids.contains(&m.key.uid)).all(|m| has(&m.flags)) {
@@ -127,6 +145,18 @@ impl Session {
             match &op {
                 Op::SetFlag { flag, on, all, .. } => flag.apply(&mut m.flags, *on, *all),
                 Op::SetKeyword { keyword, on, name, .. } => m.flags.set_category(keyword, name.as_deref(), *on),
+                Op::SetFollowUp { start, due, reminder, .. } => {
+                    // Only the fields the change names: an unnamed one keeps what it had.
+                    if let Some(c) = start {
+                        m.flags.follow_up.start = c.value().unwrap_or(0);
+                    }
+                    if let Some(c) = due {
+                        m.flags.follow_up.due = c.value().unwrap_or(0);
+                    }
+                    if let Some(c) = reminder {
+                        m.flags.follow_up.reminder = c.value().unwrap_or(0);
+                    }
+                }
                 _ => {}
             }
         }
@@ -155,6 +185,7 @@ fn same_change(a: &Op, b: &Op) -> bool {
     match (a, b) {
         (Op::SetFlag { flag: x, .. }, Op::SetFlag { flag: y, .. }) => x == y,
         (Op::SetKeyword { keyword: x, .. }, Op::SetKeyword { keyword: y, .. }) => x.eq_ignore_ascii_case(y),
+        (Op::SetFollowUp { .. }, Op::SetFollowUp { .. }) => true,
         _ => false,
     }
 }

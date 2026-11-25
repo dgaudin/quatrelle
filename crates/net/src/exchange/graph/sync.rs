@@ -97,9 +97,11 @@ pub fn sync_folder(c: &Client, st: &mut State, store: &Store, account: &str, fol
             next.seen = f.seen;
             next.flagged = f.flagged;
             next.draft = f.draft;
-            // Graph's one flag status: complete, and when.
+            // Graph's one flag status: complete, and when; its dates too, which Graph keeps
+            // (`message.flag.startDateTime`, `dueDateTime`), and no reminder.
             next.set_keyword(quatrelle_model::FOLLOW_UP_COMPLETE, f.follow_up_complete());
             next.completed = f.completed;
+            next.follow_up = f.follow_up.clone();
             if f.answered || f.forwarded {
                 (next.answered, next.forwarded, next.acted) = (f.answered, f.forwarded, f.acted);
                 next.set_keyword(quatrelle_model::REPLIED_ALL, f.replied_all());
@@ -357,9 +359,10 @@ pub fn apply_remote(c: &Client, st: &State, op: &Op) -> Result<()> {
         c.batch_ok(&reqs)
     };
     match op {
-        Op::SetFlag { keys, .. } | Op::SetKeyword { keys, .. } => match flag_patch(op) {
+        Op::SetFlag { keys, .. } | Op::SetKeyword { keys, .. } | Op::SetFollowUp { keys, .. } => match flag_patch(op) {
             Some(patch) => patch_all(keys, patch),
-            // Answered and forwarded are Exchange's to set; categories stay on this computer.
+            // Answered and forwarded are Exchange's to set; categories stay on this computer;
+            // and a follow-up's reminder has nowhere to go (it stays here).
             None => Ok(()),
         },
         Op::Move { keys, to } => {

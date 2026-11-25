@@ -14,7 +14,8 @@ use quatrelle_model::job::{IMAP_TEXT_FIRST_OVER, Secret, TEXT_FIRST_OVER, Vacati
 use quatrelle_model::search::{Doc, Index, Query, summary_sum, summary_text};
 use quatrelle_model::thread::{Thread, threads};
 use quatrelle_model::{
-    AccountConfig, EmailAddress, Event, Flag, Folder, FolderRole, Job, MessageKey, Op, Summary, SyncStatus, addr, sort_folders, sort_newest_first,
+    AccountConfig, EmailAddress, Event, FieldChange, Flag, Folder, FolderRole, Job, MessageKey, Op, Summary, SyncStatus, addr, sort_folders,
+    sort_newest_first,
 };
 use quatrelle_store::{FolderState, OutboxItem, Store};
 use serde::{Deserialize, Serialize};
@@ -61,7 +62,7 @@ pub use opening::{BodyWork, HELD_SOURCE_MAX, HeldSource, NOT_DOWNLOADED, Prepare
 pub use organize::{RulesScope, junk, quick_steps, search_folders};
 pub use prefs::{
     CtrlEnter, ListLayout, MEETINGS_PROFILE, NotesOrder, PictureLoading, Prefs, READING_ZOOM, RECENT_EMOJI, ReadInPane, ReadingPane, SenderAddresses,
-    WEBEX_ROOM_LINE_MAX, WEBEX_ROOM_LINES_MAX, WEBEX_ROOM_NAME_MAX, WEBEX_ROOMS_MAX, WebexRoom, is_profile_dir,
+    TodoBar, WEBEX_ROOM_LINE_MAX, WEBEX_ROOM_LINES_MAX, WEBEX_ROOM_NAME_MAX, WEBEX_ROOMS_MAX, WebexRoom, is_profile_dir,
 };
 use searching::SearchIndex;
 pub use searching::{IndexWork, SearchClock, SearchScope, ServerSearch};
@@ -138,7 +139,7 @@ const RECOUNT_MAX: u64 = 50_000;
 /// 1.4 KB (its recipients, references and preview): a search of everything or the address book
 /// reads every folder, and at 300,000 a 210,000-message Exchange mailbox stayed in memory whole
 /// (300 MB) for the rest of the day. A folder read again comes from the cache file in milliseconds.
-const CACHE_MESSAGES: usize = 50_000;
+pub(crate) const CACHE_MESSAGES: usize = 50_000;
 
 /// Body words kept for search at most (bytes): enough for the messages a search looks at again.
 const BODY_WORDS_BYTES: usize = 48 << 20;
@@ -345,6 +346,16 @@ pub struct Session {
     pending_marks: BTreeMap<u64, (MessageKey, Flag, bool)>,
     /// Summaries kept cached at most ([`CACHE_MESSAGES`]; tests make it small).
     pub(crate) cache_limit: usize,
+    /// Where the To-Do List's and the reminders' look through the folders kept on disk left
+    /// off: round-robin, a few folders a call ([`pim::tasks::todo::TODO_DISK_SCAN`]).
+    pub(crate) todo_scan: std::sync::atomic::AtomicUsize,
+    /// The folders' lists read from the cache on disk for the To-Do List and the reminders
+    /// (least recently read first, then by folder), so a folder not opened this session is
+    /// seen too, in time: filled a few folders a call, bounded like the cache itself.
+    pub(crate) disk_lists: std::sync::Mutex<(Vec<(String, String)>, HashMap<(String, String), FolderState<Arc<Summary>>>)>,
+    /// Counts every change commands, ops and events make to what the To-Do List and the
+    /// reminders read: the interface rebuilds them only when it changed, not at every image.
+    pub(crate) mail_stamp: u64,
     /// Folders' lists read from the cache on disk, the messages read, and the pages of lists read
     /// alone ([`Session::lists_read`], [`Session::pages_read`]).
     lists_read: (u64, u64, u64),
@@ -572,6 +583,9 @@ impl Session {
             aside_on_disk: HashSet::new(),
             pending_marks: BTreeMap::new(),
             cache_limit: CACHE_MESSAGES,
+            todo_scan: std::sync::atomic::AtomicUsize::new(0),
+            disk_lists: std::sync::Mutex::new((Vec::new(), HashMap::new())),
+            mail_stamp: 0,
             lists_read: (0, 0, 0),
             contacts: Contacts::default(),
             people: mailboxes::People::default(),
@@ -692,9 +706,16 @@ impl Session {
         self.registry.clone()
     }
 
+    /// Counts the changes made to what the To-Do List and the reminders read (commands, ops,
+    /// events): the interface rebuilds them only when this changed, not at every image.
+    pub fn mail_stamp(&self) -> u64 {
+        self.mail_stamp
+    }
+
     /// Run a command by id. Disabled commands fail with [`CmdError::Disabled`]. A panic inside a
     /// command is caught and reported as an error rather than taking the app down.
     pub fn run(&mut self, id: &str, params: &Value) -> CmdResult {
+        self.mail_stamp = self.mail_stamp.wrapping_add(1);
         let reg = self.registry.clone();
         let spec = reg.get(id).ok_or_else(|| CmdError::Unknown(id.to_string()))?;
         // What the command acts on is the message as shown: its body, still being got ready on
@@ -826,4 +847,10 @@ pub fn parse_key(v: &Value) -> Option<MessageKey> {
 /// What a follow-up date is kept under ([`Summary::follow_up_id`]).
 fn follow_up_id(m: &Summary) -> String {
     m.follow_up_id()
+}
+
+/// The key a flagged message's reminder is answered under: by its Message-ID, so moving the
+/// message to another folder doesn't make it ring again.
+pub(crate) fn mail_reminder_key(account: &str, m: &Summary) -> String {
+    format!("{account}|mail|{}", m.follow_up_id())
 }

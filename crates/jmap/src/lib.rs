@@ -510,6 +510,8 @@ pub async fn apply_remote<H: Http>(c: &Client<H>, st: &State, op: &Op) -> Result
             c.set_emails(patch_all(keys, &format!("keywords/{}", keyword.to_ascii_lowercase()), *on), Vec::new()).await
         }
         Op::SetKeyword { .. } => Ok(()),
+        // JMAP has nowhere for a flag's follow-up dates: they stay in the preferences.
+        Op::SetFollowUp { .. } => Ok(()),
         Op::Move { keys, to } => {
             let to_box = st.mailbox(to)?.to_string();
             let mut update = Map::new();

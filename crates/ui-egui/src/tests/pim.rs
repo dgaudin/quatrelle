@@ -150,6 +150,194 @@ fn people_lay_out_as_a_list_cards_or_a_phone_list() {
     let _ = std::fs::remove_dir_all(dir);
 }
 
+/// The To-Do Bar's three parts, stacked in View › To-Do Bar's order: the calendar (as before),
+/// People (a favorite contact, opened by a click) and the To-Do List small (a task, a flagged
+/// message with its follow-up's title, opened by a double click).
+#[test]
+fn the_todo_bar_stacks_the_parts_ticked() {
+    let (mut a, dir) = app("todo-bar-parts");
+    let ctx = egui::Context::default();
+    let size = egui::vec2(1280.0, 800.0);
+    a.run("view.readingPane", json!({"value": "off"}));
+    frame(&ctx, &mut a, vec![]);
+    // Calendar off, People and Tasks on (each remembered).
+    a.run("view.todoBar", json!({"calendar": false, "people": true, "tasks": true}));
+    assert_eq!((a.session.prefs.todo_bar().calendar, a.session.prefs.todo_bar().people, a.session.prefs.todo_bar().tasks), (false, true, true));
+    // A favorite person and a task, then a flagged message named by its follow-up title.
+    a.run("contact.create", json!({"name": "Zoe Martin", "emails": "zoe@studio.example"}));
+    a.run("contact.favorite", json!({"email": "zoe@studio.example"}));
+    a.run("task.create", json!({"subject": "Call the printer"}));
+    // A message of another folder, flagged there and not drawn in the list meanwhile: only the
+    // bar shows it (its subject finds the bar's row, not the list's).
+    a.run("folder.open", json!({"account": "sample", "folder": "Projects/Short film"}));
+    let m = a.session.list.iter().find(|x| x.subject == "Shot list v2").map(|x| (**x).clone()).expect("the sample's shot list");
+    a.run("mail.flag", json!({"key": m.key.to_id(), "due": "today"}));
+    a.run("folder.open", json!({"account": "sample", "folder": "INBOX"}));
+    frame(&ctx, &mut a, vec![]);
+    let zoe = settled_text_at(&ctx, &mut a, "Zoe Martin", size).expect("the favorite person");
+    assert!(settled_text_at(&ctx, &mut a, "Call the printer", size).is_some(), "the task");
+    assert!(settled_text_at(&ctx, &mut a, "Shot list v2", size).is_some(), "the flagged message's row");
+    assert!(settled_text_at(&ctx, &mut a, "Type a new task", size).is_some(), "the box to type one in");
+    // A click opens the contact in People.
+    click_at(&ctx, &mut a, zoe, 1, size);
+    assert_eq!(a.session.module, quatrelle_engine::Module::People);
+    assert!(a.ui.person.is_some(), "the contact picked");
+    // A double click on the flagged message opens it.
+    a.run("view.module", json!({"name": "mail"}));
+    frame(&ctx, &mut a, vec![]);
+    let report = settled_text_at(&ctx, &mut a, "Shot list v2", size).expect("the row again");
+    click_at(&ctx, &mut a, report, 2, size);
+    assert_eq!(a.session.reading.as_ref().map(|r| r.key.clone()), Some(m.key), "opened from the bar");
+    // Off: no part at all.
+    a.run("view.todoBar", json!({"calendar": false, "people": false, "tasks": false}));
+    frame(&ctx, &mut a, vec![]);
+    assert!(settled_text_at(&ctx, &mut a, "Zoe Martin", size).is_none());
+    assert!(settled_text_at(&ctx, &mut a, "Call the printer", size).is_none());
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// The Tasks module's views and arrangements: Current View filters (Overdue, Completed,
+/// Detailed's columns) and Arrange By orders (importance, type), remembered per list.
+#[test]
+fn task_views_filter_and_arrange_in_the_module() {
+    use quatrelle_engine::model::pim::tasks::{TaskArrange, TaskView};
+    let (mut a, dir) = app("task-views-ui");
+    let ctx = egui::Context::default();
+    let size = egui::vec2(1280.0, 800.0);
+    a.run("view.module", json!({"name": "tasks"}));
+    let today = quatrelle_engine::model::dates::today(&a.session.clock);
+    let day = |n| quatrelle_engine::model::dates::day_string(today + n);
+    let make = |a: &mut MailApp, subject: &str, due: &str, importance: &str| {
+        a.run("task.create", json!({"subject": subject, "due": due, "importance": importance, "list": "sample"}));
+    };
+    make(&mut a, "Overdue probe", &day(-2), "normal");
+    make(&mut a, "Future probe", &day(20), "normal");
+    make(&mut a, "High probe", &day(1), "high");
+    a.ui.tasks.list = "sample".into();
+    frame(&ctx, &mut a, vec![]);
+
+    // Overdue: the late one, not the future one.
+    a.run("task.view", json!({"list": "sample", "view": "overdue"}));
+    frame(&ctx, &mut a, vec![]);
+    assert!(settled_text_at(&ctx, &mut a, "Overdue probe", size).is_some(), "the overdue one");
+    assert!(settled_text_at(&ctx, &mut a, "Future probe", size).is_none(), "not the future one");
+    // Completed: the one done, and not the one still to do.
+    let uid = a.session.todo_view("sample", "Overdue probe", false, TaskView::SimpleList, TaskArrange::DueDate)[0].uid();
+    a.run("task.complete", json!({"uid": uid}));
+    a.run("task.view", json!({"list": "sample", "view": "completed"}));
+    frame(&ctx, &mut a, vec![]);
+    assert!(settled_text_at(&ctx, &mut a, "Overdue probe", size).is_some());
+    assert!(settled_text_at(&ctx, &mut a, "Future probe", size).is_none());
+    // Detailed: its columns.
+    a.run("task.view", json!({"list": "sample", "view": "detailed"}));
+    frame(&ctx, &mut a, vec![]);
+    for column in ["Subject", "Status", "Due date", "% Complete", "Categories", "In folder"] {
+        assert!(settled_text_at(&ctx, &mut a, column, size).is_some(), "{column}");
+    }
+    // Arranged by importance: High first.
+    a.run("task.view", json!({"list": "sample", "view": "simple", "arrange": "importance"}));
+    frame(&ctx, &mut a, vec![]);
+    let high = settled_text_at(&ctx, &mut a, "High probe", size).expect("the high one");
+    let normal = settled_text_at(&ctx, &mut a, "Future probe", size).expect("the normal one");
+    assert!(high.y < normal.y, "high above normal: {high:?} {normal:?}");
+    let shapes = frame_shapes(&ctx, &mut a, vec![], size);
+    assert!(shapes.iter().any(|s| matches!(s, egui::Shape::Text(t) if t.galley.text().starts_with("High Importance"))), "its heading");
+    // Arranged by type: the flagged mail under its own heading.
+    let m = (*a.session.list.first().expect("a message")).clone();
+    a.run("mail.flag", json!({"key": m.key.to_id(), "due": "today"}));
+    a.run("task.view", json!({"list": "sample", "view": "simple", "arrange": "type"}));
+    frame(&ctx, &mut a, vec![]);
+    // (The account's own list holds tasks; the To-Do List holds the flagged message.)
+    a.ui.tasks.list = "todo".into();
+    a.ui.tasks.query = m.subject.clone();
+    a.run("task.view", json!({"list": "todo", "view": "simple", "arrange": "type"}));
+    let shapes = frame_shapes(&ctx, &mut a, vec![], size);
+    assert!(
+        shapes.iter().any(|s| matches!(s, egui::Shape::Text(t) if t.galley.text().starts_with("Flagged messages"))),
+        "the flagged mail's heading"
+    );
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// The Tasks module's My Tasks pane: the To-Do List, the account's tasks, and (for an Exchange
+/// account) its read-only online archive; a task typed in a list goes to that list's account.
+#[test]
+fn task_lists_choose_where_a_new_task_goes() {
+    let (mut a, dir) = app("task-lists-ui");
+    let ctx = egui::Context::default();
+    let size = egui::vec2(1280.0, 800.0);
+    a.run("view.module", json!({"name": "tasks"}));
+    frame(&ctx, &mut a, vec![]);
+    assert!(settled_text_at(&ctx, &mut a, "My Tasks", size).is_some(), "the pane's heading");
+    assert!(settled_text_at(&ctx, &mut a, "To-Do List", size).is_some(), "the To-Do List");
+    // The account's own list: a task typed there goes to it.
+    a.ui.tasks.list = "sample".into();
+    frame(&ctx, &mut a, vec![]);
+    a.ui.tasks.focus_new = true;
+    frame(&ctx, &mut a, vec![]);
+    frame(&ctx, &mut a, vec![Event::Text("Call the printer".into())]);
+    frame(&ctx, &mut a, vec![key(Key::Enter, Modifiers::NONE)]);
+    frame(&ctx, &mut a, vec![]);
+    let made = a.session.todo_for("sample", "printer", false);
+    assert_eq!(made.len(), 1, "added in the account's list");
+    assert!(made[0].task().is_some_and(|t| t.account == "sample"));
+    // The read-only archive's list shows nothing to type in, and says why.
+    a.ui.tasks.list = "sample|archive".into();
+    frame(&ctx, &mut a, vec![]);
+    // (The sample account has no archive, so the list isn't one: the pane falls back to nothing.)
+    assert!(a.session.task_list("sample|archive").is_none());
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// Flagged mail in the To-Do List: its row (the subject, its due day and the red flag), a
+/// double click opening it, its tick marking the follow-up complete and its right-click menu
+/// with Follow Up and Remove from List.
+#[test]
+fn flagged_mail_shows_in_the_todo_list_and_opens_there() {
+    let (mut a, dir) = app("todo-ui");
+    let ctx = egui::Context::default();
+    let size = egui::vec2(1280.0, 800.0);
+    frame(&ctx, &mut a, vec![]);
+    let m = (*a.session.list[1]).clone();
+    a.run("list.select", json!({"key": m.key.to_id()}));
+    a.run("mail.flag", json!({"due": "today"}));
+    a.run("view.module", json!({"name": "tasks"}));
+    frame(&ctx, &mut a, vec![]);
+    let row =
+        a.session.todo("", false).into_iter().find(|r| r.mail().is_some_and(|f| f.key == m.key)).expect("the flagged message is in the To-Do List");
+    assert_eq!((row.subject(), row.due()), (m.subject.as_str(), Some(quatrelle_engine::model::dates::today(&a.session.clock))));
+    let at = settled_text_at(&ctx, &mut a, &m.subject, size).expect("the flagged message's row is drawn");
+    // A double click opens it, in the Mail module as the list opens one (not left in Tasks).
+    click_at(&ctx, &mut a, at, 2, size);
+    assert_eq!(a.session.reading.as_ref().map(|r| r.key.clone()), Some(m.key.clone()), "opened from the To-Do List");
+    assert_eq!(a.session.module, quatrelle_engine::Module::Mail, "the double click goes to the Mail module");
+
+    // Its tick (the command the row's tick runs) marks its follow-up complete: out of the
+    // list of what's to do, back with the completed ones.
+    a.run("view.module", json!({"name": "tasks"}));
+    a.act(crate::Action::Run("mail.flag", json!({"key": m.key.to_id(), "complete": true})));
+    assert!(a.session.todo("", false).iter().all(|r| r.uid() != m.key.to_id()), "done: out");
+    a.ui.tasks.completed = true;
+    frame(&ctx, &mut a, vec![]);
+    assert!(settled_text_at(&ctx, &mut a, &m.subject, size).is_some(), "shown with the completed ones");
+
+    // Right-click gives Follow Up and Remove from List; the latter clears the flag.
+    a.run("mail.flag", json!({"key": m.key.to_id(), "on": true})); // flagged again, a fresh flag
+    a.ui.tasks.completed = false;
+    frame(&ctx, &mut a, vec![]);
+    let at = settled_text_at(&ctx, &mut a, &m.subject, size).expect("the flagged row again");
+    frame_sized(&ctx, &mut a, vec![Event::PointerMoved(at)], size);
+    let press = |pressed| Event::PointerButton { pos: at, button: egui::PointerButton::Secondary, pressed, modifiers: Modifiers::NONE };
+    frame_sized(&ctx, &mut a, vec![press(true)], size);
+    frame_sized(&ctx, &mut a, vec![press(false)], size);
+    let shapes = frame_shapes(&ctx, &mut a, vec![], size);
+    assert!(text_at(&shapes, "Remove from List").is_some(), "the row's menu");
+    assert!(text_at(&shapes, "Follow up").is_some());
+    a.act(crate::Action::Run("mail.flag", json!({"key": m.key.to_id(), "on": false})));
+    assert!(a.session.todo("", true).iter().all(|r| r.uid() != m.key.to_id()), "removed from the list");
+    let _ = std::fs::remove_dir_all(dir);
+}
+
 /// Tasks: Ctrl+4 opens them; a task typed in the box at the top is added with Enter; the one
 /// picked shows its form beside the list; ticked, it goes (and comes back with the completed
 /// ones); its reminder's Open Item shows it.
@@ -778,5 +966,30 @@ fn a_calendar_file_opened_asks_before_it_adds() {
     a.act(crate::Action::AddFile(handed));
     let added = a.session.find_event("harvest@farm.example").expect("added once agreed to").1.event.clone();
     assert!(added.attendees.is_empty(), "and nobody is invited");
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// The two fixed My Tasks list names (the To-Do List, the Online Archive) go through the
+/// catalogs at display; the engine keeps them plain. In pseudo mode every translated string is
+/// marked, so the marked forms are what the pane draws.
+#[test]
+fn the_task_lists_fixed_names_go_through_the_catalogs() {
+    let (mut a, dir) = app("task-list-i18n");
+    let ctx = egui::Context::default();
+    let size = egui::vec2(1280.0, 800.0);
+    a.session.accounts[0].folders.push(quatrelle_engine::model::Folder {
+        account: "sample".into(),
+        path: "Archiv".into(),
+        archive: true,
+        selectable: true,
+        ..Default::default()
+    });
+    a.run("view.module", json!({"name": "tasks"}));
+    crate::i18n::pseudo::set(true);
+    frame(&ctx, &mut a, vec![]);
+    let shapes = frame_shapes(&ctx, &mut a, vec![], size);
+    crate::i18n::pseudo::set(false);
+    assert!(text_at(&shapes, crate::i18n::pseudo::mark("To-Do List")).is_some(), "the To-Do List's name goes through the catalogs");
+    assert!(text_at(&shapes, crate::i18n::pseudo::mark("Online Archive")).is_some(), "the online archive's name too");
     let _ = std::fs::remove_dir_all(dir);
 }

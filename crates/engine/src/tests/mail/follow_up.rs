@@ -4,7 +4,7 @@
 //! Engine tests: a follow-up marked complete (Mark Complete) stays so, with the day it was done,
 //! until it's flagged again or cleared; Undo puts back what it changed, the days too.
 
-use quatrelle_model::FOLLOW_UP_COMPLETE;
+use quatrelle_model::{FOLLOW_UP_COMPLETE, FieldChange};
 
 use super::*;
 
@@ -149,6 +149,151 @@ fn a_flag_set_again_elsewhere_wins_over_a_stale_complete_mark() {
     done(s);
 }
 
+/// Follow Up › Custom… sets a start day, a due day and a reminder; the reminder rings in the
+/// reminders list with the message to open, and is dismissed or snoozed as an appointment's.
+#[test]
+fn a_flag_s_reminder_rings_and_is_dismissed_or_snoozed() {
+    let mut s = sample_session("follow-up-reminder");
+    let k = key_of(&s, "Character turnarounds");
+    let day = quatrelle_model::dates::days_from_civil(2026, 12, 1);
+    let start = quatrelle_model::dates::days_from_civil(2026, 11, 20);
+    let now = s.clock.now;
+    s.run("list.select", &k).unwrap();
+    let r = s.run("mail.flag", &json!({"start": "2026-11-20", "due": "2026-12-01", "reminder": now - 60})).unwrap();
+    assert_eq!(r["flagged"], true);
+    let m = turnaround(&s);
+    assert!(m.flags.flagged, "{:?}", m.flags);
+    assert_eq!((s.follow_up_start(&m), s.follow_up_due(&m), s.follow_up_reminder(&m)), (Some(start), Some(day), Some(now - 60)));
+
+    // Due: listed with the message to open.
+    let due = s.due_reminders(now).into_iter().find(|r| r.message.as_ref() == Some(&m.key)).expect("the flag's reminder is due");
+    assert_eq!(due.summary, m.subject);
+    assert!(!due.task);
+    s.run("reminders.dismiss", &json!({"key": due.key})).unwrap();
+    assert!(s.due_reminders(now).iter().all(|r| r.message.as_ref() != Some(&m.key)), "dismissed");
+
+    // Set again: it rings again (a dismissal doesn't outlive a new reminder), and a snooze
+    // waits.
+    s.run("mail.flag", &json!({"reminder": now - 30})).unwrap();
+    let due = s.due_reminders(now).into_iter().find(|r| r.message.as_ref() == Some(&m.key)).expect("set anew, due again");
+    s.run("reminders.snooze", &json!({"key": due.key, "minutes": 5})).unwrap();
+    assert!(s.due_reminders(now).iter().all(|r| r.message.as_ref() != Some(&m.key)), "snoozed");
+    assert!(s.due_reminders(now + 301).iter().any(|r| r.message.as_ref() == Some(&m.key)), "back after the snooze");
+
+    // Add Reminder… takes it off (`false`), and the flag stays.
+    s.run("mail.flag", &json!({"reminder": false})).unwrap();
+    let m = turnaround(&s);
+    assert_eq!(s.follow_up_reminder(&m), None);
+    assert!(m.flags.flagged);
+    done(s);
+}
+
+/// What Exchange keeps wins over what's kept here: its start, due day and reminder are the
+/// follow-up's, the preferences only the fallback for what it doesn't have. The server's dates
+/// are the day's floating midnight (`day * 86_400`, as `PidLidTask*Date` holds it), read as a
+/// UTC day: west of UTC, reading one in the local zone would name the day before.
+#[test]
+fn the_server_s_follow_up_dates_win_over_the_preferences() {
+    let mut s = sample_session("follow-up-server-wins");
+    // A clock west of UTC (New York), where the local-zone read of a floating midnight shifts.
+    s.clock = quatrelle_model::dates::Clock::new(NOW, -5 * 3600).in_zone(Some(quatrelle_model::zone::Zone::Fixed(-5 * 3600)));
+    let mut m = turnaround(&s);
+    let id = id(&m);
+    let day = |y, mo, d| quatrelle_model::dates::days_from_civil(y, mo, d);
+    m.flags.flagged = true;
+    m.flags.follow_up.start = day(2026, 11, 30).saturating_mul(86_400);
+    m.flags.follow_up.due = day(2026, 12, 3).saturating_mul(86_400);
+    m.flags.follow_up.reminder = s.clock.now + 3600;
+    s.prefs.follow_up_start.insert(id.clone(), day(2020, 1, 1));
+    s.prefs.follow_up.insert(id.clone(), day(2020, 1, 2));
+    s.prefs.follow_up_reminder.insert(id, s.clock.now + 60);
+    assert_eq!(s.follow_up_start(&m), Some(day(2026, 11, 30)));
+    assert_eq!(s.follow_up_due(&m), Some(day(2026, 12, 3)));
+    assert_eq!(s.follow_up_reminder(&m), Some(s.clock.now + 3600));
+    assert_eq!(m.flags.follow_up.due, day(2026, 12, 3) * 86_400, "the day's floating midnight, not a local one");
+    done(s);
+}
+
+/// A day a follow-up is due goes to the server as the day's floating midnight (`day * 86_400`),
+/// the convention Exchange's `PidLidTask*Date` holds ([MS-OXOTASK] 2.2.2.2.4): a local midnight
+/// written there shows the day before in Outlook (in France, 22/11 leaves as the 21st).
+#[test]
+fn a_follow_up_day_goes_to_exchange_as_its_floating_midnight() {
+    let mut s = sample_session("follow-up-floating");
+    // A clock east of UTC (Paris), where a local midnight is not the floating one.
+    s.clock = quatrelle_model::dates::Clock::new(NOW, 3600).in_zone(Some(quatrelle_model::zone::Zone::Fixed(3600)));
+    let account = s
+        .run("account.add", &json!({"email": "riley@contoso.example", "password": "pw", "ews": "https://ews.contoso.example/EWS/Exchange.asmx"}))
+        .unwrap()["account"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    s.take_jobs();
+    let mut m = turnaround(&s);
+    m.key.account = account.clone();
+    let day = quatrelle_model::dates::days_from_civil(2026, 12, 1);
+    s.follow_up_for(&[std::sync::Arc::new(m)], Some(day)).unwrap();
+    let due = s
+        .take_jobs()
+        .iter()
+        .find_map(|j| match j {
+            Job::Apply { op: Op::SetFollowUp { due, .. }, .. } => Some(*due),
+            _ => None,
+        })
+        .expect("the follow-up change went to the server");
+    assert_eq!(due, Some(FieldChange::Set(day.saturating_mul(86_400))), "the floating midnight, not the local one ({})", s.clock.midnight(day));
+    done(s);
+}
+
+/// Clear Flag on a message whose server keeps its follow-up (Exchange, Graph) takes the dates
+/// and the reminder off there too, as Outlook's does — a SetFollowUp of its own, so Mark
+/// Complete (which takes the flag off without it) keeps them; Undo puts them back.
+#[test]
+fn clear_flag_takes_the_follow_up_off_the_server_too() {
+    let mut s = sample_session("clear-flag-server");
+    let account = s
+        .run("account.add", &json!({"email": "riley@contoso.example", "password": "pw", "ews": "https://ews.contoso.example/EWS/Exchange.asmx"}))
+        .unwrap()["account"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    s.take_jobs();
+    let mut m = turnaround(&s);
+    m.key.account = account.clone();
+    m.flags.flagged = true;
+    m.flags.follow_up.start = 20_000 * 86_400;
+    m.flags.follow_up.due = 20_010 * 86_400;
+    m.flags.follow_up.reminder = s.clock.now + 3600;
+    let m = std::sync::Arc::new(m);
+    // The message as the account's cache has it (`mail.flag`'s `key` reads the cache).
+    s.cache.entry((account.clone(), m.key.folder.clone())).or_default().messages.push(m.clone());
+    s.run("mail.flag", &json!({"key": m.key.to_id(), "on": false})).unwrap();
+    let jobs = s.take_jobs();
+    let cleared = jobs.iter().any(|j| {
+        matches!(
+            j,
+            Job::Apply {
+                op: Op::SetFollowUp { start: Some(FieldChange::Clear), due: Some(FieldChange::Clear), reminder: Some(FieldChange::Clear), .. },
+                ..
+            }
+        )
+    });
+    assert!(cleared, "a SetFollowUp taking all three off went to the server: {jobs:?}");
+    // Undo puts the server's dates and reminder back.
+    s.run("edit.undo", &json!({})).unwrap();
+    let jobs = s.take_jobs();
+    let now = s.clock.now;
+    let restored = jobs.iter().any(|j| match j {
+        Job::Apply {
+            op: Op::SetFollowUp { start: Some(FieldChange::Set(a)), due: Some(FieldChange::Set(b)), reminder: Some(FieldChange::Set(c)), .. },
+            ..
+        } => *a == 20_000 * 86_400 && *b == 20_010 * 86_400 && *c == now + 3600,
+        _ => false,
+    });
+    assert!(restored, "the Undo's SetFollowUp puts the dates back: {jobs:?}");
+    done(s);
+}
+
 /// The days kept in the preferences come from disk: what isn't a day (out of range, as a
 /// damaged or hostile file has it, a key too long or empty) is left out as they're read, so
 /// the reading pane never labels it.
@@ -162,4 +307,176 @@ fn the_preferences_days_read_from_disk_are_days() {
     let p: crate::Prefs = serde_json::from_value(read).unwrap();
     assert_eq!(p.follow_up, std::collections::BTreeMap::from([("due@x".to_string(), 20_400)]));
     assert_eq!(p.follow_up_done, std::collections::BTreeMap::from([("done@x".to_string(), 20_390)]));
+}
+
+/// A partial follow-up change names only its fields: Follow Up › Tomorrow on a message whose
+/// server already has a start and a reminder sends only the due day, leaving the other two as
+/// the server has them (a change that rewrote all three from the cache would erase them when
+/// the cache didn't know them).
+#[test]
+fn a_partial_follow_up_change_names_only_its_fields() {
+    let mut s = sample_session("partial-follow-up");
+    let account = s
+        .run("account.add", &json!({"email": "riley@contoso.example", "password": "pw", "ews": "https://ews.contoso.example/EWS/Exchange.asmx"}))
+        .unwrap()["account"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    s.take_jobs();
+    let mut m = turnaround(&s);
+    m.key.account = account.clone();
+    m.flags.flagged = true;
+    // As Outlook followed it: the server has all three (the cache read them).
+    m.flags.follow_up.start = 20_000 * 86_400;
+    m.flags.follow_up.due = 20_010 * 86_400;
+    m.flags.follow_up.reminder = s.clock.now + 3600;
+    let m = std::sync::Arc::new(m);
+    s.cache.entry((account.clone(), m.key.folder.clone())).or_default().messages.push(m.clone());
+    let day = quatrelle_model::dates::days_from_civil(2026, 12, 1);
+    s.run("mail.flag", &json!({"key": m.key.to_id(), "due": "2026-12-01"})).unwrap();
+    let op = s
+        .take_jobs()
+        .iter()
+        .find_map(|j| match j {
+            Job::Apply { op: Op::SetFollowUp { start, due, reminder, .. }, .. } => Some((*start, *due, *reminder)),
+            _ => None,
+        })
+        .expect("the follow-up change went to the server");
+    assert_eq!(op.0, None, "start unnamed: left as the server has it");
+    assert_eq!(op.1, Some(FieldChange::Set(day.saturating_mul(86_400))), "due named");
+    assert_eq!(op.2, None, "reminder unnamed: left as the server has it");
+    done(s);
+}
+
+/// Flagging a selection that includes an already-followed message writes the flag only on the
+/// others: the followed one keeps the text and icon Outlook gave its flag ([MS-OXOFLAG]
+/// 3.1.4.1.3 — `PidLidFlagRequest` is set only if it doesn't already exist), not "Follow up"
+/// and the plain red flag again.
+#[test]
+fn flagging_a_selection_leaves_an_already_flagged_message_s_flag_alone() {
+    let mut s = sample_session("flag-selection");
+    let account = s
+        .run("account.add", &json!({"email": "riley@contoso.example", "password": "pw", "ews": "https://ews.contoso.example/EWS/Exchange.asmx"}))
+        .unwrap()["account"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    s.take_jobs();
+    let followed = {
+        let mut m = turnaround(&s);
+        m.key.account = account.clone();
+        m.flags.flagged = true;
+        m.flags.follow_up.title = "Review".into();
+        std::sync::Arc::new(m)
+    };
+    let fresh = {
+        let mut m = turnaround(&s);
+        m.key.account = account.clone();
+        m.key.uid += 1;
+        m.subject = "Fresh".into();
+        std::sync::Arc::new(m)
+    };
+    s.set_flagged(&[followed.clone(), fresh.clone()], true);
+    let jobs = s.take_jobs();
+    let flagged_keys: Vec<u32> = jobs
+        .iter()
+        .filter_map(|j| match j {
+            Job::Apply { op: Op::SetFlag { keys, flag: Flag::Flagged, on: true, .. }, .. } => Some(keys.iter().map(|k| k.uid).collect::<Vec<_>>()),
+            _ => None,
+        })
+        .flatten()
+        .collect();
+    assert_eq!(flagged_keys, vec![fresh.key.uid], "only the message whose flag changed got the write: {jobs:?}");
+    done(s);
+}
+
+/// Reminder times and answers kept on this computer come back from disk as the Unix times they
+/// are: read with a day count, every one of them (billions of seconds) would be refused and the
+/// reminders lost at each start. They go back as they were.
+#[test]
+fn reminder_times_kept_on_this_computer_read_back_from_disk() {
+    let at = 1_791_979_140; // 2026-11-25T09:19:00Z
+    let read = json!({
+        "followUpReminder": {"ring@x": at, "far@x": i64::MAX, "early@x": -1, "": at},
+        "reminders": {"a1|mail|k1": 0, "a1|t1|1700000000": at, "a1|t1|bad": i64::MAX},
+    });
+    let p: crate::Prefs = serde_json::from_value(read).unwrap();
+    assert_eq!(p.follow_up_reminder, std::collections::BTreeMap::from([("ring@x".to_string(), at)]));
+    assert_eq!(p.reminders, std::collections::BTreeMap::from([("a1|mail|k1".to_string(), 0), ("a1|t1|1700000000".to_string(), at)]));
+    // And they are saved as they were read.
+    let saved = serde_json::to_value(&p).unwrap();
+    assert_eq!(saved["followUpReminder"]["ring@x"], json!(at));
+    assert_eq!(saved["reminders"]["a1|t1|1700000000"], json!(at));
+}
+
+/// A reminder's answer stays unless the reminder itself changes (moving the due day keeps a
+/// dismissal, naming the same time keeps it); a changed reminder rings again. The answer is
+/// under the message's Message-ID, so moving the message to another folder doesn't ring it
+/// again. A deleted message's, the Junk's and the Trash's reminders don't ring.
+#[test]
+fn a_reminder_answer_stays_unless_the_reminder_changes() {
+    let mut s = sample_session("reminder-answer-kept");
+    let k = key_of(&s, "Character turnarounds");
+    let now = s.clock.now;
+    s.run("list.select", &k).unwrap();
+    s.run("mail.flag", &json!({"due": "2026-12-01", "reminder": now - 60})).unwrap();
+    let m = turnaround(&s);
+    let id = m.message_id.clone();
+    let due = s.due_reminders(now).into_iter().find(|r| r.message.as_ref() == Some(&m.key)).expect("the flag's reminder is due");
+    s.run("reminders.dismiss", &json!({"key": due.key})).unwrap();
+    assert!(s.due_reminders(now).iter().all(|r| r.message.as_ref() != Some(&m.key)), "dismissed");
+
+    // The due day moves, the reminder isn't named: the dismissal stays.
+    s.run("mail.flag", &json!({"due": "2026-12-04"})).unwrap();
+    assert!(s.due_reminders(now).iter().all(|r| r.uid != id), "still dismissed: the reminder didn't change");
+    // The same time named again: still dismissed.
+    s.run("mail.flag", &json!({"reminder": now - 60})).unwrap();
+    assert!(s.due_reminders(now).iter().all(|r| r.uid != id), "the same reminder keeps its answer");
+    // Another time: it rings again.
+    s.run("mail.flag", &json!({"reminder": now - 30})).unwrap();
+    let due = s.due_reminders(now).into_iter().find(|r| r.uid == id).expect("a changed reminder rings again");
+    s.run("reminders.snooze", &json!({"key": due.key, "minutes": 5})).unwrap();
+    assert!(s.due_reminders(now).iter().all(|r| r.uid != id), "snoozed");
+
+    // Moved to another folder: still snoozed (the answer is under the Message-ID).
+    s.run("list.select", &key_of(&s, "Character turnarounds")).unwrap();
+    s.run("mail.move", &json!({"folder": "Projects/Short film"})).unwrap();
+    assert!(s.due_reminders(now).iter().all(|r| r.uid != id), "moved: still snoozed");
+    assert!(s.due_reminders(now + 301).iter().any(|r| r.uid == id), "back after the snooze, wherever the message is");
+
+    // The Junk's and the Trash's reminders don't ring.
+    let kj = key_of(&s, "Sound mix, version 3");
+    let idj = s.list.iter().find(|m| m.subject == "Sound mix, version 3").map(|m| m.message_id.clone()).unwrap_or_default();
+    s.run("list.select", &kj).unwrap();
+    s.run("mail.flag", &json!({"reminder": now - 10})).unwrap();
+    assert!(s.due_reminders(now).iter().any(|r| r.uid == idj), "flagged in the Inbox: rings");
+    s.run("mail.move", &json!({"folder": "Junk"})).unwrap();
+    assert!(s.due_reminders(now).iter().all(|r| r.uid != idj), "the Junk's reminder doesn't ring");
+    s.run("folder.open", &json!({"account": "sample", "folder": "Junk"})).unwrap();
+    s.run("list.select", &key_of(&s, "Sound mix, version 3")).unwrap();
+    s.run("mail.move", &json!({"folder": "Trash"})).unwrap();
+    assert!(s.due_reminders(now).iter().all(|r| r.uid != idj), "the Trash's reminder doesn't ring");
+
+    // A deleted message's reminder doesn't ring either.
+    s.run("folder.open", &json!({"account": "sample", "folder": "INBOX"})).unwrap();
+    let idd = s.list.iter().find(|m| m.subject == "Open call: winter group show").map(|m| m.message_id.clone()).unwrap_or_default();
+    s.run("list.select", &key_of(&s, "Open call: winter group show")).unwrap();
+    s.run("mail.flag", &json!({"reminder": now - 10})).unwrap();
+    assert!(s.due_reminders(now).iter().any(|r| r.uid == idd), "flagged: rings");
+    let key = s.list.iter().find(|m| m.subject == "Open call: winter group show").map(|m| m.key.clone()).unwrap_or_default();
+    s.apply_op("sample", Op::SetFlag { keys: vec![key], flag: Flag::Deleted, on: true, all: false });
+    assert!(s.due_reminders(now).iter().all(|r| r.uid != idd), "deleted: doesn't ring");
+    done(s);
+}
+
+/// mail.flag needs a message: with neither a key nor a selection it's disabled, as its
+/// neighbours in Home › Tags; from the To-Do List, the key alone works.
+#[test]
+fn mail_flag_needs_a_message() {
+    let mut s = sample_session("flag-needs-a-message");
+    assert!(matches!(s.run("mail.flag", &json!({"due": "today"})), Err(CmdError::Disabled(_))), "no selection: disabled, whatever the params");
+    let k = key_of(&s, "Character turnarounds");
+    s.run("mail.flag", &json!({"key": k["key"], "due": "today"})).unwrap();
+    assert!(turnaround(&s).flags.flagged, "by key, without a selection: works");
+    done(s);
 }

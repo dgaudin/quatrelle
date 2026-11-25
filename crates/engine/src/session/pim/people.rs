@@ -50,6 +50,36 @@ impl Session {
         found.map(|(a, c)| Person { account: a.clone(), book: c.book.clone(), card: c.card.clone() })
     }
 
+    /// Whether this address is one of the To-Do bar's favorite people.
+    pub fn is_favorite_person(&self, email: &str) -> bool {
+        let email = email.trim();
+        self.prefs.favorite_people.iter().any(|e| e.eq_ignore_ascii_case(email))
+    }
+
+    /// Add a person to the To-Do bar's People part, or take them off (`on`: whether to add; the
+    /// opposite of how they stand when not given). Kept on this computer, as Outlook keeps its
+    /// favorite people.
+    pub fn favorite_person(&mut self, email: &str, on: Option<bool>) -> CmdResult {
+        let email = email.trim();
+        if email.is_empty() || !email.contains('@') {
+            return Err(CmdError::Params("`email` is an address".into()));
+        }
+        let present = self.prefs.favorite_people.iter().position(|e| e.eq_ignore_ascii_case(email));
+        let on = on.unwrap_or(present.is_none());
+        if on {
+            if present.is_none() {
+                // Bounded as every list from outside is: a preferences file isn't trusted.
+                if self.prefs.favorite_people.len() >= 200 {
+                    self.prefs.favorite_people.remove(0);
+                }
+                self.prefs.favorite_people.push(email.to_string());
+            }
+        } else if let Some(at) = present {
+            self.prefs.favorite_people.remove(at);
+        }
+        Ok(serde_json::json!({"email": email, "on": on, "count": self.prefs.favorite_people.len()}))
+    }
+
     pub fn find_person(&self, uid: &str) -> Option<Person> {
         self.pim.iter().find_map(|(a, p)| {
             p.cards.iter().find(|c| c.card.uid == uid).map(|c| Person { account: a.clone(), book: c.book.clone(), card: c.card.clone() })

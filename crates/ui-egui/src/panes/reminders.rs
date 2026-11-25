@@ -61,6 +61,8 @@ fn signature(s: &Session) -> u64 {
     for p in s.pim.values() {
         mix(p.events.len() as u64);
     }
+    // A flagged message's reminder comes from the mail, not the calendar.
+    mix(s.mail_stamp());
     h
 }
 
@@ -197,7 +199,14 @@ fn body(ui: &mut Ui, st: &mut State, s: &Session, t: &Tokens, acts: &mut Vec<Act
                 if widgets::accent_button(ui, crate::icons::Icon::Close, "Dismiss", t, true).clicked() {
                     acts.push(Action::Run("reminders.dismiss", json!({ "key": r.key })));
                 }
-                if r.task {
+                if r.message.is_some() {
+                    if ui.button(tl!("Open Item")).clicked() {
+                        if let Some(k) = &r.message {
+                            acts.push(Action::Open(k.clone()));
+                        }
+                        acts.push(Action::FocusMain);
+                    }
+                } else if r.task {
                     if ui.button(tl!("Open Item")).clicked() {
                         acts.push(Action::OpenTask(r.uid.clone()));
                         acts.push(Action::FocusMain);

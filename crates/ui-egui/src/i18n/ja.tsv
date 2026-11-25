@@ -2483,3 +2483,29 @@ presence	Offline	オフライン
 	Maximize	最大化
 	Use the system title bar	システムのタイトルバーを使う
 	Applies when Quatrelle starts again	次回 Quatrelle を起動したときに反映されます
+	Custom Follow Up	カスタム フォローアップ
+	Add Reminder	リマインダーの追加
+	Custom…	カスタム…
+	Add Reminder…	リマインダーの追加…
+	The reminder is a day (YYYY-MM-DD) and a time (HH:MM)	リマインダーは日付 (YYYY-MM-DD) と時刻 (HH:MM) です
+	`{name}` is a day, YYYY-MM-DD	「{name}」は日付です (YYYY-MM-DD)
+	The start date is after the due date	開始日が期限日より後になっています
+	Remove from List	一覧から削除
+	Add to Favorites	お気に入りに追加
+	Open contact	連絡先を開く
+	No favorite people yet: right-click a contact or a sender to add one.	お気に入りの人物はまだいません。連絡先または送信者を右クリックして追加してください。
+	My Tasks	自分のタスク
+	To-Do List	To Do リスト
+	Read-only: this list is read on the server	読み取り専用: この一覧はサーバーから読み取ります
+	Nothing is kept here: this list is read on the server.	ここには何も保存されません: この一覧はサーバーから読み取ります。
+	Simple List	簡易一覧
+	Detailed	詳細
+	Active	アクティブ
+	Next 7 Days	今後 7 日間
+	Prioritized	優先順位
+	Arrange By	並べ替え
+	Importance	重要度
+	Type	種類
+	No category	カテゴリなし
+	Flagged messages	フラグ付きメッセージ
+	In folder	フォルダー内

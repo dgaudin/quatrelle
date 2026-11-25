@@ -2482,3 +2482,29 @@ presence	Offline	לא מחובר
 	Maximize	הגדלה
 	Use the system title bar	שימוש בשורת הכותרת של המערכת
 	Applies when Quatrelle starts again	יחול בהפעלה הבאה של Quatrelle
+	Custom Follow Up	מעקב מותאם אישית
+	Add Reminder	הוספת תזכורת
+	Custom…	מותאם אישית…
+	Add Reminder…	הוספת תזכורת…
+	The reminder is a day (YYYY-MM-DD) and a time (HH:MM)	התזכורת היא יום (YYYY-MM-DD) ושעה (HH:MM)
+	`{name}` is a day, YYYY-MM-DD	"{name}" הוא יום, YYYY-MM-DD
+	The start date is after the due date	תאריך ההתחלה הוא אחרי תאריך היעד
+	Remove from List	הסרה מהרשימה
+	Add to Favorites	הוספה למועדפים
+	Open contact	פתיחת איש קשר
+	No favorite people yet: right-click a contact or a sender to add one.	אין עדיין אנשים מועדפים: לחצו עם מקש ימני על איש קשר או שולח כדי להוסיף.
+	My Tasks	המשימות שלי
+	To-Do List	רשימת המשימות
+	Read-only: this list is read on the server	לקריאה בלבד: הרשימה נקראת בשרת
+	Nothing is kept here: this list is read on the server.	שום דבר לא נשמר כאן: הרשימה נקראת בשרת.
+	Simple List	רשימה פשוטה
+	Detailed	מפורט
+	Active	פעיל
+	Next 7 Days	7 הימים הבאים
+	Prioritized	לפי עדיפות
+	Arrange By	סידור לפי
+	Importance	חשיבות
+	Type	סוג
+	No category	ללא קטגוריה
+	Flagged messages	הודעות מסומנות
+	In folder	בתיקייה

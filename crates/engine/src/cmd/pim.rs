@@ -301,6 +301,10 @@ pub(super) fn commands() -> Vec<CommandSpec> {
             s.delete_card(&uid)
         })
         .params(r#"{"uid": string}"#),
+        CommandSpec::new("contact.favorite", "Add to Favorites", "People › Contact", |s, v| {
+            s.favorite_person(p::req_str(v, "email")?, p::bool(v, "on"))
+        })
+        .params(r#"{"email": string, "on"?: bool (else the opposite of how they stand)}"#),
         CommandSpec::new("contact.photo", "Contact picture", "People › Contact", |s, v| {
             s.fetch_person_photo(p::str(v, "account"), p::str(v, "email").unwrap_or_default())
         })

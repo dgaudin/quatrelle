@@ -2489,3 +2489,29 @@ presence	Offline	離線
 	Maximize	最大化
 	Use the system title bar	使用系統標題列
 	Applies when Quatrelle starts again	於 Quatrelle 下次啟動時生效
+	Custom Follow Up	自訂後續旗標
+	Add Reminder	新增提醒
+	Custom…	自訂…
+	Add Reminder…	新增提醒…
+	The reminder is a day (YYYY-MM-DD) and a time (HH:MM)	提醒是一個日期 (YYYY-MM-DD) 和時間 (HH:MM)
+	`{name}` is a day, YYYY-MM-DD	「{name}」是一個日期，YYYY-MM-DD
+	The start date is after the due date	開始日期晚於到期日期
+	Remove from List	從清單中移除
+	Add to Favorites	加到我的最愛
+	Open contact	開啟連絡人
+	No favorite people yet: right-click a contact or a sender to add one.	尚無我的最愛人員：在連絡人或寄件者上按右鍵以新增。
+	My Tasks	我的工作
+	To-Do List	待辦事項清單
+	Read-only: this list is read on the server	唯讀：此清單在伺服器上讀取
+	Nothing is kept here: this list is read on the server.	此處不保留任何內容：此清單在伺服器上讀取。
+	Simple List	簡易清單
+	Detailed	詳細資料
+	Active	作用中
+	Next 7 Days	未來 7 天
+	Prioritized	依優先順序
+	Arrange By	排列依據
+	Importance	重要性
+	Type	類型
+	No category	無類別
+	Flagged messages	已加上旗標的郵件
+	In folder	所在資料夾

@@ -39,6 +39,52 @@ pub enum CtrlEnter {
     Nothing,
 }
 
+/// What the To-Do bar beside the mail holds: the calendar, People and Tasks, each on or off
+/// (`View › To-Do Bar`). `{"on": true}` from before it had parts reads as the calendar alone.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TodoBar {
+    pub calendar: bool,
+    pub people: bool,
+    pub tasks: bool,
+}
+
+impl Default for TodoBar {
+    fn default() -> Self {
+        TodoBar { calendar: true, people: false, tasks: false }
+    }
+}
+
+impl TodoBar {
+    /// Any part shown.
+    pub fn any(&self) -> bool {
+        self.calendar || self.people || self.tasks
+    }
+}
+
+impl<'de> Deserialize<'de> for TodoBar {
+    fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        #[derive(Deserialize)]
+        #[serde(untagged)]
+        enum Raw {
+            /// `true`: the calendar, as the bar was before it had parts; `false`: off.
+            On(bool),
+            Parts {
+                #[serde(default)]
+                calendar: bool,
+                #[serde(default)]
+                people: bool,
+                #[serde(default)]
+                tasks: bool,
+            },
+        }
+        Ok(match Raw::deserialize(d)? {
+            Raw::On(on) => TodoBar { calendar: on, people: false, tasks: false },
+            Raw::Parts { calendar, people, tasks } => TodoBar { calendar, people, tasks },
+        })
+    }
+}
+
 /// Settings the user changes from the View tab (saved by the app).
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
@@ -77,6 +123,16 @@ pub struct Prefs {
     /// `all` (everyone written to or heard from, and contacts), `people` (every contact), or
     /// one address book (`book:<account>:<book id>`).
     pub address_book: String,
+    /// The Tasks module's view and arrangement, by My Tasks list (Outlook remembers them per
+    /// list).
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub task_views: BTreeMap<String, quatrelle_model::pim::tasks::TaskView>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub task_arranges: BTreeMap<String, quatrelle_model::pim::tasks::TaskArrange>,
+    /// The people in the To-Do bar's People part (Outlook's favorite people): their addresses,
+    /// in the order shown. Kept on this computer (the contacts themselves are in the books).
+    #[serde(default, skip_serializing_if = "Vec::is_empty", deserialize_with = "checked_people")]
+    pub favorite_people: Vec<String>,
     /// Mail received in the last this many days kept on this computer, whole (0: all of it), as
     /// Outlook's "Mail to keep offline" in Cached Exchange Mode; older mail is read on the server.
     pub keep_days: u32,
@@ -88,8 +144,15 @@ pub struct Prefs {
     pub compact: bool,
     /// Cards, a table, or whichever suits where the reading pane is.
     pub list_layout: ListLayout,
-    /// The month and the coming appointments beside the mail (Outlook's To-Do bar).
+    /// Whether the To-Do bar beside the mail shows at all, as the version before it had parts
+    /// kept it — a bool, so an older Quatrelle reads what this one saved: any part on. (As a
+    /// version with parts wrote it, the object, reads as any part on.)
+    #[serde(default = "yes", deserialize_with = "bar_on")]
     pub todo_bar: bool,
+    /// The To-Do bar's parts (`View › To-Do Bar`), each remembered even while the bar is off, so
+    /// switching it back on restores them. None until set: the bool alone, as before.
+    #[serde(default, rename = "todoBarParts", skip_serializing_if = "Option::is_none")]
+    pub todo_bar_parts: Option<TodoBar>,
     /// Ask before deleting permanently.
     pub confirm_permanent_delete: bool,
     /// Desktop notifications for new mail in an Inbox.
@@ -163,9 +226,18 @@ pub struct Prefs {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub pane_order: Vec<String>,
     /// When flagged messages are due (Follow Up › Today, Tomorrow…): Message-ID → local day.
-    /// IMAP has nowhere for it, so it's kept here, as Outlook keeps it for IMAP accounts.
+    /// IMAP has nowhere for it, so it's kept here, as Outlook keeps it for IMAP accounts; a
+    /// server that keeps it (Exchange, Graph) wins over it (`Session::follow_up_due`).
     #[serde(default, deserialize_with = "checked_days")]
     pub follow_up: BTreeMap<String, i64>,
+    /// When a follow-up starts: Message-ID → local day. Kept here where the server has nowhere
+    /// for it, as the due day is; Exchange's own wins.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty", deserialize_with = "checked_days")]
+    pub follow_up_start: BTreeMap<String, i64>,
+    /// When a follow-up's reminder rings: Message-ID → Unix seconds. Exchange keeps it on the
+    /// item and its own wins; Graph has no reminder on a flag, so it stays here.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty", deserialize_with = "checked_times")]
+    pub follow_up_reminder: BTreeMap<String, i64>,
     /// When follow-ups were marked complete (Follow Up › Mark Complete): Message-ID → local day.
     /// The mark itself is the message's [`FOLLOW_UP_COMPLETE`](quatrelle_model::FOLLOW_UP_COMPLETE)
     /// keyword; Exchange keeps the day too, and its own wins (`Session::follow_up_done`).
@@ -205,7 +277,7 @@ pub struct Prefs {
     pub search_folders: Vec<search_folders::SearchFolder>,
     /// Reminders answered ([`Session::due_reminders`]), by occurrence
     /// (`<account>|<uid>|<occurrence>`): 0 dismissed, else snoozed until that Unix time.
-    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty", deserialize_with = "checked_times")]
     pub reminders: BTreeMap<String, i64>,
     /// Where the search box looks unless told (its menu, as Outlook's; Current Mailbox at first).
     pub search_scope: SearchScope,
@@ -312,12 +384,16 @@ impl Default for Prefs {
             calendars_side_by_side: false,
             calendar_months: 2,
             address_book: "all".into(),
+            task_views: BTreeMap::new(),
+            task_arranges: BTreeMap::new(),
+            favorite_people: Vec::new(),
             keep_days: KEEP_DAYS,
             read_after_secs: 0,
             show_preview: true,
             compact: false,
             list_layout: ListLayout::Auto,
             todo_bar: true,
+            todo_bar_parts: None,
             confirm_permanent_delete: true,
             favorites: None,
             notify: true,
@@ -343,6 +419,8 @@ impl Default for Prefs {
             work_offline: false,
             ignored: BTreeSet::new(),
             follow_up: BTreeMap::new(),
+            follow_up_start: BTreeMap::new(),
+            follow_up_reminder: BTreeMap::new(),
             follow_up_done: BTreeMap::new(),
             reminders: BTreeMap::new(),
             search_folders: Vec::new(),
@@ -543,6 +621,63 @@ fn checked_days<'de, D: serde::Deserializer<'de>>(d: D) -> Result<BTreeMap<Strin
 /// A setting that was on before it existed.
 fn yes() -> bool {
     true
+}
+
+/// Favorite people read from disk: at most 200 of them, each a plausible address (not empty, not
+/// over 254 bytes), as a damaged or hostile file may have more.
+fn checked_people<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Vec<String>, D::Error> {
+    let read = <Vec<String> as serde::Deserialize>::deserialize(d)?;
+    Ok(read.into_iter().filter(|a| !a.trim().is_empty() && a.len() <= 254).take(200).collect())
+}
+
+/// The To-Do bar's on/off as saved: a bool, or (as a version that gave it parts wrote it) the
+/// parts object, read as any part on.
+fn bar_on<'de, D: serde::Deserializer<'de>>(d: D) -> Result<bool, D::Error> {
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum Raw {
+        On(bool),
+        Parts {
+            #[serde(default)]
+            calendar: bool,
+            #[serde(default)]
+            people: bool,
+            #[serde(default)]
+            tasks: bool,
+        },
+    }
+    Ok(match Raw::deserialize(d)? {
+        Raw::On(on) => on,
+        Raw::Parts { calendar, people, tasks } => calendar || people || tasks,
+    })
+}
+
+impl Prefs {
+    /// The To-Do bar's parts as they are drawn: off, none (the parts stay remembered in
+    /// `todo_bar_parts`); on, those remembered, else the calendar alone as before it had parts.
+    pub fn todo_bar(&self) -> TodoBar {
+        if self.todo_bar { self.todo_bar_parts.unwrap_or_default() } else { TodoBar { calendar: false, people: false, tasks: false } }
+    }
+
+    /// Set the bar's parts (and the bool an older version reads: any part on).
+    pub fn set_todo_bar(&mut self, bar: TodoBar) {
+        self.todo_bar = bar.any();
+        self.todo_bar_parts = Some(bar);
+    }
+}
+
+/// Reminder times and answers read from disk: only what are Unix times (a key empty or too
+/// long, a time before 1970 or past the end of 9999, past MAX_FOLLOW_UP are left out), as a
+/// damaged or hostile file may have them. A day count would refuse every real reminder time.
+fn checked_times<'de, D: serde::Deserializer<'de>>(d: D) -> Result<BTreeMap<String, i64>, D::Error> {
+    use quatrelle_model::dates::days_from_civil;
+    let read = <BTreeMap<String, i64> as serde::Deserialize>::deserialize(d)?;
+    let times = 0..=days_from_civil(9999, 12, 31).saturating_mul(86_400);
+    Ok(read
+        .into_iter()
+        .filter(|(id, t)| !id.trim().is_empty() && id.len() <= MAX_FOLLOW_UP_ID && times.contains(t))
+        .take(super::mailboxes::MAX_FOLLOW_UP)
+        .collect())
 }
 
 impl ListLayout {

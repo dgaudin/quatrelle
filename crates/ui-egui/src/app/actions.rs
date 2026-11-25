@@ -256,8 +256,11 @@ impl MailApp {
                     self.ui.scroll_to_focus = true;
                 }
             }
+            // As the mail list opens one: to the Mail module, so a message opened from the
+            // Tasks module or the To-Do bar is shown there, not left in the module it came from.
             Action::Open(k) => {
-                self.run("list.open", json!({"key": k.to_id()}));
+                self.session.module = quatrelle_engine::Module::Mail;
+                self.session.open_any(&k);
             }
             Action::Dialog(d) => self.ui.dialog = Some(d),
             Action::DeleteMail { for_good } => self.delete_mail(for_good),
@@ -273,6 +276,11 @@ impl MailApp {
                 }
                 Err(e) => self.session.notice(e.to_string(), true),
             },
+            Action::OpenPerson(uid) => {
+                self.session.module = quatrelle_engine::Module::People;
+                self.ui.people_query.clear();
+                self.ui.person = Some(uid);
+            }
             Action::OpenTask(uid) => {
                 self.session.module = Module::Tasks;
                 self.ui.tasks.query.clear();

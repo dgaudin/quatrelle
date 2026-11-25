@@ -202,7 +202,7 @@
 	Remove	Retirer
 	Remove account?	Retirer le compte ?
 	Remove account…	Retirer le compte…
-	Remove from Favorites	Retirer des Favoris
+	Remove from Favorites	Retirer des favoris
 	Remove…	Retirer…
 	Rename	Renommer
 	Rename folder	Renommer le dossier
@@ -2487,3 +2487,29 @@ presence	Offline	Hors ligne
 	Maximize	Agrandir
 	Use the system title bar	Utiliser la barre de titre du système
 	Applies when Quatrelle starts again	S’applique au prochain démarrage de Quatrelle
+	Custom Follow Up	Suivi personnalisé
+	Add Reminder	Ajouter un rappel
+	Custom…	Personnalisé…
+	Add Reminder…	Ajouter un rappel…
+	The reminder is a day (YYYY-MM-DD) and a time (HH:MM)	Le rappel est un jour (YYYY-MM-DD) et une heure (HH:MM)
+	`{name}` is a day, YYYY-MM-DD	« {name} » est un jour, YYYY-MM-DD
+	The start date is after the due date	La date de début est après l'échéance
+	Remove from List	Retirer de la liste
+	Add to Favorites	Ajouter aux favoris
+	Open contact	Ouvrir le contact
+	No favorite people yet: right-click a contact or a sender to add one.	Aucune personne favorite : cliquez avec le bouton droit sur un contact ou un expéditeur pour en ajouter une.
+	My Tasks	Mes tâches
+	To-Do List	Liste des tâches
+	Read-only: this list is read on the server	Lecture seule : cette liste est lue sur le serveur
+	Nothing is kept here: this list is read on the server.	Rien n'est conservé ici : cette liste est lue sur le serveur.
+	Simple List	Liste simple
+	Detailed	Détaillé
+	Active	Actives
+	Next 7 Days	7 prochains jours
+	Prioritized	Par ordre de priorité
+	Arrange By	Organiser par
+	Importance	Importance
+	Type	Type
+	No category	Aucune catégorie
+	Flagged messages	Messages avec indicateur
+	In folder	Dans le dossier

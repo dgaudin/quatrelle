@@ -12,6 +12,195 @@ fn uid_of(r: &Value) -> String {
 }
 
 /// A task made, changed as Outlook changes one, ticked and unticked, listed and deleted.
+/// The Tasks module's views and arrangements: Active, Completed, the next seven days, Overdue
+/// and Prioritized filter or order the list; Arrange By orders it by start, importance,
+/// categories, folder or type, remembered per list.
+#[test]
+fn task_views_filter_and_arrange() {
+    use quatrelle_model::pim::tasks::{TaskArrange, TaskView};
+    let mut s = sample_session("task-views");
+    let today = quatrelle_model::dates::today(&s.clock);
+    let day = |n| quatrelle_model::dates::day_string(today + n);
+    let make = |s: &mut Session, subject: &str, due: Option<&str>, importance: &str| -> String {
+        let mut p = json!({"subject": subject, "importance": importance});
+        if let Some(d) = due {
+            p["due"] = json!(d);
+        }
+        uid_of(&s.run("task.create", &p).unwrap())
+    };
+    let overdue = make(&mut s, "Overdue one", Some(&day(-2)), "normal");
+    let soon = make(&mut s, "Due soon", Some(&day(2)), "normal");
+    let far = make(&mut s, "Due far", Some(&day(40)), "high");
+    let finished = make(&mut s, "Done one", Some(&day(2)), "low");
+    s.run("task.complete", &json!({"uid": finished})).unwrap();
+    let no_date = make(&mut s, "No date", None, "normal");
+    let subjects = |s: &Session, view: TaskView, arrange: TaskArrange| -> Vec<String> {
+        s.todo_view("todo", "", true, view, arrange).iter().map(|r| r.subject().to_string()).collect()
+    };
+
+    // Active leaves the done one out; Completed keeps it alone; Overdue only the late one.
+    let active = subjects(&s, TaskView::Active, TaskArrange::DueDate);
+    assert!(!active.contains(&"Done one".to_string()) && active.contains(&"Overdue one".to_string()));
+    let completed = subjects(&s, TaskView::Completed, TaskArrange::DueDate);
+    assert!(completed.contains(&"Done one".to_string()) && !completed.contains(&"Overdue one".to_string()), "{completed:?}");
+    let overdue_view = subjects(&s, TaskView::Overdue, TaskArrange::DueDate);
+    assert!(overdue_view.contains(&"Overdue one".to_string()), "{overdue_view:?}");
+    // The next seven days: due soon, and the done one if completed is shown with the view, but
+    // not the far one or one with no date.
+    let week = subjects(&s, TaskView::NextSevenDays, TaskArrange::DueDate);
+    assert!(week.contains(&"Due soon".to_string()) && !week.contains(&"Due far".to_string()) && !week.contains(&"No date".to_string()), "{week:?}");
+    // Prioritized: high first, then by due day.
+    let prioritized = subjects(&s, TaskView::Prioritized, TaskArrange::DueDate);
+    let at = |subject: &str| prioritized.iter().position(|x| x == subject).unwrap_or_else(|| panic!("{subject} in {prioritized:?}"));
+    assert!(at("Due far") < at("Overdue one"), "{prioritized:?}");
+    // Arrange by importance, categories, start date and type.
+    let by_importance = s.todo_view("todo", "", true, TaskView::SimpleList, TaskArrange::Importance);
+    let at = |subject: &str| by_importance.iter().position(|r| r.subject() == subject).unwrap_or_else(|| panic!("{subject}"));
+    assert!(at("Due far") < at("Overdue one"), "high first");
+    let by_start = s.todo_view("todo", "", true, TaskView::SimpleList, TaskArrange::StartDate);
+    assert!(by_start.iter().position(|r| r.uid() == no_date).is_some());
+    s.run("task.view", &json!({"list": "todo", "view": "overdue", "arrange": "importance"})).unwrap();
+    assert_eq!(s.task_view("todo"), (TaskView::Overdue, TaskArrange::Importance));
+    let listed = s.run("task.list", &json!({"list": "todo", "completed": true})).unwrap();
+    let names: Vec<&str> = listed["tasks"].as_array().unwrap().iter().filter_map(|t| t["subject"].as_str()).collect();
+    assert!(names.contains(&"Overdue one"));
+    // Views are remembered per list: another list keeps its own (Simple, by due day).
+    assert_eq!(s.task_view("sample"), (TaskView::SimpleList, TaskArrange::DueDate));
+    // Each of the ids is a view, and one that isn't is refused.
+    for v in TaskView::ALL {
+        assert_eq!(TaskView::from_code(v.code()), Some(v));
+    }
+    for a in TaskArrange::ALL {
+        assert_eq!(TaskArrange::from_code(a.code()), Some(a));
+    }
+    assert!(s.run("task.view", &json!({"view": "nope"})).is_err());
+    // (The rows made here are the sample's task list; the overdue one is still incomplete.)
+    assert!(s.find_task(&overdue).is_some());
+    assert!(s.find_task(&soon).is_some_and(|t| t.task.due.is_some()));
+    assert!(s.find_task(&far).is_some());
+    done(s);
+}
+
+/// The My Tasks lists: the To-Do List, each account's tasks, its online archive's (read-only:
+/// every change refused) and the shared mailboxes opened in it; a task typed in a list goes to
+/// its account.
+#[test]
+fn task_lists_are_per_account_with_the_archive_read_only() {
+    let mut s = sample_session("task-lists");
+    let lists = s.task_lists();
+    assert_eq!(lists.first().map(|l| l.id.as_str()), Some("todo"));
+    assert!(lists.iter().any(|l| l.id == "sample" && !l.read_only), "{lists:?}");
+    assert!(!lists.iter().any(|l| l.archive), "no archive on this computer's account");
+    // An Exchange account has its online archive's list only when it has an archive folder,
+    // and a shared mailbox's list when one is opened.
+    s.accounts[0].config.ews = Some("https://mail.contoso.example/EWS/Exchange.asmx".into());
+    assert!(!s.task_lists().iter().any(|l| l.archive), "no archive folder: no archive list, whatever the server");
+    let shared = quatrelle_model::Folder {
+        account: "sample".into(),
+        path: "Team/Inbox".into(),
+        delimiter: Some('/'),
+        role: quatrelle_model::FolderRole::Inbox,
+        selectable: true,
+        mailbox: Some("team@contoso.example".into()),
+        ..Default::default()
+    };
+    s.accounts[0].folders.push(shared);
+    let archive_folder = quatrelle_model::Folder {
+        account: "sample".into(),
+        path: "Archive".into(),
+        delimiter: Some('/'),
+        role: quatrelle_model::FolderRole::Archive,
+        selectable: true,
+        mailbox: Some("archive".into()),
+        archive: true,
+        ..Default::default()
+    };
+    s.accounts[0].folders.push(archive_folder);
+    let lists = s.task_lists();
+    let archive = lists.iter().find(|l| l.archive).expect("the online archive");
+    assert!(archive.read_only && archive.id == "sample|archive" && archive.account.as_deref() == Some("sample"));
+    assert!(lists.iter().any(|l| l.mailbox.as_deref() == Some("team@contoso.example")), "{lists:?}");
+    // A task typed in a shared mailbox's list is refused there, not made in the account's own.
+    let before = s.tasks("", true).len();
+    let err = s.run("task.create", &json!({"subject": "Shared", "list": "sample|mailbox:team@contoso.example"})).unwrap_err();
+    assert!(err.to_string().contains("shared mailbox"), "{err}");
+    assert_eq!(s.tasks("", true).len(), before, "not made in the account's own");
+    // Its changes are refused first, as the archive's mail is.
+    let refused = s.run("task.create", &json!({"subject": "Archived", "list": archive.id})).unwrap_err();
+    assert!(refused.to_string().contains("online archive"), "{refused}");
+    // Typed in an account's list: there, and only there.
+    let uid = uid_of(&s.run("task.create", &json!({"subject": "Zoe's task", "list": "sample"})).unwrap());
+    assert!(s.find_task(&uid).unwrap().account == "sample");
+    assert!(s.todo_for("sample", "", false).iter().any(|r| r.task().is_some_and(|t| t.task.uid == uid)));
+    assert!(s.todo_for("todo", "", false).iter().any(|r| r.task().is_some_and(|t| t.task.uid == uid)));
+    assert!(s.todo_for("sample|archive", "", false).is_empty());
+    let listed = s.run("task.lists", &json!({})).unwrap();
+    assert!(listed.as_array().is_some_and(|a| a.iter().any(|l| l["archive"] == true && l["readOnly"] == true)), "{listed}");
+    done(s);
+}
+
+/// The To-Do List: flagged mail beside the tasks, grouped by due day, done with or removed
+/// from the list by its key, and across accounts.
+#[test]
+fn the_todo_list_holds_the_flagged_mail_and_the_tasks() {
+    let mut s = sample_session("todo-list");
+    let today = quatrelle_model::dates::today(&s.clock);
+    let due = |subject: &str| {
+        s.cache
+            .values()
+            .find_map(|st| st.messages.iter().find(|m| m.subject == subject))
+            .map(|m| m.key.to_id())
+            .unwrap_or_else(|| panic!("no {subject}"))
+    };
+    let a = due("Character turnarounds");
+    let b = due("Sound mix, version 3");
+    // Flagged for today, and tomorrow, without being in the list's selection at all.
+    s.run("mail.flag", &json!({"key": a, "due": "today"})).unwrap();
+    s.run("mail.flag", &json!({"key": b, "due": "tomorrow"})).unwrap();
+    let uid = uid_of(&s.run("task.create", &json!({"subject": "Devis Martin", "due": quatrelle_model::dates::day_string(today + 3)})).unwrap());
+    // Its follow-up title, when one was set (`PidLidFlagRequest`), is the row's subject.
+    {
+        let key = MessageKey::from_id(&a).unwrap();
+        let st = s.cache.get_mut(&(key.account.clone(), key.folder.clone())).unwrap();
+        let m = st.messages.iter_mut().find(|m| m.key == key).unwrap();
+        std::sync::Arc::make_mut(m).flags.follow_up.title = "Send the report".into();
+    }
+    let list = s.todo("", false);
+    let mail = |id: &str| list.iter().find(|r| r.uid() == id).cloned();
+    let row = mail(&a).expect("the flagged message");
+    assert_eq!(row.subject(), "Send the report");
+    assert_eq!((row.due(), row.is_complete()), (Some(today), false));
+    assert!(row.task().is_none() && row.mail().is_some());
+    assert!(mail(&b).is_some());
+    assert!(list.iter().any(|r| r.task().is_some_and(|t| t.task.uid == uid)), "the task too");
+    // Grouped by due day: today's before tomorrow's, the task (in three days) after both.
+    let at = |id: &str| list.iter().position(|r| r.uid() == id).unwrap();
+    assert!(at(&a) < at(&b) && at(&b) < at(&uid), "{:?}", list.iter().map(|r| (r.uid(), r.group(today))).collect::<Vec<_>>());
+
+    // Ticked from the To-Do List: done, out of what's to do, still there with the completed.
+    s.run("mail.flag", &json!({"key": a, "complete": true})).unwrap();
+    assert!(s.todo("", false).iter().all(|r| r.uid() != a), "done: out");
+    let row_done = s.todo("", true).into_iter().find(|r| r.uid() == a).expect("shown with the completed");
+    assert!(row_done.is_complete() && row_done.group(today) == quatrelle_model::pim::tasks::DueGroup::Completed);
+    // Ticked again (not done): back among the flagged, a fresh flag (its old due day gone,
+    // as flagging one again after Mark Complete always leaves it).
+    s.run("mail.flag", &json!({"key": a, "on": true})).unwrap();
+    assert!(s.todo("", false).iter().any(|r| r.uid() == a && !r.is_complete() && r.due().is_none()));
+
+    // Removed from the list (the flag cleared): neither list has it.
+    s.run("mail.flag", &json!({"key": a, "on": false})).unwrap();
+    assert!(s.todo("", true).iter().all(|r| r.uid() != a));
+
+    // Another account's task is there too.
+    let other =
+        s.run("account.add", &json!({"email": "zoe@studio.example", "local": true, "name": "Zoe"})).unwrap()["account"].as_str().unwrap().to_string();
+    s.run("task.create", &json!({"subject": "Zoe's task", "account": other})).unwrap();
+    let list = s.todo("", false);
+    assert!(list.iter().any(|r| r.task().is_some_and(|t| t.account == other && t.task.subject == "Zoe's task")), "{list:?}");
+    assert!(list.iter().any(|r| r.task().is_some_and(|t| t.account == "sample")), "the first account's too");
+    done(s);
+}
+
 #[test]
 fn a_task_goes_through_its_life() {
     let mut s = sample_session("tasks-life");
@@ -242,4 +431,198 @@ fn a_tasks_reminder_comes_and_goes() {
     s.run("task.complete", &json!({"uid": other})).unwrap();
     assert!(s.due_reminders(NOW).iter().all(|x| x.uid != other));
     done(s);
+}
+
+/// A message flagged in a folder not opened this session — its list is only in the cache on
+/// disk — is in the To-Do List and its reminder rings: the list and the reminders read the
+/// cache on disk too, not just what is in memory.
+#[test]
+fn a_flagged_message_in_a_folder_never_opened_counts_too() {
+    let mut s = sample_session("todo-disk");
+    let today = quatrelle_model::dates::today(&s.clock);
+    // A folder kept on disk only, never read into the cache this session.
+    let folder = quatrelle_model::Folder { account: "sample".into(), path: "Projects".into(), selectable: true, ..Default::default() };
+    s.accounts[0].folders.push(folder);
+    s.store.as_ref().unwrap().save_folders("sample", &s.accounts[0].folders).unwrap();
+    let mut st = quatrelle_store::FolderState { validity: 1, ..Default::default() };
+    st.messages.push(Summary {
+        key: MessageKey { account: "sample".into(), folder: "Projects".into(), validity: 1, uid: 77 },
+        message_id: "disk-only@x".into(),
+        subject: "On disk only".into(),
+        flags: quatrelle_model::Flags {
+            flagged: true,
+            follow_up: quatrelle_model::FollowUp { due: today.saturating_mul(86_400), reminder: s.clock.now - 60, ..Default::default() },
+            ..Default::default()
+        },
+        ..Default::default()
+    });
+    s.store.as_ref().unwrap().save_folder("sample", "Projects", &st).unwrap();
+    // Out of the memory cache, as the trim leaves it (only so many summaries are kept): the
+    // folder was not opened this session.
+    s.cache.remove(&("sample".to_string(), "Projects".to_string()));
+    s.cache_order.retain(|k| *k != ("sample".to_string(), "Projects".to_string()));
+    assert!(!s.cache.contains_key(&("sample".to_string(), "Projects".to_string())), "not in the cache this session");
+
+    // The To-Do List finds it (a call may read only part of the disk's folders; the next calls
+    // come to the rest).
+    let mut found = false;
+    for _ in 0..s.accounts[0].folders.len() {
+        if s.todo("", false).iter().any(|r| r.subject() == "On disk only") {
+            found = true;
+            break;
+        }
+    }
+    assert!(
+        found,
+        "the To-Do List reads the cache on disk, not just the memory: {:?}",
+        s.todo("", false).iter().map(|r| r.subject().to_string()).collect::<Vec<_>>()
+    );
+    // Its reminder rings too.
+    let mut rings = false;
+    for _ in 0..s.accounts[0].folders.len() {
+        if s.due_reminders(s.clock.now).iter().any(|r| r.message.as_ref().is_some_and(|k| k.uid == 77)) {
+            rings = true;
+            break;
+        }
+    }
+    assert!(rings, "the reminders read the cache on disk too: {:?}", s.due_reminders(s.clock.now).iter().map(|r| &r.summary).collect::<Vec<_>>());
+    done(s);
+}
+
+/// The look through the folders kept on disk is bounded per call: one call reads a few folders
+/// (round-robin), not them all, and the next calls come to the rest.
+#[test]
+fn the_look_through_the_disk_folders_is_bounded_per_call() {
+    let mut s = sample_session("todo-scan");
+    // Six folders on disk only, each with one flagged message, none in the memory cache.
+    for i in 0..6u32 {
+        let path = format!("Disk-{i}");
+        s.accounts[0].folders.push(quatrelle_model::Folder { account: "sample".into(), path: path.clone(), selectable: true, ..Default::default() });
+        let mut st = quatrelle_store::FolderState { validity: 1, ..Default::default() };
+        st.messages.push(Summary {
+            key: MessageKey { account: "sample".into(), folder: path.clone(), validity: 1, uid: 100 + i },
+            subject: format!("Disk {i}"),
+            flags: quatrelle_model::Flags { flagged: true, ..Default::default() },
+            ..Default::default()
+        });
+        s.store.as_ref().unwrap().save_folder("sample", &path, &st).unwrap();
+    }
+    s.store.as_ref().unwrap().save_folders("sample", &s.accounts[0].folders).unwrap();
+    for i in 0..6 {
+        let path = format!("Disk-{i}");
+        let k = ("sample".to_string(), path);
+        s.cache.remove(&k);
+        s.cache_order.retain(|o| *o != k);
+    }
+
+    // One call reads at most a few of them.
+    let first = s.todo("", false);
+    let n_first = first.iter().filter(|r| r.subject().starts_with("Disk ")).count();
+    assert!(n_first <= 2, "one call read {n_first} disk folders, not a few: bounded per call");
+    // And the next calls come to the rest: everything is seen in time.
+    let mut all = first;
+    for _ in 0..8 {
+        all = s.todo("", false);
+        if all.iter().filter(|r| r.subject().starts_with("Disk ")).count() == 6 {
+            break;
+        }
+    }
+    assert_eq!(all.iter().filter(|r| r.subject().starts_with("Disk ")).count(), 6, "every disk folder is come to in time");
+    done(s);
+}
+
+/// The mail stamp counts the changes commands, ops and events make to what the To-Do List and
+/// the reminders read: the interface rebuilds them only when it changed, not at every image.
+#[test]
+fn the_mail_stamp_counts_every_change() {
+    let mut s = sample_session("mail-stamp");
+    let a = s.mail_stamp();
+    s.run("list.select", &key_of(&s, "Character turnarounds")).unwrap();
+    assert!(s.mail_stamp() > a, "a command counts");
+    let b = s.mail_stamp();
+    let key = s.list.iter().find(|m| m.subject == "Character turnarounds").map(|m| m.key.clone()).unwrap_or_default();
+    s.apply_op("sample", Op::SetFlag { keys: vec![key], flag: Flag::Flagged, on: true, all: false });
+    assert!(s.mail_stamp() > b, "an op counts");
+    let c = s.mail_stamp();
+    s.apply(Event::Status { account: "sample".into(), status: SyncStatus::Online { at: s.clock.now } });
+    assert!(s.mail_stamp() > c, "an event counts");
+    done(s);
+}
+
+/// for when the bar is switched back on.
+#[test]
+fn the_todo_bar_setting_reads_and_writes_as_an_older_version_reads_it() {
+    // Saved by 1.5 (a bool) and by a version that gave the bar parts (an object): both read.
+    let p: crate::Prefs = serde_json::from_value(json!({"todoBar": false})).unwrap();
+    assert!(!p.todo_bar && p.todo_bar_parts.is_none() && !p.todo_bar().any(), "1.5's off");
+    let p: crate::Prefs = serde_json::from_value(json!({"todoBarParts": {"calendar": true, "tasks": true}})).unwrap();
+    assert!(p.todo_bar && p.todo_bar_parts.is_some_and(|b| b.calendar && b.tasks && !b.people), "the parts beside the bool");
+    // Saved here: a bool for the older version, the parts beside it.
+    let mut p = crate::Prefs::default();
+    p.set_todo_bar(crate::session::TodoBar { calendar: false, people: true, tasks: true });
+    let saved = serde_json::to_value(&p).unwrap();
+    assert_eq!(saved["todoBar"], json!(true), "a bool, as 1.5 reads it: {saved}");
+    assert_eq!(saved["todoBarParts"]["people"], json!(true));
+    assert!(serde_json::from_value::<crate::Prefs>(saved.clone()).is_ok(), "reads back");
+
+    // Off remembers the ticked parts; on restores them (not the calendar alone).
+    let mut s = sample_session("todo-bar-parts");
+    s.run("view.todoBar", &json!({"tasks": true})).unwrap();
+    let off = s.run("view.todoBar", &json!({"on": false})).unwrap();
+    assert_eq!(off["on"], json!(false));
+    assert!(!s.prefs.todo_bar, "the bool an older version reads is off");
+    let on = s.run("view.todoBar", &json!({"on": true})).unwrap();
+    assert_eq!(on["tasks"], json!(true), "the ticked part is remembered, not the calendar alone: {on}");
+    done(s);
+}
+
+/// Next 7 Days covers seven days, not eight: due in seven days is out of it, in six is in.
+#[test]
+fn next_seven_days_covers_seven_days() {
+    use quatrelle_model::pim::tasks::{TaskArrange, TaskView};
+    let mut s = sample_session("next-7");
+    let today = quatrelle_model::dates::today(&s.clock);
+    let day = |n| quatrelle_model::dates::day_string(today + n);
+    s.run("task.create", &json!({"subject": "In six", "due": day(6)})).unwrap();
+    s.run("task.create", &json!({"subject": "In seven", "due": day(7)})).unwrap();
+    s.run("task.create", &json!({"subject": "In eight", "due": day(8)})).unwrap();
+    let v = s.todo_view("todo", "", true, TaskView::NextSevenDays, TaskArrange::DueDate);
+    let names: Vec<&str> = v.iter().map(|r| r.subject()).collect();
+    assert!(names.contains(&"In six"), "{names:?}");
+    assert!(!names.contains(&"In seven") && !names.contains(&"In eight"), "seven days, not eight: {names:?}");
+    done(s);
+}
+
+/// Arrange By › Categories puts a flagged message under its category, beside the tasks of it,
+/// not under "No category".
+#[test]
+fn flagged_mail_is_arranged_by_its_categories() {
+    use quatrelle_model::pim::tasks::{TaskArrange, TaskView};
+    let mut s = sample_session("todo-categories");
+    s.run("task.create", &json!({"subject": "Plain task"})).unwrap();
+    s.run("task.create", &json!({"subject": "Work task", "categories": "Work"})).unwrap();
+    let k = key_of(&s, "Character turnarounds");
+    s.run("list.select", &k).unwrap();
+    s.run("mail.categorize", &json!({"category": "Work"})).unwrap();
+    s.run("mail.flag", &json!({"due": "2026-12-01"})).unwrap();
+    let list = s.todo_view("todo", "", true, TaskView::SimpleList, TaskArrange::Categories);
+    let names: Vec<&str> = list.iter().map(|r| r.subject()).collect();
+    let at = |n: &str| names.iter().position(|x| *x == n);
+    let (plain, work, mail) = (at("Plain task"), at("Work task"), at("Character turnarounds"));
+    assert!(
+        matches!((plain, work, mail), (Some(p), Some(w), Some(m)) if m > p && (m as i64 - w as i64).abs() == 1),
+        "the flagged message sits with the Work task: {names:?}"
+    );
+    done(s);
+}
+
+/// Favorite people read back from disk are capped (200, plausible addresses), as a damaged or
+/// hostile file may have more.
+#[test]
+fn favorite_people_read_from_disk_are_capped() {
+    let many: Vec<String> = (0..300).map(|i| format!("p{i}@x.example")).collect();
+    let p: crate::Prefs = serde_json::from_value(json!({"favoritePeople": many})).unwrap();
+    assert_eq!(p.favorite_people.len(), 200, "capped at 200");
+    let p: crate::Prefs = serde_json::from_value(json!({"favoritePeople": ["", "ok@x.example", "x".repeat(300)]})).unwrap();
+    assert_eq!(p.favorite_people, vec!["ok@x.example".to_string()], "empty and over-long addresses left out");
 }

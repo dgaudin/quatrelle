@@ -277,7 +277,7 @@ impl Store {
             .unwrap_or_default()
             .into_iter()
             .filter(|op| match op {
-                Op::SetFlag { keys, .. } | Op::SetKeyword { keys, .. } | Op::Expunge { keys, .. } => touches(keys),
+                Op::SetFlag { keys, .. } | Op::SetKeyword { keys, .. } | Op::SetFollowUp { keys, .. } | Op::Expunge { keys, .. } => touches(keys),
                 Op::Move { keys, to } => to != folder && touches(keys),
                 _ => false,
             })
@@ -359,7 +359,7 @@ impl Store {
         for folder in &folders {
             // A flag or category in a big folder: the pages the messages are in alone read, and
             // their marks written beside them.
-            if matches!(op, Op::SetFlag { .. } | Op::SetKeyword { .. }) && self.mark_in_pages(account, folder, op, extra)? {
+            if matches!(op, Op::SetFlag { .. } | Op::SetKeyword { .. } | Op::SetFollowUp { .. }) && self.mark_in_pages(account, folder, op, extra)? {
                 continue;
             }
             let mut st = self.load_folder(account, folder)?;
@@ -382,6 +382,22 @@ impl Store {
                     let uids: HashSet<u32> = keys.iter().filter(|k| in_folder(k)).map(|k| k.uid).collect();
                     for m in st.messages.iter_mut().filter(|m| uids.contains(&m.key.uid)) {
                         m.flags.set_category(keyword, name.as_deref(), *on);
+                    }
+                    marked = Some(uids);
+                }
+                Op::SetFollowUp { keys, start, due, reminder } => {
+                    let uids: HashSet<u32> = keys.iter().filter(|k| in_folder(k)).map(|k| k.uid).collect();
+                    for m in st.messages.iter_mut().filter(|m| uids.contains(&m.key.uid)) {
+                        // Only the fields the change names: an unnamed one keeps what it had.
+                        if let Some(c) = start {
+                            m.flags.follow_up.start = c.value().unwrap_or(0);
+                        }
+                        if let Some(c) = due {
+                            m.flags.follow_up.due = c.value().unwrap_or(0);
+                        }
+                        if let Some(c) = reminder {
+                            m.flags.follow_up.reminder = c.value().unwrap_or(0);
+                        }
                     }
                     marked = Some(uids);
                 }
@@ -467,6 +483,7 @@ impl Store {
             }
             Op::SetFlag { .. }
             | Op::SetKeyword { .. }
+            | Op::SetFollowUp { .. }
             | Op::Move { .. }
             | Op::Expunge { .. }
             | Op::EmptyFolder { .. }
@@ -485,6 +502,8 @@ impl Store {
 enum Effect<'o> {
     Flag(&'o quatrelle_model::Flag, bool, bool),
     Category(&'o str, Option<&'o str>, bool),
+    /// A follow-up's fields the edit named, as it left them (unnamed: untouched).
+    FollowUp(Option<quatrelle_model::FieldChange>, Option<quatrelle_model::FieldChange>, Option<quatrelle_model::FieldChange>),
     /// Moved away or deleted.
     Gone,
 }
@@ -507,6 +526,7 @@ pub(crate) fn reapply<'a>(
         let effect = match op {
             Op::SetFlag { flag, on, all, .. } => Effect::Flag(flag, *on, *all),
             Op::SetKeyword { keyword, on, name, .. } => Effect::Category(keyword, name.as_deref(), *on),
+            Op::SetFollowUp { start, due, reminder, .. } => Effect::FollowUp(*start, *due, *reminder),
             Op::Move { .. } | Op::Expunge { .. } => Effect::Gone,
             _ => continue,
         };
@@ -518,6 +538,7 @@ pub(crate) fn reapply<'a>(
             list.push(match &effect {
                 Effect::Flag(f, on, all) => Effect::Flag(f, *on, *all),
                 Effect::Category(k, n, on) => Effect::Category(k, *n, *on),
+                Effect::FollowUp(s, d, r) => Effect::FollowUp(*s, *d, *r),
                 Effect::Gone => Effect::Gone,
             });
         }
@@ -536,6 +557,18 @@ pub(crate) fn reapply<'a>(
             match e {
                 Effect::Flag(f, on, all) => f.apply(&mut flags, *on, *all),
                 Effect::Category(k, n, on) => flags.set_category(k, *n, *on),
+                Effect::FollowUp(s, d, r) => {
+                    // Only the fields the edit named: an unnamed one keeps what it had.
+                    if let Some(c) = s {
+                        flags.follow_up.start = c.value().unwrap_or(0);
+                    }
+                    if let Some(c) = d {
+                        flags.follow_up.due = c.value().unwrap_or(0);
+                    }
+                    if let Some(c) = r {
+                        flags.follow_up.reminder = c.value().unwrap_or(0);
+                    }
+                }
                 Effect::Gone => {
                     gone = true;
                     break;

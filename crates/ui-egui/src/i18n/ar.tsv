@@ -2482,3 +2482,29 @@ presence	Offline	غير متصل
 	Maximize	تكبير
 	Use the system title bar	استخدام شريط عنوان النظام
 	Applies when Quatrelle starts again	يسري عند بدء تشغيل Quatrelle مرة أخرى
+	Custom Follow Up	متابعة مخصصة
+	Add Reminder	إضافة تذكير
+	Custom…	مخصص…
+	Add Reminder…	إضافة تذكير…
+	The reminder is a day (YYYY-MM-DD) and a time (HH:MM)	التذكير هو يوم (YYYY-MM-DD) ووقت (HH:MM)
+	`{name}` is a day, YYYY-MM-DD	«{name}» هو يوم، YYYY-MM-DD
+	The start date is after the due date	تاريخ البدء بعد تاريخ الاستحقاق
+	Remove from List	إزالة من القائمة
+	Add to Favorites	إضافة إلى المفضلة
+	Open contact	فتح جهة الاتصال
+	No favorite people yet: right-click a contact or a sender to add one.	لا يوجد أشخاص مفضلون بعد: انقر بزر الماوس الأيمن على جهة اتصال أو مرسل لإضافة واحد.
+	My Tasks	مهامي
+	To-Do List	قائمة المهام
+	Read-only: this list is read on the server	للقراءة فقط: تُقرأ هذه القائمة على الخادم
+	Nothing is kept here: this list is read on the server.	لا يُحفظ شيء هنا: تُقرأ هذه القائمة على الخادم.
+	Simple List	قائمة بسيطة
+	Detailed	مفصّلة
+	Active	النشطة
+	Next 7 Days	الأيام السبعة القادمة
+	Prioritized	حسب الأولوية
+	Arrange By	ترتيب حسب
+	Importance	الأهمية
+	Type	النوع
+	No category	بلا فئة
+	Flagged messages	الرسائل المعلّمة
+	In folder	في المجلد

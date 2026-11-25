@@ -41,6 +41,25 @@ impl fmt::Debug for Private {
     }
 }
 
+/// What a change names for one of a follow-up's fields: set to a value, or taken off. A field
+/// the change doesn't name (`None` at the [`Op::SetFollowUp`] field) is left as the server has
+/// it, so a partial change doesn't erase what the cache didn't know.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+pub enum FieldChange {
+    Set(i64),
+    Clear,
+}
+
+impl FieldChange {
+    /// The value the field is left with (none for `Clear`), for the cache.
+    pub fn value(self) -> Option<i64> {
+        match self {
+            FieldChange::Set(v) => Some(v),
+            FieldChange::Clear => None,
+        }
+    }
+}
+
 /// A change to the mailbox the user makes, applied to the local cache at once and replayed on
 /// the server when it can be reached (RFC 4549's "pending actions").
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -64,6 +83,22 @@ pub enum Op {
         /// other keywords.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         name: Option<String>,
+    },
+    /// A flagged message's follow-up dates and reminder, as Exchange and Graph keep them
+    /// (MS-OXOFLAG 2.2.1). `start` and `due` are the day's floating midnight (`day * 86_400`,
+    /// as `PidLidTask*Date` holds it), `reminder` Unix seconds. Each field the change names
+    /// ([`FieldChange`]): a field left `None` is untouched on the server, so a partial change
+    /// (Follow Up › Tomorrow, Add Reminder…) doesn't erase what this computer didn't know.
+    /// A server with nowhere for them leaves the change to the preferences (the network layer
+    /// passes it over).
+    SetFollowUp {
+        keys: Vec<MessageKey>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        start: Option<FieldChange>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        due: Option<FieldChange>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        reminder: Option<FieldChange>,
     },
     /// Move to another folder of the same account.
     Move { keys: Vec<MessageKey>, to: String },
@@ -200,6 +235,7 @@ impl Op {
         match self {
             Op::SetFlag { keys, .. }
             | Op::SetKeyword { keys, .. }
+            | Op::SetFollowUp { keys, .. }
             | Op::Move { keys, .. }
             | Op::Expunge { keys, .. }
             | Op::SetArchiveTag { keys, .. } => keys,
@@ -230,6 +266,7 @@ impl Op {
         let (kind, folder) = match self {
             Op::SetFlag { .. } => ("SetFlag", None),
             Op::SetKeyword { .. } => ("SetKeyword", None),
+            Op::SetFollowUp { .. } => ("SetFollowUp", None),
             Op::Move { .. } => ("Move", None),
             Op::Expunge { .. } => ("Expunge", None),
             Op::CreateFolder { path } => ("CreateFolder", Some(path.as_str())),

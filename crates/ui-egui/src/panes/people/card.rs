@@ -62,6 +62,13 @@ pub fn show(s: &Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action>) 
                         {
                             acts.extend(write_to(&name, &e.value));
                         }
+                        if let Some(e) = c.emails.first() {
+                            let on = s.is_favorite_person(&e.value);
+                            let label = if on { "Remove from Favorites" } else { "Add to Favorites" };
+                            if widgets::pill_button(ui, Icon::Star, label, &t).clicked() {
+                                acts.push(Action::Run("contact.favorite", json!({"email": e.value, "on": !on})));
+                            }
+                        }
                         // Someone in a shared address book (an organisation's) is only read.
                         if s.person_read_only(&c.uid) {
                             ui.label(RichText::new(tl!("In a shared address book: read-only")).color(t.faint).small());

@@ -59,6 +59,18 @@ impl Store {
                 match op {
                     Op::SetFlag { flag, on, all, .. } => flag.apply(flags, *on, *all),
                     Op::SetKeyword { keyword, on, name, .. } => flags.set_category(keyword, name.as_deref(), *on),
+                    Op::SetFollowUp { start, due, reminder, .. } => {
+                        // Only the fields the change names: an unnamed one keeps what it had.
+                        if let Some(c) = start {
+                            flags.follow_up.start = c.value().unwrap_or(0);
+                        }
+                        if let Some(c) = due {
+                            flags.follow_up.due = c.value().unwrap_or(0);
+                        }
+                        if let Some(c) = reminder {
+                            flags.follow_up.reminder = c.value().unwrap_or(0);
+                        }
+                    }
                     _ => {}
                 }
             }

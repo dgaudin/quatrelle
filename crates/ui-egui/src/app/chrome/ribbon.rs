@@ -313,7 +313,7 @@ impl MailApp {
                         {
                             acts.push(Action::Run("mail.toggleRead", json!({})));
                         }
-                        if widgets::big_button(ui, Icon::Flag, "Flag", &t, enabled("mail.flag"))
+                        if widgets::big_button(ui, Icon::Flag, "Flag", &t, enabled("mail.flag") && !s.selection.is_empty())
                             .on_hover_text(tl!("Flag / Unflag (Insert)"))
                             .clicked()
                         {
@@ -321,7 +321,7 @@ impl MailApp {
                         }
                         // Follow Up: when it's due, as Outlook's flag drop-down.
                         let r = widgets::big_more(ui, "Follow up", &t);
-                        egui::Popup::menu(&r).show(|ui| organize::follow_up_menu(ui, s, &t, acts));
+                        egui::Popup::menu(&r).show(|ui| organize::follow_up_menu(ui, s, &t, acts, None));
                         let sel = !s.selection.is_empty();
                         let r = widgets::big_button(ui, Icon::Tag, "Categorize", &t, sel);
                         egui::Popup::menu(&r).show(|ui| organize::categorize_menu(ui, s, &t, acts));
@@ -478,12 +478,29 @@ impl MailApp {
                         {
                             acts.push(Action::Run("view.favorites", json!({})));
                         }
-                        if widgets::big_toggle(ui, Icon::CalendarToday, "To-Do bar", &t, s.prefs.todo_bar)
-                            .on_hover_text(tl!("The month and your coming appointments beside the mail"))
-                            .clicked()
-                        {
-                            acts.push(Action::Run("view.todoBar", json!({})));
-                        }
+                        // To-Do Bar: its parts, each ticked or not, or Off, as Outlook's menu.
+                        let r = widgets::big_more(ui, "To-Do bar", &t);
+                        egui::Popup::menu(&r).show(|ui| {
+                            let bar = s.prefs.todo_bar();
+                            for (label, on, part) in
+                                [("Calendar", bar.calendar, "calendar"), ("People", bar.people, "people"), ("Tasks", bar.tasks, "tasks")]
+                            {
+                                let mut v = on;
+                                if ui.checkbox(&mut v, tl!(label)).changed() {
+                                    let p = match part {
+                                        "calendar" => json!({"calendar": v}),
+                                        "people" => json!({"people": v}),
+                                        _ => json!({"tasks": v}),
+                                    };
+                                    acts.push(Action::Run("view.todoBar", p));
+                                }
+                            }
+                            ui.separator();
+                            let mut off = !bar.any();
+                            if ui.checkbox(&mut off, tl!("Off")).changed() && off {
+                                acts.push(Action::Run("view.todoBar", json!({"calendar": false, "people": false, "tasks": false})));
+                            }
+                        });
                         groups.end(ui, &t, "Layout");
                         // Messages: small boxes stacked, as Outlook's.
                         widgets::stack(ui, |ui| {

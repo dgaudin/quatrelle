@@ -2486,3 +2486,29 @@ presence	Offline	离线
 	Maximize	最大化
 	Use the system title bar	使用系统标题栏
 	Applies when Quatrelle starts again	在 Quatrelle 下次启动时生效
+	Custom Follow Up	自定义后续标志
+	Add Reminder	添加提醒
+	Custom…	自定义…
+	Add Reminder…	添加提醒…
+	The reminder is a day (YYYY-MM-DD) and a time (HH:MM)	提醒是一个日期 (YYYY-MM-DD) 和时间 (HH:MM)
+	`{name}` is a day, YYYY-MM-DD	“{name}”是一个日期，YYYY-MM-DD
+	The start date is after the due date	开始日期晚于到期日期
+	Remove from List	从列表中删除
+	Add to Favorites	添加到收藏夹
+	Open contact	打开联系人
+	No favorite people yet: right-click a contact or a sender to add one.	还没有收藏联系人：右键单击联系人或发件人以添加。
+	My Tasks	我的任务
+	To-Do List	待办事项列表
+	Read-only: this list is read on the server	只读：此列表在服务器上读取
+	Nothing is kept here: this list is read on the server.	此处不保存任何内容：此列表在服务器上读取。
+	Simple List	简单列表
+	Detailed	详细信息
+	Active	活动
+	Next 7 Days	未来 7 天
+	Prioritized	按优先级
+	Arrange By	排列依据
+	Importance	重要性
+	Type	类型
+	No category	无类别
+	Flagged messages	已标记邮件
+	In folder	所在文件夹

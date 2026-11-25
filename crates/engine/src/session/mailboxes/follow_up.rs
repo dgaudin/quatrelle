@@ -15,8 +15,19 @@ use super::*;
 /// The most due or done days kept in the preferences.
 pub(crate) const MAX_FOLLOW_UP: usize = 10_000;
 
-/// The days a message was due and done, as they were, by its follow-up id (for Undo).
-type FollowUpDays = Vec<(String, Option<i64>, Option<i64>)>;
+/// One message's follow-up as it was, for Undo: start, due, reminder and done (local days, or
+/// the reminder's time).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct FollowUpWas {
+    pub id: String,
+    pub start: Option<i64>,
+    pub due: Option<i64>,
+    pub reminder: Option<i64>,
+    pub done: Option<i64>,
+}
+
+/// The follow-ups of the messages a change touched, as they were.
+pub type FollowUpDays = Vec<FollowUpWas>;
 
 impl Session {
     /// Flag `sel` (or clear the flag): one marked complete no longer is, a fresh flag has no due
@@ -25,12 +36,10 @@ impl Session {
     /// A server that keeps one status for both (Exchange's flag status) gets the
     /// [`FOLLOW_UP_COMPLETE`] keyword taken off before the flag is set, and put on after it.
     pub(crate) fn set_flagged(&mut self, sel: &[Arc<Summary>], on: bool) -> Vec<(String, Vec<Op>)> {
-        let mut by_account: BTreeMap<String, Vec<MessageKey>> = BTreeMap::new();
         let mut changed: BTreeMap<String, Vec<MessageKey>> = BTreeMap::new();
         // Carrying the keyword: complete, or flagged again elsewhere with it left behind.
         let mut completed: BTreeMap<String, Vec<MessageKey>> = BTreeMap::new();
         for m in sel {
-            by_account.entry(m.key.account.clone()).or_default().push(m.key.clone());
             if m.flags.flagged != on {
                 changed.entry(m.key.account.clone()).or_default().push(m.key.clone());
             }
@@ -41,8 +50,39 @@ impl Session {
         for (a, keys) in &completed {
             self.apply_op(a, Op::SetKeyword { keys: keys.clone(), keyword: FOLLOW_UP_COMPLETE.into(), on: false, name: None });
         }
-        for (a, keys) in by_account {
-            self.apply_op(&a, Op::SetFlag { keys, flag: Flag::Flagged, on, all: false });
+        // Where the server keeps a follow-up's dates and reminder (Exchange, Graph): Clear Flag
+        // takes them off there too, as Outlook's does (Mark Complete, which takes the flag off
+        // the same way, keeps them: the flag-off write alone leaves them).
+        let (ews, graph) = self.mail_server_kind(sel);
+        let server_side = |a: &str| ews.contains(a) || graph.contains(a);
+        let mut clear: BTreeMap<String, Vec<MessageKey>> = BTreeMap::new();
+        let mut restore: BTreeMap<(String, i64, i64, i64), Vec<MessageKey>> = BTreeMap::new();
+        if !on {
+            for m in sel {
+                if server_side(&m.key.account) {
+                    let old = (m.flags.follow_up.start.max(0), m.flags.follow_up.due.max(0), m.flags.follow_up.reminder.max(0));
+                    clear.entry(m.key.account.clone()).or_default().push(m.key.clone());
+                    restore.entry((m.key.account.clone(), old.0, old.1, old.2)).or_default().push(m.key.clone());
+                }
+            }
+        }
+        // The flag write goes only to the messages whose flag changes: one already flagged keeps
+        // the text and icon Outlook gave it ([MS-OXOFLAG] 3.1.4.1.3: `PidLidFlagRequest` is set
+        // only if it doesn't already exist — writing it again would replace a "Review" with
+        // "Follow up").
+        for (a, keys) in &changed {
+            self.apply_op(a, Op::SetFlag { keys: keys.clone(), flag: Flag::Flagged, on, all: false });
+        }
+        for (a, keys) in &clear {
+            self.apply_op(
+                a,
+                Op::SetFollowUp {
+                    keys: keys.clone(),
+                    start: Some(FieldChange::Clear),
+                    due: Some(FieldChange::Clear),
+                    reminder: Some(FieldChange::Clear),
+                },
+            );
         }
         for m in sel {
             let id = follow_up_id(m);
@@ -50,6 +90,9 @@ impl Session {
             // completed (one still flagged keeps its day).
             if !on || m.flags.follow_up_complete() {
                 self.prefs.follow_up.remove(&id);
+                self.prefs.follow_up_start.remove(&id);
+                self.prefs.follow_up_reminder.remove(&id);
+                self.prefs.reminders.remove(&mail_reminder_key(&m.key.account, m));
             }
             self.prefs.follow_up_done.remove(&id);
         }
@@ -60,16 +103,26 @@ impl Session {
         for (a, keys) in completed {
             undo.entry(a).or_default().push(Op::SetKeyword { keys, keyword: FOLLOW_UP_COMPLETE.into(), on: true, name: None });
         }
+        // Undo of Clear Flag puts the server's dates and reminder back as they were.
+        for ((a, s, d, r), keys) in restore {
+            let back = |old: i64| if old > 0 { FieldChange::Set(old) } else { FieldChange::Clear };
+            undo.entry(a).or_default().push(Op::SetFollowUp { keys, start: Some(back(s)), due: Some(back(d)), reminder: Some(back(r)) });
+        }
         undo.into_iter().collect()
     }
 
-    /// Each of `sel`'s due and done days as they are, for Undo to put back.
+    /// Each of `sel`'s follow-up days, start and reminder as they are, for Undo to put back.
     pub(crate) fn follow_up_days_of(&self, sel: &[Arc<Summary>]) -> FollowUpDays {
         sel.iter()
             .map(|m| {
                 let id = follow_up_id(m);
-                let (due, done) = (self.prefs.follow_up.get(&id).copied(), self.prefs.follow_up_done.get(&id).copied());
-                (id, due, done)
+                FollowUpWas {
+                    start: self.prefs.follow_up_start.get(&id).copied(),
+                    due: self.prefs.follow_up.get(&id).copied(),
+                    reminder: self.prefs.follow_up_reminder.get(&id).copied(),
+                    done: self.prefs.follow_up_done.get(&id).copied(),
+                    id,
+                }
             })
             .collect()
     }
@@ -77,8 +130,12 @@ impl Session {
     /// Remember a change to follow-ups for Undo, when it changed anything: `ops` put the flags
     /// back, `was` the days.
     pub(crate) fn remember_follow_up(&mut self, ops: Vec<(String, Vec<Op>)>, was: FollowUpDays) {
-        let days_changed =
-            was.iter().any(|(id, due, done)| self.prefs.follow_up.get(id).copied() != *due || self.prefs.follow_up_done.get(id).copied() != *done);
+        let days_changed = was.iter().any(|w| {
+            self.prefs.follow_up_start.get(&w.id).copied() != w.start
+                || self.prefs.follow_up.get(&w.id).copied() != w.due
+                || self.prefs.follow_up_reminder.get(&w.id).copied() != w.reminder
+                || self.prefs.follow_up_done.get(&w.id).copied() != w.done
+        });
         if ops.iter().any(|(_, o)| !o.is_empty()) || days_changed {
             self.remember(Undo::FollowUp { ops, days: was });
         }
@@ -91,9 +148,11 @@ impl Session {
                 self.apply_op(&account, op);
             }
         }
-        for (id, due, done) in days {
-            put_day(&mut self.prefs.follow_up, id.clone(), due);
-            put_day(&mut self.prefs.follow_up_done, id, done);
+        for w in days {
+            put_day(&mut self.prefs.follow_up_start, w.id.clone(), w.start);
+            put_day(&mut self.prefs.follow_up, w.id.clone(), w.due);
+            put_day(&mut self.prefs.follow_up_reminder, w.id.clone(), w.reminder);
+            put_day(&mut self.prefs.follow_up_done, w.id, w.done);
         }
     }
 
@@ -103,40 +162,179 @@ impl Session {
         if complete {
             return self.complete_selection();
         }
-        let sel = self.selected();
+        self.follow_up_for(&self.selected(), due)
+    }
+
+    /// [`Self::follow_up_selection`] on these messages (the To-Do List's own rows, by key:
+    /// `mail.flag` with `key`).
+    pub fn follow_up_for(&mut self, sel: &[Arc<Summary>], due: Option<i64>) -> CmdResult {
         if sel.is_empty() {
             return Err(CmdError::Disabled("no message selected".into()));
         }
-        let was = self.follow_up_days_of(&sel);
-        let undo = self.set_flagged(&sel, true);
-        for m in &sel {
+        let was = self.follow_up_days_of(sel);
+        let undo = self.set_flagged(sel, true);
+        self.set_follow_up_fields(sel, None, Some(due), None, was, undo);
+        Ok(serde_json::json!({ "flagged": true, "due": due.map(quatrelle_model::dates::day_string), "count": sel.len() }))
+    }
+
+    /// Follow Up › Custom…: the selection's start and due days and its reminder as given (`None`
+    /// takes each off), flagged for follow-up. Exchange keeps all three; Graph keeps the dates
+    /// and the reminder stays here; the other servers keep all three here.
+    pub fn follow_up_custom(&mut self, start: Option<i64>, due: Option<i64>, reminder: Option<i64>) -> CmdResult {
+        self.follow_up_set(Some(start), Some(due), Some(reminder))
+    }
+
+    /// The follow-up fields named (`None`: leave as it is; `Some(None)`: take it off), flagged.
+    pub fn follow_up_set(&mut self, start: Option<Option<i64>>, due: Option<Option<i64>>, reminder: Option<Option<i64>>) -> CmdResult {
+        self.follow_up_set_for(&self.selected(), start, due, reminder)
+    }
+
+    /// [`Self::follow_up_set`] on these messages (a row of the To-Do List, by key).
+    pub fn follow_up_set_for(
+        &mut self,
+        sel: &[Arc<Summary>],
+        start: Option<Option<i64>>,
+        due: Option<Option<i64>>,
+        reminder: Option<Option<i64>>,
+    ) -> CmdResult {
+        if sel.is_empty() {
+            return Err(CmdError::Disabled("no message selected".into()));
+        }
+        let was = self.follow_up_days_of(sel);
+        let undo = self.set_flagged(sel, true);
+        self.set_follow_up_fields(sel, start, due, reminder, was, undo);
+        Ok(serde_json::json!({
+            "flagged": true,
+            "start": start.flatten().map(quatrelle_model::dates::day_string),
+            "due": due.flatten().map(quatrelle_model::dates::day_string),
+            "reminder": reminder.flatten(),
+            "count": sel.len(),
+        }))
+    }
+
+    /// Add Reminder… (`Some` a time) or take the selection's reminder off (`None`), keeping its
+    /// dates and flagging it.
+    pub fn follow_up_set_reminder(&mut self, reminder: Option<i64>) -> CmdResult {
+        self.follow_up_set_for(&self.selected(), None, None, Some(reminder))
+    }
+
+    /// Set the follow-up fields the caller named (outer `None`: leave it as it is; inner `None`:
+    /// take it off), in the cache at once and where the account keeps them: Exchange's item, or
+    /// the preferences (`Graph`'s reminder too, which Graph has nowhere for). `was` and `flags`
+    /// are the Undo: the days kept here and the ops that put the flags back.
+    fn set_follow_up_fields(
+        &mut self,
+        sel: &[Arc<Summary>],
+        start: Option<Option<i64>>,
+        due: Option<Option<i64>>,
+        reminder: Option<Option<i64>>,
+        was: FollowUpDays,
+        undo: Vec<(String, Vec<Op>)>,
+    ) {
+        let mut undo: BTreeMap<String, Vec<Op>> = undo.into_iter().collect();
+        // What each account keeps where: Exchange all three, Graph the dates, the others here.
+        let (ews, graph) = self.mail_server_kind(sel);
+        // The change each field names, as a day goes to the server: the day's floating midnight
+        // (`day * 86_400`), the convention Exchange's `PidLidTask*Date` holds ([MS-OXOTASK]
+        // 2.2.2.2.4). A field left unnamed (`None`) is left as the server has it, so a partial
+        // change doesn't erase what the cache didn't know.
+        let change = |v: Option<Option<i64>>| v.map(|d| d.map_or(FieldChange::Clear, |d| FieldChange::Set(d.saturating_mul(86_400))));
+        let change_time = |v: Option<Option<i64>>| v.map(|t| t.map_or(FieldChange::Clear, FieldChange::Set));
+        let (start, due, reminder) = (change(start), change(due), change_time(reminder));
+        // The change to make, by account and its three fields as named.
+        let mut ops: BTreeMap<(String, Option<FieldChange>, Option<FieldChange>, Option<FieldChange>), Vec<MessageKey>> = BTreeMap::new();
+        let mut before: BTreeMap<(String, i64, i64, i64), Vec<MessageKey>> = BTreeMap::new();
+        for m in sel {
             let id = follow_up_id(m);
-            match due {
-                Some(d) if self.prefs.follow_up.len() < MAX_FOLLOW_UP || self.prefs.follow_up.contains_key(&id) => {
-                    self.prefs.follow_up.insert(id, d);
+            let old = (m.flags.follow_up.start.max(0), m.flags.follow_up.due.max(0), m.flags.follow_up.reminder.max(0));
+            let account = m.key.account.clone();
+            // A reminder set anew or taken off rings again, though an earlier one was dismissed
+            // or snoozed; one the change leaves as it was keeps the answer given to it.
+            if let Some(c) = reminder {
+                let new = c.value();
+                let old = self.follow_up_reminder(m).filter(|t| *t > 0);
+                if new != old {
+                    self.prefs.reminders.remove(&mail_reminder_key(&account, m));
                 }
-                _ => {
-                    self.prefs.follow_up.remove(&id);
+            }
+            let exchange = ews.contains(account.as_str());
+            let graph = graph.contains(account.as_str());
+            if exchange || graph {
+                ops.entry((account.clone(), start, due, reminder)).or_default().push(m.key.clone());
+                before.entry((account, old.0, old.1, old.2)).or_default().push(m.key.clone());
+            }
+            // What stays here: everything for the other servers; Graph's reminder alone (its
+            // dates are the server's). Only the fields named are touched: an unnamed one keeps
+            // what was kept here.
+            if !exchange {
+                let keep_dates = !graph;
+                if keep_dates {
+                    if let Some(c) = start {
+                        put_day(&mut self.prefs.follow_up_start, id.clone(), c.value().map(quatrelle_model::dates::utc_day));
+                    }
+                    if let Some(c) = due {
+                        put_day(&mut self.prefs.follow_up, id.clone(), c.value().map(quatrelle_model::dates::utc_day));
+                    }
+                }
+                if let Some(c) = reminder {
+                    put_day(&mut self.prefs.follow_up_reminder, id.clone(), c.value());
+                }
+            } else {
+                // Exchange's own: what was kept here would otherwise come back if it says none.
+                self.prefs.follow_up_start.remove(&id);
+                self.prefs.follow_up.remove(&id);
+                self.prefs.follow_up_reminder.remove(&id);
+            }
+        }
+        for ((account, s, d, r), keys) in ops {
+            if s.is_none() && d.is_none() && r.is_none() {
+                continue;
+            }
+            self.apply_op(&account, Op::SetFollowUp { keys, start: s, due: d, reminder: r });
+        }
+        // Undo puts the server's own back too, for the fields the change named (the days here
+        // are put back by `was`): what the cache had, set or taken off.
+        for ((account, s, d, r), keys) in before {
+            let back = |old: i64, named: Option<FieldChange>| named.map(|_| if old > 0 { FieldChange::Set(old) } else { FieldChange::Clear });
+            undo.entry(account).or_default().push(Op::SetFollowUp { keys, start: back(s, start), due: back(d, due), reminder: back(r, reminder) });
+        }
+        self.remember_follow_up(undo.into_iter().collect(), was);
+    }
+
+    /// The accounts among `sel` whose server keeps a follow-up's dates: Exchange (EWS) all of
+    /// them, Graph the dates alone.
+    fn mail_server_kind<'a>(&self, sel: &'a [Arc<Summary>]) -> (BTreeSet<&'a str>, BTreeSet<&'a str>) {
+        let mut ews = BTreeSet::new();
+        let mut graph = BTreeSet::new();
+        for m in sel {
+            if let Some(a) = self.account(&m.key.account) {
+                if a.config.ews.is_some() {
+                    ews.insert(m.key.account.as_str());
+                } else if a.config.graph.is_some() {
+                    graph.insert(m.key.account.as_str());
                 }
             }
         }
-        self.remember_follow_up(undo, was);
-        Ok(serde_json::json!({ "flagged": true, "due": due.map(quatrelle_model::dates::day_string), "count": sel.len() }))
+        (ews, graph)
     }
 
     /// Mark the selection's follow-up complete (Mark Complete): unflagged, with the
     /// [`FOLLOW_UP_COMPLETE`] keyword, and the day it was done kept (as Outlook keeps it). Its
     /// due day stays; Undo puts the flag and both days back as they were, in one step.
     pub fn complete_selection(&mut self) -> CmdResult {
-        let sel = self.selected();
+        self.complete_for(&self.selected())
+    }
+
+    /// [`Self::complete_selection`] on these messages (a row of the To-Do List, by key).
+    pub fn complete_for(&mut self, sel: &[Arc<Summary>]) -> CmdResult {
         if sel.is_empty() {
             return Err(CmdError::Disabled("no message selected".into()));
         }
-        let was = self.follow_up_days_of(&sel);
+        let was = self.follow_up_days_of(sel);
         let today = quatrelle_model::dates::today(&self.clock);
         let mut flagged: BTreeMap<String, Vec<MessageKey>> = BTreeMap::new();
         let mut marked: BTreeMap<String, Vec<MessageKey>> = BTreeMap::new();
-        for m in &sel {
+        for m in sel {
             if m.flags.flagged {
                 flagged.entry(m.key.account.clone()).or_default().push(m.key.clone());
             }
@@ -170,12 +368,52 @@ impl Session {
         Ok(serde_json::json!({ "flagged": false, "complete": true, "count": sel.len() }))
     }
 
-    /// When a flagged message is due, if a day was given.
+    /// When a flagged message is due, if a day was given: the server's own (Exchange, Graph),
+    /// else the day kept here.
     pub fn follow_up_due(&self, m: &Summary) -> Option<i64> {
         if !m.flags.flagged {
             return None;
         }
+        self.follow_up_due_any(m)
+    }
+
+    /// When the follow-up is due whether or not it's still flagged: a completed one is still
+    /// due, as the To-Do List shows it.
+    pub fn follow_up_due_any(&self, m: &Summary) -> Option<i64> {
+        if m.flags.follow_up.due > 0 {
+            // A floating midnight, read as a UTC day, never in the local zone.
+            return Some(quatrelle_model::dates::utc_day(m.flags.follow_up.due));
+        }
         self.prefs.follow_up.get(&follow_up_id(m)).copied()
+    }
+
+    /// A kept message by its id ([`MessageKey::to_id`]), as the To-Do List's rows name one.
+    pub fn message_by_id(&self, id: &str) -> Option<Arc<Summary>> {
+        let key = MessageKey::from_id(id)?;
+        self.cache.get(&(key.account.clone(), key.folder.clone()))?.messages.iter().find(|m| m.key == key).cloned()
+    }
+
+    /// When a flag's follow-up starts: the server's own, else the day kept here.
+    pub fn follow_up_start(&self, m: &Summary) -> Option<i64> {
+        if m.flags.follow_up.start > 0 {
+            // A floating midnight, read as a UTC day, never in the local zone.
+            return Some(quatrelle_model::dates::utc_day(m.flags.follow_up.start));
+        }
+        self.prefs.follow_up_start.get(&follow_up_id(m)).copied()
+    }
+
+    /// When a flag's reminder rings (Unix seconds): the server's own (Exchange), else the one
+    /// kept here (everywhere else, Graph too, which has no reminder on a flag).
+    pub fn follow_up_reminder(&self, m: &Summary) -> Option<i64> {
+        if m.flags.follow_up.reminder > 0 {
+            return Some(m.flags.follow_up.reminder);
+        }
+        self.prefs.follow_up_reminder.get(&follow_up_id(m)).copied()
+    }
+
+    /// What a flag's follow-up asks for: the title Outlook wrote (Exchange), else none.
+    pub fn follow_up_title<'a>(&self, m: &'a Summary) -> Option<&'a str> {
+        (!m.flags.follow_up.title.is_empty()).then_some(m.flags.follow_up.title.as_str())
     }
 
     /// When a message's follow-up was marked complete (a local day), if it was and the day is

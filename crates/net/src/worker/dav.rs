@@ -356,7 +356,7 @@ fn looks_for_calendars(acc: &AccountConfig) -> bool {
 
 /// The system's time zone, for calendar times written without one (`UTC` when it can't say).
 fn system_zone() -> quatrelle_model::zone::Zone {
-    iana_time_zone::get_timezone().ok().and_then(|z| quatrelle_model::zone::Zone::named(&z)).unwrap_or_default()
+    crate::system_zone()
 }
 
 #[cfg(test)]

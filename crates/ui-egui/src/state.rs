@@ -264,6 +264,8 @@ pub struct UiState {
     pub(crate) note_selected: Option<String>,
     /// Tasks: the search, the one picked and its form, the task being typed in.
     pub(crate) tasks: tasks::TasksUi,
+    /// The To-Do lists computed for the frames that follow ([`tasks::TodoMemo`]).
+    pub(crate) todo_memo: tasks::TodoMemo,
     pub(crate) note_windows: Vec<notes::NoteWindow>,
     /// The person whose card is shown (uid).
     pub(crate) person: Option<String>,

@@ -8,14 +8,22 @@ use crate::dialogs::people_field::{DIALOG_WINDOWS, PeopleFields, accepts_of, dia
 use quatrelle_engine::model::addr::{matched, matched_text};
 use quatrelle_engine::model::search::from_people;
 
+mod follow_up;
 mod quick_step;
 mod rule_form;
 
+pub use follow_up::*;
 pub use quick_step::*;
 pub use rule_form::*;
 
+/// Follow Up › Custom… and Add Reminder… (`follow_up.rs`).
+fn draw_follow_up(ui: &mut Ui, d: &mut Dialog, s: &Session, t: &Tokens, acts: &mut Vec<Action>) -> bool {
+    follow_up::draw(ui, d, s, t, acts)
+}
+
 pub(super) fn draw(ui: &mut Ui, d: &mut Dialog, s: &Session, people: &mut PeopleFields, t: &Tokens, acts: &mut Vec<Action>) -> bool {
     match d {
+        Dialog::FollowUp(..) => draw_follow_up(ui, d, s, t, acts),
         Dialog::NewCategory { name, color, error } => {
             ui.set_width(340.0);
             title(ui, t, "New category");

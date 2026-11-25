@@ -301,6 +301,8 @@ pub enum Dialog {
     },
     /// Outlook's Spelling: the words the dictionaries don't know, one at a time.
     Spelling(Box<SpellForm>),
+    /// Follow Up › Custom… and Add Reminder…: a flag's start and due days and its reminder.
+    FollowUp(Box<FollowUpForm>),
 }
 
 impl Dialog {
@@ -519,7 +521,8 @@ fn body(
         | Dialog::ReplaceOutlookRules { .. }
         | Dialog::EditRule(..)
         | Dialog::SearchFolder(..)
-        | Dialog::QuickStep(..) => organize::draw(ui, d, s, people, t, acts),
+        | Dialog::QuickStep(..)
+        | Dialog::FollowUp(..) => organize::draw(ui, d, s, people, t, acts),
         Dialog::SelectNames(..)
         | Dialog::AttachItem(..)
         | Dialog::SaveChanges

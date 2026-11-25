@@ -42,6 +42,12 @@ pub(super) fn catch_up_once(
         }
         st.replies_read(folder);
     }
+    if st.follow_ups_wanted(folder) {
+        if kept {
+            changed += catch_up_follow_ups(c, store, st, account, folder, id, window, since)?;
+        }
+        st.follow_ups_read(folder);
+    }
     Ok(changed)
 }
 
@@ -185,6 +191,38 @@ fn catch_up_replied(
     let changed = take_found(store, st, account, folder, &found)?;
     if changed > 0 {
         log::info!("{account}: {}: {changed} messages replied to or forwarded in Outlook read", utf7::decode(folder));
+    }
+    Ok(changed)
+}
+
+/// The follow-ups of a folder flagged in Outlook before this version read their dates and
+/// reminder (`PidTagFlagStatus` 2, with `PidLidTask*Date`, `PidLidReminder*` and
+/// `PidLidFlagRequest`): a sync that asks only what changed never brings them. The folder's
+/// flagged messages are asked for alone, their ids and marks only, a page of a thousand at a
+/// time, and those kept here take them; nothing else is read. How many changed.
+#[allow(clippy::too_many_arguments)]
+fn catch_up_follow_ups(
+    c: &Client,
+    store: &Store,
+    st: &State,
+    account: &str,
+    folder: &str,
+    id: &str,
+    window: usize,
+    since: Option<i64>,
+) -> Result<usize> {
+    let found = match c.follow_ups(id, window, since, TICKS_PAGE) {
+        Ok(f) => f,
+        // A server that won't search so: they come as each message changes.
+        Err(NetError::No(e)) => {
+            log::info!("{account}: {}: flagged follow-ups not asked for ({e})", utf7::decode(folder));
+            return Ok(0);
+        }
+        Err(e) => return Err(e),
+    };
+    let changed = take_found(store, st, account, folder, &found)?;
+    if changed > 0 {
+        log::info!("{account}: {}: {changed} flagged follow-ups read, with their dates and reminder", utf7::decode(folder));
     }
     Ok(changed)
 }

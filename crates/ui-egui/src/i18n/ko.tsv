@@ -2485,3 +2485,29 @@ presence	Offline	오프라인
 	Maximize	최대화
 	Use the system title bar	시스템 제목 표시줄 사용
 	Applies when Quatrelle starts again	Quatrelle을 다시 시작할 때 적용됩니다
+	Custom Follow Up	사용자 지정 후속 조치
+	Add Reminder	미리 알림 추가
+	Custom…	사용자 지정…
+	Add Reminder…	미리 알림 추가…
+	The reminder is a day (YYYY-MM-DD) and a time (HH:MM)	미리 알림은 날짜(YYYY-MM-DD)와 시간(HH:MM)입니다
+	`{name}` is a day, YYYY-MM-DD	'{name}'은(는) 날짜입니다(YYYY-MM-DD)
+	The start date is after the due date	시작일이 마감일보다 늦습니다
+	Remove from List	목록에서 제거
+	Add to Favorites	즐겨찾기에 추가
+	Open contact	연락처 열기
+	No favorite people yet: right-click a contact or a sender to add one.	즐겨찾는 사람이 아직 없습니다. 연락처나 보낸 사람을 마우스 오른쪽 단추로 클릭하여 추가하세요.
+	My Tasks	내 작업
+	To-Do List	할 일 목록
+	Read-only: this list is read on the server	읽기 전용: 이 목록은 서버에서 읽습니다
+	Nothing is kept here: this list is read on the server.	여기에는 아무것도 저장되지 않습니다: 이 목록은 서버에서 읽습니다.
+	Simple List	간단한 목록
+	Detailed	자세히
+	Active	활성
+	Next 7 Days	향후 7일
+	Prioritized	우선 순위
+	Arrange By	정렬 기준
+	Importance	중요도
+	Type	종류
+	No category	범주 없음
+	Flagged messages	플래그 표시된 메시지
+	In folder	폴더 위치
