@@ -844,3 +844,9 @@ pub fn parse_key(v: &Value) -> Option<MessageKey> {
 fn follow_up_id(m: &Summary) -> String {
     m.follow_up_id()
 }
+
+/// The key a flagged message's reminder is answered under: by its Message-ID, so moving the
+/// message to another folder doesn't make it ring again.
+pub(crate) fn mail_reminder_key(account: &str, m: &Summary) -> String {
+    format!("{account}|mail|{}", m.follow_up_id())
+}

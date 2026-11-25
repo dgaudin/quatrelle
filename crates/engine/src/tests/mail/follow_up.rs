@@ -408,3 +408,63 @@ fn reminder_times_kept_on_this_computer_read_back_from_disk() {
     assert_eq!(saved["followUpReminder"]["ring@x"], json!(at));
     assert_eq!(saved["reminders"]["a1|t1|1700000000"], json!(at));
 }
+
+/// A reminder's answer stays unless the reminder itself changes (moving the due day keeps a
+/// dismissal, naming the same time keeps it); a changed reminder rings again. The answer is
+/// under the message's Message-ID, so moving the message to another folder doesn't ring it
+/// again. A deleted message's, the Junk's and the Trash's reminders don't ring.
+#[test]
+fn a_reminder_answer_stays_unless_the_reminder_changes() {
+    let mut s = sample_session("reminder-answer-kept");
+    let k = key_of(&s, "Character turnarounds");
+    let now = s.clock.now;
+    s.run("list.select", &k).unwrap();
+    s.run("mail.flag", &json!({"due": "2026-12-01", "reminder": now - 60})).unwrap();
+    let m = turnaround(&s);
+    let id = m.message_id.clone();
+    let due = s.due_reminders(now).into_iter().find(|r| r.message.as_ref() == Some(&m.key)).expect("the flag's reminder is due");
+    s.run("reminders.dismiss", &json!({"key": due.key})).unwrap();
+    assert!(s.due_reminders(now).iter().all(|r| r.message.as_ref() != Some(&m.key)), "dismissed");
+
+    // The due day moves, the reminder isn't named: the dismissal stays.
+    s.run("mail.flag", &json!({"due": "2026-12-04"})).unwrap();
+    assert!(s.due_reminders(now).iter().all(|r| r.uid != id), "still dismissed: the reminder didn't change");
+    // The same time named again: still dismissed.
+    s.run("mail.flag", &json!({"reminder": now - 60})).unwrap();
+    assert!(s.due_reminders(now).iter().all(|r| r.uid != id), "the same reminder keeps its answer");
+    // Another time: it rings again.
+    s.run("mail.flag", &json!({"reminder": now - 30})).unwrap();
+    let due = s.due_reminders(now).into_iter().find(|r| r.uid == id).expect("a changed reminder rings again");
+    s.run("reminders.snooze", &json!({"key": due.key, "minutes": 5})).unwrap();
+    assert!(s.due_reminders(now).iter().all(|r| r.uid != id), "snoozed");
+
+    // Moved to another folder: still snoozed (the answer is under the Message-ID).
+    s.run("list.select", &key_of(&s, "Character turnarounds")).unwrap();
+    s.run("mail.move", &json!({"folder": "Projects/Short film"})).unwrap();
+    assert!(s.due_reminders(now).iter().all(|r| r.uid != id), "moved: still snoozed");
+    assert!(s.due_reminders(now + 301).iter().any(|r| r.uid == id), "back after the snooze, wherever the message is");
+
+    // The Junk's and the Trash's reminders don't ring.
+    let kj = key_of(&s, "Sound mix, version 3");
+    let idj = s.list.iter().find(|m| m.subject == "Sound mix, version 3").map(|m| m.message_id.clone()).unwrap_or_default();
+    s.run("list.select", &kj).unwrap();
+    s.run("mail.flag", &json!({"reminder": now - 10})).unwrap();
+    assert!(s.due_reminders(now).iter().any(|r| r.uid == idj), "flagged in the Inbox: rings");
+    s.run("mail.move", &json!({"folder": "Junk"})).unwrap();
+    assert!(s.due_reminders(now).iter().all(|r| r.uid != idj), "the Junk's reminder doesn't ring");
+    s.run("folder.open", &json!({"account": "sample", "folder": "Junk"})).unwrap();
+    s.run("list.select", &key_of(&s, "Sound mix, version 3")).unwrap();
+    s.run("mail.move", &json!({"folder": "Trash"})).unwrap();
+    assert!(s.due_reminders(now).iter().all(|r| r.uid != idj), "the Trash's reminder doesn't ring");
+
+    // A deleted message's reminder doesn't ring either.
+    s.run("folder.open", &json!({"account": "sample", "folder": "INBOX"})).unwrap();
+    let idd = s.list.iter().find(|m| m.subject == "Open call: winter group show").map(|m| m.message_id.clone()).unwrap_or_default();
+    s.run("list.select", &key_of(&s, "Open call: winter group show")).unwrap();
+    s.run("mail.flag", &json!({"reminder": now - 10})).unwrap();
+    assert!(s.due_reminders(now).iter().any(|r| r.uid == idd), "flagged: rings");
+    let key = s.list.iter().find(|m| m.subject == "Open call: winter group show").map(|m| m.key.clone()).unwrap_or_default();
+    s.apply_op("sample", Op::SetFlag { keys: vec![key], flag: Flag::Deleted, on: true, all: false });
+    assert!(s.due_reminders(now).iter().all(|r| r.uid != idd), "deleted: doesn't ring");
+    done(s);
+}

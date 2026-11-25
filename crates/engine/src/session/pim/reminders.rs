@@ -139,16 +139,22 @@ impl Session {
             }
         }
         // A flagged message's reminder, as the server or this computer keeps it (MS-OXOFLAG
-        // 2.2.1): its title (else its subject) and the folder it's in. Not one done or no longer
-        // flagged; dismissed and snoozed as the others (`reminders.dismiss`, `.snooze`). The
-        // folders not opened this session are read from the cache on disk too, so a reminder
-        // set there rings as well.
+        // 2.2.1): its title (else its subject) and the folder it's in. Not one done, deleted
+        // or no longer flagged, nor one in the Junk or the Trash; dismissed and snoozed as the
+        // others (`reminders.dismiss`, `.snooze`), under a key its Message-ID makes (a move
+        // doesn't ring it again). The folders not opened this session are read from the cache
+        // on disk too, so a reminder set there rings as well.
+        let roles: std::collections::HashMap<(&str, &str), quatrelle_model::FolderRole> =
+            self.accounts.iter().flat_map(|a| a.folders.iter().map(move |f| ((a.config.id.as_str(), f.path.as_str()), f.role))).collect();
         self.scan_mail(|account, folder, m| {
-            if !m.flags.flagged || m.flags.follow_up_complete() {
+            if !m.flags.flagged || m.flags.follow_up_complete() || m.flags.deleted {
+                return;
+            }
+            if matches!(roles.get(&(account, folder)), Some(quatrelle_model::FolderRole::Junk | quatrelle_model::FolderRole::Trash)) {
                 return;
             }
             let Some(at) = self.follow_up_reminder(m).filter(|t| *t > 0) else { return };
-            let key = format!("{account}|mail|{}", m.key.to_id());
+            let key = crate::session::mail_reminder_key(account, m);
             let due = match self.prefs.reminders.get(&key) {
                 Some(0) => return,
                 Some(until) => *until,

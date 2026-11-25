@@ -92,7 +92,7 @@ impl Session {
                 self.prefs.follow_up.remove(&id);
                 self.prefs.follow_up_start.remove(&id);
                 self.prefs.follow_up_reminder.remove(&id);
-                self.prefs.reminders.remove(&format!("{}|mail|{}", m.key.account, m.key.to_id()));
+                self.prefs.reminders.remove(&mail_reminder_key(&m.key.account, m));
             }
             self.prefs.follow_up_done.remove(&id);
         }
@@ -248,8 +248,15 @@ impl Session {
             let id = follow_up_id(m);
             let old = (m.flags.follow_up.start.max(0), m.flags.follow_up.due.max(0), m.flags.follow_up.reminder.max(0));
             let account = m.key.account.clone();
-            // A reminder set anew rings again, though an earlier one was dismissed or snoozed.
-            self.prefs.reminders.remove(&format!("{account}|mail|{}", m.key.to_id()));
+            // A reminder set anew or taken off rings again, though an earlier one was dismissed
+            // or snoozed; one the change leaves as it was keeps the answer given to it.
+            if let Some(c) = reminder {
+                let new = c.value();
+                let old = self.follow_up_reminder(m).filter(|t| *t > 0);
+                if new != old {
+                    self.prefs.reminders.remove(&mail_reminder_key(&account, m));
+                }
+            }
             let exchange = ews.contains(account.as_str());
             let graph = graph.contains(account.as_str());
             if exchange || graph {
