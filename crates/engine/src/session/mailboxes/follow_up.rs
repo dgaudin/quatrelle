@@ -72,7 +72,15 @@ impl Session {
             self.apply_op(&a, Op::SetFlag { keys, flag: Flag::Flagged, on, all: false });
         }
         for (a, keys) in &clear {
-            self.apply_op(a, Op::SetFollowUp { keys: keys.clone(), start: None, due: None, reminder: None });
+            self.apply_op(
+                a,
+                Op::SetFollowUp {
+                    keys: keys.clone(),
+                    start: Some(FieldChange::Clear),
+                    due: Some(FieldChange::Clear),
+                    reminder: Some(FieldChange::Clear),
+                },
+            );
         }
         for m in sel {
             let id = follow_up_id(m);
@@ -95,12 +103,8 @@ impl Session {
         }
         // Undo of Clear Flag puts the server's dates and reminder back as they were.
         for ((a, s, d, r), keys) in restore {
-            undo.entry(a).or_default().push(Op::SetFollowUp {
-                keys,
-                start: (s > 0).then_some(s),
-                due: (d > 0).then_some(d),
-                reminder: (r > 0).then_some(r),
-            });
+            let back = |old: i64| if old > 0 { FieldChange::Set(old) } else { FieldChange::Clear };
+            undo.entry(a).or_default().push(Op::SetFollowUp { keys, start: Some(back(s)), due: Some(back(d)), reminder: Some(back(r)) });
         }
         undo.into_iter().collect()
     }
@@ -228,38 +232,44 @@ impl Session {
         let mut undo: BTreeMap<String, Vec<Op>> = undo.into_iter().collect();
         // What each account keeps where: Exchange all three, Graph the dates, the others here.
         let (ews, graph) = self.mail_server_kind(sel);
-        // The change to make, by account and its three values. A day goes to the server as its
-        // floating midnight (`day * 86_400`), the convention Exchange's `PidLidTask*Date` holds
-        // ([MS-OXOTASK] 2.2.2.2.4): a local midnight written there shows the day before west of
-        // UTC, and in Outlook itself for a French date.
-        let mut ops: BTreeMap<(String, i64, i64, i64), Vec<MessageKey>> = BTreeMap::new();
+        // The change each field names, as a day goes to the server: the day's floating midnight
+        // (`day * 86_400`), the convention Exchange's `PidLidTask*Date` holds ([MS-OXOTASK]
+        // 2.2.2.2.4). A field left unnamed (`None`) is left as the server has it, so a partial
+        // change doesn't erase what the cache didn't know.
+        let change = |v: Option<Option<i64>>| v.map(|d| d.map_or(FieldChange::Clear, |d| FieldChange::Set(d.saturating_mul(86_400))));
+        let change_time = |v: Option<Option<i64>>| v.map(|t| t.map_or(FieldChange::Clear, FieldChange::Set));
+        let (start, due, reminder) = (change(start), change(due), change_time(reminder));
+        // The change to make, by account and its three fields as named.
+        let mut ops: BTreeMap<(String, Option<FieldChange>, Option<FieldChange>, Option<FieldChange>), Vec<MessageKey>> = BTreeMap::new();
         let mut before: BTreeMap<(String, i64, i64, i64), Vec<MessageKey>> = BTreeMap::new();
         for m in sel {
             let id = follow_up_id(m);
             let old = (m.flags.follow_up.start.max(0), m.flags.follow_up.due.max(0), m.flags.follow_up.reminder.max(0));
-            let now = (
-                start.unwrap_or_else(|| self.follow_up_start(m)).map(|d| d.saturating_mul(86_400)).unwrap_or(0),
-                due.unwrap_or_else(|| self.follow_up_due(m)).map(|d| d.saturating_mul(86_400)).unwrap_or(0),
-                reminder.unwrap_or_else(|| self.follow_up_reminder(m)).unwrap_or(0),
-            );
             let account = m.key.account.clone();
             // A reminder set anew rings again, though an earlier one was dismissed or snoozed.
             self.prefs.reminders.remove(&format!("{account}|mail|{}", m.key.to_id()));
             let exchange = ews.contains(account.as_str());
             let graph = graph.contains(account.as_str());
             if exchange || graph {
-                ops.entry((account.clone(), now.0, now.1, now.2)).or_default().push(m.key.clone());
+                ops.entry((account.clone(), start, due, reminder)).or_default().push(m.key.clone());
                 before.entry((account, old.0, old.1, old.2)).or_default().push(m.key.clone());
             }
             // What stays here: everything for the other servers; Graph's reminder alone (its
-            // dates are the server's, and an answer of none is none).
+            // dates are the server's). Only the fields named are touched: an unnamed one keeps
+            // what was kept here.
             if !exchange {
                 let keep_dates = !graph;
                 if keep_dates {
-                    put_day(&mut self.prefs.follow_up_start, id.clone(), (now.0 > 0).then(|| quatrelle_model::dates::utc_day(now.0)));
-                    put_day(&mut self.prefs.follow_up, id.clone(), (now.1 > 0).then(|| quatrelle_model::dates::utc_day(now.1)));
+                    if let Some(c) = start {
+                        put_day(&mut self.prefs.follow_up_start, id.clone(), c.value().map(quatrelle_model::dates::utc_day));
+                    }
+                    if let Some(c) = due {
+                        put_day(&mut self.prefs.follow_up, id.clone(), c.value().map(quatrelle_model::dates::utc_day));
+                    }
                 }
-                put_day(&mut self.prefs.follow_up_reminder, id.clone(), (now.2 > 0).then_some(now.2));
+                if let Some(c) = reminder {
+                    put_day(&mut self.prefs.follow_up_reminder, id.clone(), c.value());
+                }
             } else {
                 // Exchange's own: what was kept here would otherwise come back if it says none.
                 self.prefs.follow_up_start.remove(&id);
@@ -268,16 +278,16 @@ impl Session {
             }
         }
         for ((account, s, d, r), keys) in ops {
-            self.apply_op(&account, Op::SetFollowUp { keys, start: (s > 0).then_some(s), due: (d > 0).then_some(d), reminder: (r > 0).then_some(r) });
+            if s.is_none() && d.is_none() && r.is_none() {
+                continue;
+            }
+            self.apply_op(&account, Op::SetFollowUp { keys, start: s, due: d, reminder: r });
         }
-        // Undo puts the server's own back too (the days here are put back by `was`).
+        // Undo puts the server's own back too, for the fields the change named (the days here
+        // are put back by `was`): what the cache had, set or taken off.
         for ((account, s, d, r), keys) in before {
-            undo.entry(account).or_default().push(Op::SetFollowUp {
-                keys,
-                start: (s > 0).then_some(s),
-                due: (d > 0).then_some(d),
-                reminder: (r > 0).then_some(r),
-            });
+            let back = |old: i64, named: Option<FieldChange>| named.map(|_| if old > 0 { FieldChange::Set(old) } else { FieldChange::Clear });
+            undo.entry(account).or_default().push(Op::SetFollowUp { keys, start: back(s, start), due: back(d, due), reminder: back(r, reminder) });
         }
         self.remember_follow_up(undo.into_iter().collect(), was);
     }

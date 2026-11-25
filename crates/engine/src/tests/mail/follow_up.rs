@@ -4,7 +4,7 @@
 //! Engine tests: a follow-up marked complete (Mark Complete) stays so, with the day it was done,
 //! until it's flagged again or cleared; Undo puts back what it changed, the days too.
 
-use quatrelle_model::FOLLOW_UP_COMPLETE;
+use quatrelle_model::{FOLLOW_UP_COMPLETE, FieldChange};
 
 use super::*;
 
@@ -241,7 +241,7 @@ fn a_follow_up_day_goes_to_exchange_as_its_floating_midnight() {
             _ => None,
         })
         .expect("the follow-up change went to the server");
-    assert_eq!(due, Some(day.saturating_mul(86_400)), "the floating midnight, not the local one ({})", s.clock.midnight(day));
+    assert_eq!(due, Some(FieldChange::Set(day.saturating_mul(86_400))), "the floating midnight, not the local one ({})", s.clock.midnight(day));
     done(s);
 }
 
@@ -269,14 +269,16 @@ fn clear_flag_takes_the_follow_up_off_the_server_too() {
     s.cache.entry((account.clone(), m.key.folder.clone())).or_default().messages.push(m.clone());
     s.run("mail.flag", &json!({"key": m.key.to_id(), "on": false})).unwrap();
     let jobs = s.take_jobs();
-    let cleared = jobs.iter().any(|j| matches!(j, Job::Apply { op: Op::SetFollowUp { start: None, due: None, reminder: None, .. }, .. }));
+    let cleared = jobs
+        .iter()
+        .any(|j| matches!(j, Job::Apply { op: Op::SetFollowUp { start: Some(FieldChange::Clear), due: Some(FieldChange::Clear), reminder: Some(FieldChange::Clear), .. }, .. }));
     assert!(cleared, "a SetFollowUp taking all three off went to the server: {jobs:?}");
     // Undo puts the server's dates and reminder back.
     s.run("edit.undo", &json!({})).unwrap();
     let jobs = s.take_jobs();
     let now = s.clock.now;
     let restored = jobs.iter().any(|j| match j {
-        Job::Apply { op: Op::SetFollowUp { start: Some(a), due: Some(b), reminder: Some(c), .. }, .. } => {
+        Job::Apply { op: Op::SetFollowUp { start: Some(FieldChange::Set(a)), due: Some(FieldChange::Set(b)), reminder: Some(FieldChange::Set(c)), .. }, .. } => {
             *a == 20_000 * 86_400 && *b == 20_010 * 86_400 && *c == now + 3600
         }
         _ => false,
@@ -299,3 +301,43 @@ fn the_preferences_days_read_from_disk_are_days() {
     assert_eq!(p.follow_up, std::collections::BTreeMap::from([("due@x".to_string(), 20_400)]));
     assert_eq!(p.follow_up_done, std::collections::BTreeMap::from([("done@x".to_string(), 20_390)]));
 }
+
+/// A partial follow-up change names only its fields: Follow Up › Tomorrow on a message whose
+/// server already has a start and a reminder sends only the due day, leaving the other two as
+/// the server has them (a change that rewrote all three from the cache would erase them when
+/// the cache didn't know them).
+#[test]
+fn a_partial_follow_up_change_names_only_its_fields() {
+    let mut s = sample_session("partial-follow-up");
+    let account = s
+        .run("account.add", &json!({"email": "riley@contoso.example", "password": "pw", "ews": "https://ews.contoso.example/EWS/Exchange.asmx"}))
+        .unwrap()["account"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    s.take_jobs();
+    let mut m = turnaround(&s);
+    m.key.account = account.clone();
+    m.flags.flagged = true;
+    // As Outlook followed it: the server has all three (the cache read them).
+    m.flags.follow_up.start = 20_000 * 86_400;
+    m.flags.follow_up.due = 20_010 * 86_400;
+    m.flags.follow_up.reminder = s.clock.now + 3600;
+    let m = std::sync::Arc::new(m);
+    s.cache.entry((account.clone(), m.key.folder.clone())).or_default().messages.push(m.clone());
+    let day = quatrelle_model::dates::days_from_civil(2026, 12, 1);
+    s.run("mail.flag", &json!({"key": m.key.to_id(), "due": "2026-12-01"})).unwrap();
+    let op = s
+        .take_jobs()
+        .iter()
+        .find_map(|j| match j {
+            Job::Apply { op: Op::SetFollowUp { start, due, reminder, .. }, .. } => Some((*start, *due, *reminder)),
+            _ => None,
+        })
+        .expect("the follow-up change went to the server");
+    assert_eq!(op.0, None, "start unnamed: left as the server has it");
+    assert_eq!(op.1, Some(FieldChange::Set(day.saturating_mul(86_400))), "due named");
+    assert_eq!(op.2, None, "reminder unnamed: left as the server has it");
+    done(s);
+}
+

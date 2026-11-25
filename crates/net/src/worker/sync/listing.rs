@@ -199,10 +199,10 @@ impl Worker {
         // next start where it failed).
         if matches!(self.conn, Some(Conn::Ews(_))) {
             let (ticks, replies) = (self.jstate.finish_ticks(&followed), self.jstate.finish_replies(&followed));
-            let kinds = self.jstate.finish_kinds(&followed);
-            if ticks || replies || kinds {
+            let (kinds, follow_ups) = (self.jstate.finish_kinds(&followed), self.jstate.finish_follow_ups(&followed));
+            if ticks || replies || kinds || follow_ups {
                 log::info!(
-                    "{}: in all {} folders, read: completed follow-ups {ticks}, replies {replies}, kinds {kinds}",
+                    "{}: in all {} folders, read: completed follow-ups {ticks}, replies {replies}, kinds {kinds}, flagged follow-ups {follow_ups}",
                     self.acc.id,
                     followed.len()
                 );

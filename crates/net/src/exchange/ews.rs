@@ -20,7 +20,7 @@ use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 
 use quatrelle_mime as mime;
-use quatrelle_model::{Flag, Flags, FolderRole, MessageKey, Op, Summary, sort_newest_first, utf7};
+use quatrelle_model::{FieldChange, Flag, Flags, FolderRole, MessageKey, Op, Summary, sort_newest_first, utf7};
 use quatrelle_store::{FolderState, Store};
 
 use crate::http::{self, Conn, Request, Response};

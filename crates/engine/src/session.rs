@@ -14,7 +14,8 @@ use quatrelle_model::job::{IMAP_TEXT_FIRST_OVER, Secret, TEXT_FIRST_OVER, Vacati
 use quatrelle_model::search::{Doc, Index, Query, summary_sum, summary_text};
 use quatrelle_model::thread::{Thread, threads};
 use quatrelle_model::{
-    AccountConfig, EmailAddress, Event, Flag, Folder, FolderRole, Job, MessageKey, Op, Summary, SyncStatus, addr, sort_folders, sort_newest_first,
+    AccountConfig, EmailAddress, Event, FieldChange, Flag, Folder, FolderRole, Job, MessageKey, Op, Summary, SyncStatus, addr, sort_folders,
+    sort_newest_first,
 };
 use quatrelle_store::{FolderState, OutboxItem, Store};
 use serde::{Deserialize, Serialize};

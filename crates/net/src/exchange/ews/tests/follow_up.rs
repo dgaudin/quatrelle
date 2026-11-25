@@ -137,7 +137,17 @@ fn follow_up_dates_and_its_reminder_go_both_ways() {
     let start = at("2026-12-01T00:00:00Z");
     let due = at("2026-12-04T00:00:00Z");
     let reminder = at("2026-12-04T08:30:00Z");
-    apply_remote(&c, &st, &Op::SetFollowUp { keys: keys.clone(), start: Some(start), due: Some(due), reminder: Some(reminder) }).unwrap();
+    apply_remote(
+        &c,
+        &st,
+        &Op::SetFollowUp {
+            keys: keys.clone(),
+            start: Some(FieldChange::Set(start)),
+            due: Some(FieldChange::Set(due)),
+            reminder: Some(FieldChange::Set(reminder)),
+        },
+    )
+    .unwrap();
     {
         let d = server.data.lock().unwrap();
         let f = &d.items.iter().find(|i| i.id == id).unwrap().follow_up;
@@ -160,7 +170,12 @@ fn follow_up_dates_and_its_reminder_go_both_ways() {
     assert_eq!(m.flags.follow_up.title, "Send the report");
 
     // Taken off here: Exchange has no reminder and no dates, Task or Common.
-    apply_remote(&c, &st, &Op::SetFollowUp { keys: keys.clone(), start: None, due: None, reminder: None }).unwrap();
+    apply_remote(
+        &c,
+        &st,
+        &Op::SetFollowUp { keys: keys.clone(), start: Some(FieldChange::Clear), due: Some(FieldChange::Clear), reminder: Some(FieldChange::Clear) },
+    )
+    .unwrap();
     {
         let d = server.data.lock().unwrap();
         let f = &d.items.iter().find(|i| i.id == id).unwrap().follow_up;
@@ -426,9 +441,104 @@ fn marking_complete_keeps_the_follow_up_dates_on_exchange() {
     assert_eq!((m.flags.follow_up.start, m.flags.follow_up.due), (at("2026-11-02T00:00:00Z"), at("2026-11-06T00:00:00Z")), "{:?}", m.flags.follow_up);
 
     // Clear Flag's own SetFollowUp takes the dates off.
-    apply_remote(&c, &st, &Op::SetFollowUp { keys, start: None, due: None, reminder: None }).unwrap();
+    apply_remote(
+        &c,
+        &st,
+        &Op::SetFollowUp { keys, start: Some(FieldChange::Clear), due: Some(FieldChange::Clear), reminder: Some(FieldChange::Clear) },
+    )
+    .unwrap();
     let d = server.data.lock().unwrap();
     let f = &d.items.iter().find(|i| i.id == id).unwrap().follow_up;
     assert!(f.start.is_none() && f.due.is_none() && f.common_start.is_none() && f.common_end.is_none(), "{f:?}");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// A follow-up Outlook flagged before this version read its dates (the cache has the message
+/// flagged with no dates, a sync that asks only what changed never brings them): the first sync
+/// of each folder asks once for its flagged messages and reads their dates and reminder, and
+/// never asks again. A change naming one field alone leaves the server's other fields.
+#[test]
+fn flagged_follow_ups_before_this_version_are_read_once() {
+    let mut d = Data::default();
+    let inbox = d.folder("Inbox", None, Some("inbox"), "IPF.Note");
+    let mail = |s: &str| format!("From: a@x.example\r\nSubject: {s}\r\n\r\nx\r\n").into_bytes();
+    let flagged = d.deliver(&inbox, &mail("followed"), true, "2024-05-01T09:00:00Z");
+    d.deliver(&inbox, &mail("plain"), true, "2024-05-02T09:00:00Z");
+    for i in d.items.iter_mut() {
+        if i.id == flagged {
+            i.flagged = true;
+            i.follow_up = fake_ews::FollowUp {
+                start: Some("2026-11-02T00:00:00Z".into()),
+                due: Some("2026-11-06T00:00:00Z".into()),
+                common_start: Some("2026-11-02T00:00:00Z".into()),
+                common_end: Some("2026-11-06T00:00:00Z".into()),
+                reminder_set: true,
+                reminder_time: Some("2026-11-06T09:00:00Z".into()),
+                reminder_signal: Some("2026-11-06T09:00:00Z".into()),
+                request: Some("Review".into()),
+            };
+        }
+    }
+    let server = fake_ews::serve(d);
+    let dir = std::env::temp_dir().join(format!("quatrelle-ews-followups-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    let store = Store::open(&dir).unwrap();
+    let user = format!("{}\\{}", fake_ews::DOMAIN, fake_ews::USER);
+    let c = Client::connect(&server.url, &user, fake_ews::PASSWORD, "riley@contoso.example").unwrap();
+    let mut st = State::default();
+    list_folders(&c, &mut st, "a1").unwrap();
+    let opts = SyncOptions { prefetch: 0, ..Default::default() };
+    let at = |text: &str| jmap::utc_date(text).unwrap();
+    let asked = || server.data.lock().unwrap().calls.iter().filter(|c| c.as_str() == "FindItem followUps").count();
+
+    // Listed in full first: the flagged one comes in with its dates.
+    sync_folder(&c, &mut st, &store, "a1", "INBOX", &opts).unwrap();
+    let m = store.load_folder("a1", "INBOX").unwrap().messages.iter().find(|m| m.subject == "followed").cloned().unwrap();
+    assert_eq!(
+        (m.flags.follow_up.start, m.flags.follow_up.due, m.flags.follow_up.reminder),
+        (at("2026-11-02T00:00:00Z"), at("2026-11-06T00:00:00Z"), at("2026-11-06T09:00:00Z"))
+    );
+    assert_eq!(asked(), 0, "nothing kept before it was listed in full: no pass");
+
+    // As the version before left it: the cache without the dates, the state without the pass.
+    {
+        let mut fs = store.load_folder("a1", "INBOX").unwrap();
+        for m in fs.messages.iter_mut() {
+            m.flags.follow_up = Default::default();
+        }
+        store.save_folder("a1", "INBOX", &fs).unwrap();
+        let mut v = serde_json::to_value(&st).unwrap();
+        v.as_object_mut().unwrap().remove("follow_ups");
+        st = serde_json::from_value::<State>(v).unwrap();
+    }
+    // The first sync set the folder's sync state: only what changed is asked now.
+    sync_folder(&c, &mut st, &store, "a1", "INBOX", &opts).unwrap();
+    assert_eq!(asked(), 1, "the flagged follow-ups asked for once");
+    let m = store.load_folder("a1", "INBOX").unwrap().messages.iter().find(|m| m.subject == "followed").cloned().unwrap();
+    assert_eq!(
+        (m.flags.follow_up.start, m.flags.follow_up.due, m.flags.follow_up.reminder),
+        (at("2026-11-02T00:00:00Z"), at("2026-11-06T00:00:00Z"), at("2026-11-06T09:00:00Z")),
+        "the pass read them: {:?}",
+        m.flags.follow_up
+    );
+    assert_eq!(m.flags.follow_up.title, "Review");
+    // Never asked again.
+    st.save(&store, "a1").unwrap();
+    let mut st = State::load(&store, "a1").unwrap();
+    sync_folder(&c, &mut st, &store, "a1", "INBOX", &opts).unwrap();
+    assert_eq!(asked(), 1, "never asked again");
+
+    // A change naming one field alone (Add Reminder…): the server's dates stay.
+    let keys = vec![m.key];
+    let reminder = at("2026-11-07T08:00:00Z");
+    apply_remote(&c, &st, &Op::SetFollowUp { keys, start: None, due: None, reminder: Some(FieldChange::Set(reminder)) }).unwrap();
+    {
+        let d = server.data.lock().unwrap();
+        let f = &d.items.iter().find(|i| i.id == flagged).unwrap().follow_up;
+        assert_eq!(f.start.as_deref().and_then(jmap::utc_date), Some(at("2026-11-02T00:00:00Z")), "start left as it was: {f:?}");
+        assert_eq!(f.due.as_deref().and_then(jmap::utc_date), Some(at("2026-11-06T00:00:00Z")), "due left as it was: {f:?}");
+        assert_eq!(f.common_start.as_deref().and_then(jmap::utc_date), Some(at("2026-11-02T00:00:00Z")), "{f:?}");
+        assert_eq!(f.reminder_signal.as_deref().and_then(jmap::utc_date), Some(reminder), "{f:?}");
+    }
     let _ = std::fs::remove_dir_all(&dir);
 }

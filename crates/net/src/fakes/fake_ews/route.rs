@@ -175,6 +175,7 @@ impl Data {
                                 self.calls.push("FindItem completed".into());
                             } else {
                                 list.retain(|i| i.flagged != negated);
+                                self.calls.push("FindItem followUps".into());
                             }
                         }
                     }

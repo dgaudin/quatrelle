@@ -19,7 +19,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 use quatrelle_mime as mime;
 use quatrelle_model::organize::{Condition, Rule, RuleAction};
-use quatrelle_model::{Flag, Flags, FolderRole, MessageKey, MessageKind, Op, Smime, Summary, sort_newest_first, utf7, voting};
+use quatrelle_model::{FieldChange, Flag, Flags, FolderRole, MessageKey, MessageKind, Op, Smime, Summary, sort_newest_first, utf7, voting};
 use quatrelle_store::{FolderState, Store};
 use serde_json::{Value, json};
 
@@ -576,23 +576,34 @@ fn flag_patch(op: &Op) -> Option<Value> {
         Op::SetKeyword { keyword, on, .. } if keyword.eq_ignore_ascii_case(quatrelle_model::FOLLOW_UP_COMPLETE) => {
             Some(json!({"flag": {"flagStatus": if *on { "complete" } else { "notFlagged" }}}))
         }
-        // Its follow-up dates (Graph's `message.flag.startDateTime`/`dueDateTime`, in UTC): a
-        // date taken off is nulled. Graph has no reminder on a flag. A day comes as its floating
-        // midnight (`day * 86_400`) and goes as that midnight in the local zone, so Outlook
-        // shows the same day whatever the zone.
+        // Its follow-up dates (Graph's `message.flag.startDateTime`/`dueDateTime`, in UTC): only
+        // the fields the change names are sent — a date taken off is nulled, an unnamed one left
+        // as the server has it. Graph has no reminder on a flag. A day comes as its floating
+        // midnight (`day * 86_400`) and goes as that midnight in the local zone, so Outlook shows
+        // the same day whatever the zone.
         Op::SetFollowUp { start, due, .. } => {
             let zone = crate::system_zone();
-            let time = |t: Option<i64>| match t {
-                Some(t) => json!({"dateTime": utc(zone.to_utc(t)).trim_end_matches('Z'), "timeZone": "UTC"}),
-                None => Value::Null,
+            let time = |c: Option<FieldChange>| match c {
+                Some(FieldChange::Set(t)) => Some(json!({"dateTime": utc(zone.to_utc(t)).trim_end_matches('Z'), "timeZone": "UTC"})),
+                Some(FieldChange::Clear) => Some(Value::Null),
+                None => None,
             };
-            let mut flag = json!({"startDateTime": time(*start), "dueDateTime": time(*due)});
+            let mut flag = serde_json::Map::new();
+            if let Some(v) = time(*start) {
+                flag.insert("startDateTime".into(), v);
+            }
+            if let Some(v) = time(*due) {
+                flag.insert("dueDateTime".into(), v);
+            }
+            if flag.is_empty() {
+                return None;
+            }
             // Its dates with the flag still on: it stays flagged (clearing them all leaves the
             // flag as it was).
-            if start.is_some() || due.is_some() {
-                flag["flagStatus"] = json!("flagged");
+            if matches!(start, Some(FieldChange::Set(_))) || matches!(due, Some(FieldChange::Set(_))) {
+                flag.insert("flagStatus".into(), json!("flagged"));
             }
-            Some(json!({ "flag": flag }))
+            Some(json!({ "flag": Value::Object(flag) }))
         }
         // Replied to or forwarded here: the original marked as Outlook marks it (as over EWS:
         // `crate::ews` says where the values come from). Taken off, nothing: the next one

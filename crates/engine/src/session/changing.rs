@@ -149,9 +149,16 @@ impl Session {
                 Op::SetFollowUp { start, due, reminder, .. } => {
                     for m in st.messages.iter_mut().filter(|m| mine.contains(&m.key.uid)) {
                         let m = Arc::make_mut(m);
-                        m.flags.follow_up.start = start.unwrap_or(0);
-                        m.flags.follow_up.due = due.unwrap_or(0);
-                        m.flags.follow_up.reminder = reminder.unwrap_or(0);
+                        // Only the fields the change names: an unnamed one keeps what it had.
+                        if let Some(c) = start {
+                            m.flags.follow_up.start = c.value().unwrap_or(0);
+                        }
+                        if let Some(c) = due {
+                            m.flags.follow_up.due = c.value().unwrap_or(0);
+                        }
+                        if let Some(c) = reminder {
+                            m.flags.follow_up.reminder = c.value().unwrap_or(0);
+                        }
                     }
                 }
                 Op::Move { to, .. } if to == f => {}

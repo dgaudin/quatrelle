@@ -196,4 +196,20 @@ impl State {
     pub fn finish_kinds(&mut self, followed: &[String]) -> bool {
         self.kinds.finish(followed)
     }
+
+    /// Whether this folder is still to be asked for the follow-ups Outlook flagged before they
+    /// were read here (their dates and reminder).
+    pub fn follow_ups_wanted(&self, folder: &str) -> bool {
+        self.follow_ups.wanted(folder)
+    }
+
+    /// This folder had the pass for flagged follow-ups.
+    pub fn follow_ups_read(&mut self, folder: &str) {
+        self.follow_ups.read(folder);
+    }
+
+    /// The pass for flagged follow-ups done once every folder `followed` had it.
+    pub fn finish_follow_ups(&mut self, followed: &[String]) -> bool {
+        self.follow_ups.finish(followed)
+    }
 }

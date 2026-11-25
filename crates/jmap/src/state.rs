@@ -50,6 +50,11 @@ pub struct State {
     /// messages, reports, S/MIME…: [`Ticks`] too).
     #[serde(default, skip_serializing_if = "Ticks::is_new", deserialize_with = "ticks::lenient")]
     pub kinds: Ticks,
+    /// Exchange: the one pass reading the follow-ups Outlook flagged before they were read here
+    /// (their dates and reminder: a sync that asks only what changed never brings them), as
+    /// [`Ticks`] too.
+    #[serde(default, skip_serializing_if = "Ticks::is_new", deserialize_with = "ticks::lenient")]
+    pub follow_ups: Ticks,
     /// Exchange: the folders that pass failed in this run, not asked again before Quatrelle
     /// next starts ([`State::kinds_failed`]); never written.
     #[serde(skip)]
@@ -145,6 +150,7 @@ impl State {
         self.ticks.hash(&mut h);
         self.replies.hash(&mut h);
         self.kinds.hash(&mut h);
+        self.follow_ups.hash(&mut h);
         h.finish()
     }
 
@@ -230,6 +236,7 @@ impl State {
             ticks: self.ticks.clone(),
             replies: self.replies.clone(),
             kinds: self.kinds.clone(),
+            follow_ups: self.follow_ups.clone(),
             kinds_put_off: self.kinds_put_off.clone(),
             saved: std::cell::Cell::new(0),
             base: Some(numbering.clone()),
@@ -276,6 +283,7 @@ impl State {
         self.ticks.absorb(other.ticks);
         self.replies.absorb(other.replies);
         self.kinds.absorb(other.kinds);
+        self.follow_ups.absorb(other.follow_ups);
         for f in other.kinds_put_off {
             self.put_off_kinds(&f);
         }

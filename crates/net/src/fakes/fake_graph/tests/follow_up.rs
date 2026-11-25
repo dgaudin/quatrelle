@@ -3,7 +3,7 @@
 //! A follow-up marked complete over the fake Graph server: Graph's one `flagStatus` holds both
 //! the flag and the follow-up marked complete (`complete`, with its `completedDateTime`).
 
-use quatrelle_model::{FOLLOW_UP_COMPLETE, Flag, Op};
+use quatrelle_model::{FOLLOW_UP_COMPLETE, FieldChange, Flag, Op};
 
 use super::*;
 
@@ -109,7 +109,12 @@ fn follow_up_dates_go_both_ways_and_no_reminder_is_sent() {
     crate::graph::apply_remote(
         &c,
         &st,
-        &Op::SetFollowUp { keys: keys.clone(), start: Some(start), due: Some(due), reminder: Some(at("2026-12-04T08:30:00Z")) },
+        &Op::SetFollowUp {
+            keys: keys.clone(),
+            start: Some(FieldChange::Set(start)),
+            due: Some(FieldChange::Set(due)),
+            reminder: Some(FieldChange::Set(at("2026-12-04T08:30:00Z"))),
+        },
     )
     .unwrap();
     {
@@ -126,7 +131,12 @@ fn follow_up_dates_go_both_ways_and_no_reminder_is_sent() {
     assert_eq!((m.flags.follow_up.start, m.flags.follow_up.due, m.flags.follow_up.reminder), (start, due, 0), "{:?}", m.flags.follow_up);
 
     // Taken off here: Graph has none.
-    crate::graph::apply_remote(&c, &st, &Op::SetFollowUp { keys, start: None, due: None, reminder: None }).unwrap();
+    crate::graph::apply_remote(
+        &c,
+        &st,
+        &Op::SetFollowUp { keys, start: Some(FieldChange::Clear), due: Some(FieldChange::Clear), reminder: Some(FieldChange::Clear) },
+    )
+    .unwrap();
     let d = server.data.lock().unwrap();
     let m = d.message(&id).unwrap();
     assert!(m.start.is_none() && m.due.is_none(), "{m:?}");

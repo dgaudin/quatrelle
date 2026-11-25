@@ -153,17 +153,25 @@ fn date_updates(task: &str, common: &str, at: Option<i64>) -> String {
     }
 }
 
-/// The updates for a follow-up's dates and reminder as a change names them: each property as
-/// `None` deletes it.
-fn follow_up_updates(start: Option<i64>, due: Option<i64>, reminder: Option<i64>) -> String {
-    let mut out = date_updates(TASK_START, COMMON_START, start);
-    out.push_str(&date_updates(TASK_DUE, COMMON_END, due));
+/// The updates for the follow-up fields a change names: `Set` a value, `Clear` to take the
+/// property off, unnamed (`None`) left as the server has it — a partial change doesn't erase
+/// what this computer didn't know.
+fn follow_up_updates(start: Option<FieldChange>, due: Option<FieldChange>, reminder: Option<FieldChange>) -> String {
+    let mut out = String::new();
+    if let Some(c) = start {
+        out.push_str(&date_updates(TASK_START, COMMON_START, c.value()));
+    }
+    if let Some(c) = due {
+        out.push_str(&date_updates(TASK_DUE, COMMON_END, c.value()));
+    }
     // A reminder's time of day and the moment it rings are the same moment here: Outlook keeps
     // the day it is due in `PidLidReminderTime` and the moment in `PidLidReminderSignalTime`
     // ([MS-OXOFLAG] 2.2.1), and Quatrelle has one time, which both take.
-    match reminder {
-        Some(at) => out.push_str(&format!("{}{}{}", set_value(REMINDER_SET, "true"), set_time(REMINDER_TIME, at), set_time(REMINDER_SIGNAL, at))),
-        None => out.push_str(&format!("{}{}{}", delete(REMINDER_SET), delete(REMINDER_TIME), delete(REMINDER_SIGNAL))),
+    if let Some(c) = reminder {
+        match c.value() {
+            Some(at) => out.push_str(&format!("{}{}{}", set_value(REMINDER_SET, "true"), set_time(REMINDER_TIME, at), set_time(REMINDER_SIGNAL, at))),
+            None => out.push_str(&format!("{}{}{}", delete(REMINDER_SET), delete(REMINDER_TIME), delete(REMINDER_SIGNAL))),
+        }
     }
     out
 }
@@ -223,8 +231,12 @@ pub fn apply_remote(c: &Client, st: &State, op: &Op) -> Result<()> {
         Op::SetFlag { keys, flag: Flag::Flagged, on: false, .. } => {
             update(keys, &format!("{}{}{}{}", delete(FLAG_STATUS), delete(COMPLETE_TIME), delete(FOLLOW_UP_ICON), delete(FLAG_REQUEST)))
         }
-        // Its dates and reminder, as Follow Up › Custom… set them (and Add Reminder…).
-        Op::SetFollowUp { keys, start, due, reminder } => update(keys, &follow_up_updates(*start, *due, *reminder)),
+        // Its dates and reminder, as Follow Up › Custom… set them (and Add Reminder…): only the
+        // fields the change names, the others left as the server has them.
+        Op::SetFollowUp { keys, start, due, reminder } => {
+            let change = follow_up_updates(*start, *due, *reminder);
+            if change.is_empty() { Ok(()) } else { update(keys, &change) }
+        }
         // Outlook's Mark Complete: status 1 and the time it was done, the flag's icon gone
         // ([MS-OXOFLAG] 3.1.4.2); taken off (Undo, or flagged again): none of it.
         Op::SetKeyword { keys, keyword, on, .. } if keyword.eq_ignore_ascii_case(quatrelle_model::FOLLOW_UP_COMPLETE) => {

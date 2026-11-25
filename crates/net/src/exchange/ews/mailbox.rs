@@ -12,6 +12,8 @@ pub(super) enum Only {
     Categorized,
     Completed,
     Replied,
+    /// Flagged (`PidTagFlagStatus` 2): the follow-ups Outlook set, read once ([`Client::follow_ups`]).
+    FollowUps,
     /// What may be more than mail, or was replied to all ([`Client::kinds`]).
     Kinds,
 }
@@ -332,6 +334,13 @@ impl Client {
         self.newest_where(folder, limit, since, Only::Replied, page, id_and_flags)
     }
 
+    /// [`Client::newest`], the flagged ones only (`PidTagFlagStatus` 2), with their follow-up
+    /// dates and reminder read: the pass that reads what Outlook flagged before they were read
+    /// here, a page of `page` at a time.
+    pub(super) fn follow_ups(&self, folder: &str, limit: usize, since: Option<i64>, page: usize) -> Result<Vec<(String, Flags)>> {
+        self.newest_where(folder, limit, since, Only::FollowUps, page, id_and_flags)
+    }
+
     /// [`Client::newest`], `only` those, each read by `read` (one it reads nothing of is left out).
     pub(super) fn newest_where<T>(
         &self,
@@ -352,6 +361,10 @@ impl Client {
                 "<t:IsEqualTo><t:ExtendedFieldURI PropertyTag=\"0x1090\" PropertyType=\"Integer\"/>\
                  <t:FieldURIOrConstant><t:Constant Value=\"1\"/></t:FieldURIOrConstant></t:IsEqualTo>",
             ),
+            Only::FollowUps => conditions.push_str(
+                "<t:IsEqualTo><t:ExtendedFieldURI PropertyTag=\"0x1090\" PropertyType=\"Integer\"/>\
+                 <t:FieldURIOrConstant><t:Constant Value=\"2\"/></t:FieldURIOrConstant></t:IsEqualTo>",
+            ),
             Only::Replied => conditions.push_str(&format!(
                 "<t:IsGreaterThanOrEqualTo><t:ExtendedFieldURI PropertyTag=\"0x1081\" PropertyType=\"Integer\"/>\
                  <t:FieldURIOrConstant><t:Constant Value=\"{}\"/></t:FieldURIOrConstant></t:IsGreaterThanOrEqualTo>\
@@ -371,7 +384,9 @@ impl Client {
         // One condition alone, two or more under an `And` (a range is two).
         let restriction = match (only, since.is_some()) {
             (Only::All, false) => String::new(),
-            (Only::Categorized | Only::Completed | Only::Kinds, false) | (Only::All, true) => format!("<m:Restriction>{conditions}</m:Restriction>"),
+            (Only::Categorized | Only::Completed | Only::FollowUps | Only::Kinds, false) | (Only::All, true) => {
+                format!("<m:Restriction>{conditions}</m:Restriction>")
+            }
             _ => format!("<m:Restriction><t:And>{conditions}</t:And></m:Restriction>"),
         };
         // What a message is, for the pass that reads it alone.
