@@ -372,9 +372,16 @@ pub struct Session {
     /// time: filled off the interface thread, bounded, re-read when a change touches the
     /// folder ([`Session::disk_folder_changed`]).
     pub(crate) disk_lists: std::sync::Arc<std::sync::Mutex<DiskScan>>,
-    /// Counts every change commands, ops and events make to what the To-Do List and the
-    /// reminders read: the interface rebuilds them only when it changed, not at every image.
+    /// Counts the changes that can alter what the To-Do List and the reminders read (the
+    /// content commands, the ops and events that touch mail): the interface rebuilds them only
+    /// when it changed, not at every image or every status line.
     pub(crate) mail_stamp: u64,
+    /// The My Tasks pane's lists, computed for the mail stamp they were computed at: rebuilt
+    /// only when accounts or folders changed, not at every call.
+    pub(crate) task_lists_memo: std::sync::Mutex<Option<(u64, Vec<pim::TaskList>)>>,
+    /// The address book by address (lower case), for the PIM revision it was built at: looked up
+    /// in, not searched card by card at every image.
+    pub(crate) people_index: std::sync::Mutex<Option<(u64, HashMap<String, pim::Person>)>>,
     /// Folders' lists read from the cache on disk, the messages read, and the pages of lists read
     /// alone ([`Session::lists_read`], [`Session::pages_read`]).
     lists_read: (u64, u64, u64),
@@ -611,6 +618,8 @@ impl Session {
                 started: false,
             })),
             mail_stamp: 0,
+            task_lists_memo: std::sync::Mutex::new(None),
+            people_index: std::sync::Mutex::new(None),
             lists_read: (0, 0, 0),
             contacts: Contacts::default(),
             people: mailboxes::People::default(),
@@ -778,7 +787,11 @@ impl Session {
     /// Run a command by id. Disabled commands fail with [`CmdError::Disabled`]. A panic inside a
     /// command is caught and reported as an error rather than taking the app down.
     pub fn run(&mut self, id: &str, params: &Value) -> CmdResult {
-        self.mail_stamp = self.mail_stamp.wrapping_add(1);
+        // Only a command that can change the mail or the tasks moves the stamp the To-Do List
+        // and the reminders are memoized on: selecting, looking and searching leave it alone.
+        if crate::cmd::changes_mail(id) {
+            self.mail_stamp = self.mail_stamp.wrapping_add(1);
+        }
         let reg = self.registry.clone();
         let spec = reg.get(id).ok_or_else(|| CmdError::Unknown(id.to_string()))?;
         // What the command acts on is the message as shown: its body, still being got ready on

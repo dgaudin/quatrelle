@@ -8,7 +8,24 @@ use super::*;
 impl Session {
     /// Apply an event from the network layer.
     pub fn apply(&mut self, e: Event) {
-        self.mail_stamp = self.mail_stamp.wrapping_add(1);
+        // Only an event that can change what the To-Do List and the reminders read moves the
+        // stamp: a status line, a fetched body or a search result doesn't.
+        if matches!(
+            e,
+            Event::Folders { .. }
+                | Event::Archived { .. }
+                | Event::PutBack { .. }
+                | Event::FolderChanged { .. }
+                | Event::FolderSynced { .. }
+                | Event::OpFailed { .. }
+                | Event::OpsSetAside { .. }
+                | Event::MessagesFiled { .. }
+                | Event::MessageFileRead { .. }
+                | Event::DavSynced { .. }
+                | Event::Categories { .. }
+        ) {
+            self.mail_stamp = self.mail_stamp.wrapping_add(1);
+        }
         // A folder's list changed on disk: its disk-read list for the To-Do List is stale.
         if let Event::FolderChanged { account, folder } | Event::FolderSynced { account, folder, .. } = &e {
             self.disk_folder_changed(account, folder);

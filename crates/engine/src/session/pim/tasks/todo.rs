@@ -27,8 +27,25 @@ pub struct TaskList {
 impl Session {
     /// The My Tasks pane's lists, in Outlook's order: the To-Do List, then each account's tasks
     /// (with its online archive's read-only list, and those of the shared mailboxes opened in
-    /// it).
+    /// it). Computed again only when the mail stamp moved (an account or folder changed), not
+    /// at every call.
     pub fn task_lists(&self) -> Vec<TaskList> {
+        let stamp = self.mail_stamp;
+        {
+            let g = self.task_lists_memo.lock().unwrap_or_else(|e| e.into_inner());
+            if let Some((s, lists)) = g.as_ref()
+                && *s == stamp
+            {
+                return lists.clone();
+            }
+        }
+        let lists = self.build_task_lists();
+        *self.task_lists_memo.lock().unwrap_or_else(|e| e.into_inner()) = Some((stamp, lists.clone()));
+        lists
+    }
+
+    /// [`Session::task_lists`], computed from the accounts and folders as they are now.
+    fn build_task_lists(&self) -> Vec<TaskList> {
         let mut out = vec![TaskList { id: "todo".into(), name: "To-Do List".into(), account: None, read_only: false, archive: false, mailbox: None }];
         for a in &self.accounts {
             let name = if a.config.name.trim().is_empty() { a.config.email.clone() } else { a.config.name.clone() };

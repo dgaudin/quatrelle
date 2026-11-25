@@ -39,7 +39,11 @@ impl Session {
     /// Apply a change: to the in-memory list at once, then to the cache and server (through a
     /// job), or straight to the cache for local accounts.
     pub fn apply_op(&mut self, account: &str, op: Op) {
-        self.mail_stamp = self.mail_stamp.wrapping_add(1);
+        // Only an op that touches messages or folders moves the To-Do stamp: an empty one (all
+        // its keys in the Outbox, or none) changes nothing.
+        if op.is_folder_op() || op.keys().iter().any(|k| k.folder != OUTBOX) {
+            self.mail_stamp = self.mail_stamp.wrapping_add(1);
+        }
         let folders: std::collections::HashSet<String> = op.keys().iter().map(|k| k.folder.clone()).collect();
         if let Err(e) = self.apply_op_checked(account, op) {
             self.notice_with("Your mail couldn't be moved, so it stays where it was: {error}", &[("error", &e.to_string())], true);
