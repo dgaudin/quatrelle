@@ -131,7 +131,9 @@ fn follow_up_dates_and_its_reminder_go_both_ways() {
     assert_eq!(m.flags.follow_up.start, at("2026-11-02T00:00:00Z"), "{:?}", m.flags.follow_up);
     assert_eq!(m.flags.follow_up.due, at("2026-11-06T00:00:00Z"), "{:?}", m.flags.follow_up);
     assert_eq!(m.flags.follow_up.reminder, at("2026-11-06T09:00:00Z"), "{:?}", m.flags.follow_up);
-    assert_eq!(m.flags.follow_up.title, "Follow up");
+    // The flag's request is not the title: with no PidLidToDoTitle the title is empty and the
+    // list shows the message's subject.
+    assert_eq!(m.flags.follow_up.title, "");
 
     // Set here: Exchange gets the dates and the reminder (both its times).
     let keys = vec![m.key];
@@ -164,7 +166,10 @@ fn follow_up_dates_and_its_reminder_go_both_ways() {
         assert_eq!(f.reminder_signal.as_deref().and_then(jmap::utc_date), Some(reminder), "{f:?}");
     }
     // The next sync reads them back.
-    server.data.lock().unwrap().items.iter_mut().for_each(|i| i.follow_up.request = Some("Send the report".into()));
+    server.data.lock().unwrap().items.iter_mut().for_each(|i| {
+        i.follow_up.request = Some("Review".into());
+        i.follow_up.title = Some("Send the report".into());
+    });
     sync_folder(&c, &mut st, &store, "a1", "INBOX", &opts).unwrap();
     let m = store.load_folder("a1", "INBOX").unwrap().messages[0].clone();
     assert_eq!((m.flags.follow_up.start, m.flags.follow_up.due, m.flags.follow_up.reminder), (start, due, reminder), "{:?}", m.flags.follow_up);
@@ -478,7 +483,7 @@ fn flagged_follow_ups_before_this_version_are_read_once() {
                 reminder_time: Some("2026-11-06T09:00:00Z".into()),
                 reminder_signal: Some("2026-11-06T09:00:00Z".into()),
                 request: Some("Review".into()),
-                title: None,
+                title: Some("Review the proofs".into()),
             };
         }
     }
@@ -524,7 +529,7 @@ fn flagged_follow_ups_before_this_version_are_read_once() {
         "the pass read them: {:?}",
         m.flags.follow_up
     );
-    assert_eq!(m.flags.follow_up.title, "Review");
+    assert_eq!(m.flags.follow_up.title, "Review the proofs");
     // Never asked again.
     st.save(&store, "a1").unwrap();
     let mut st = State::load(&store, "a1").unwrap();
@@ -576,7 +581,7 @@ fn the_follow_up_s_title_is_the_task_s_todo_title() {
     let m = store.load_folder("a1", "INBOX").unwrap().messages[0].clone();
     assert_eq!(m.flags.follow_up.title, "Review the proofs", "the task's title, not the flag's request: {:?}", m.flags.follow_up);
 
-    // One with no task title: the flag's request.
+    // One with no task title: the flag's request is not a title.
     {
         let d = server.data.lock().unwrap();
         let inbox = d.folders.iter().find(|f| f.name == "Inbox").map(|f| f.id.clone()).unwrap_or_default();
@@ -589,7 +594,7 @@ fn the_follow_up_s_title_is_the_task_s_todo_title() {
     }
     sync_folder(&c, &mut st, &store, "a1", "INBOX", &opts).unwrap();
     let m = store.load_folder("a1", "INBOX").unwrap().messages.iter().find(|m| m.subject == "plain").cloned().unwrap();
-    assert_eq!(m.flags.follow_up.title, "Review", "the flag's request when the task has no title: {:?}", m.flags.follow_up);
+    assert_eq!(m.flags.follow_up.title, "", "no task title: the flag's request is not used, the subject is shown: {:?}", m.flags.follow_up);
     let _ = std::fs::remove_dir_all(&dir);
 }
 
@@ -686,5 +691,33 @@ fn common_dates_are_written_under_their_own_property_ids() {
     assert!(!upd.contains("PropertyId=\"34052\"") && !upd.contains("PropertyId=\"34053\""), "not 0x8504/0x8505: {upd}");
     let f = &d.items.iter().find(|i| i.id == id).unwrap().follow_up;
     assert!(f.common_start.is_some() && f.common_end.is_some(), "the server read them under the same ids: {f:?}");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// The flag's request text (`PidLidFlagRequest`, "Follow up" by default) is never the task's
+/// title: only `PidLidToDoTitle` is, and the list falls back to the message's subject.
+#[test]
+fn a_flag_request_alone_is_not_the_task_s_title() {
+    let mut d = Data::default();
+    let inbox = d.folder("Inbox", None, Some("inbox"), "IPF.Note");
+    d.deliver(&inbox, b"From: a@x.example\r\nSubject: Proofs of the film\r\n\r\nx\r\n", true, "2024-05-01T09:00:00Z");
+    for i in d.items.iter_mut() {
+        i.flagged = true;
+        i.follow_up = fake_ews::FollowUp { request: Some("Follow up".into()), title: None, ..Default::default() };
+    }
+    let server = fake_ews::serve(d);
+    let dir = std::env::temp_dir().join(format!("quatrelle-ews-title-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    let store = Store::open(&dir).unwrap();
+    let user = format!("{}\\{}", fake_ews::DOMAIN, fake_ews::USER);
+    let c = Client::connect(&server.url, &user, fake_ews::PASSWORD, "riley@contoso.example").unwrap();
+    let mut st = State::default();
+    list_folders(&c, &mut st, "a1").unwrap();
+    let opts = SyncOptions { prefetch: 0, ..Default::default() };
+    sync_folder(&c, &mut st, &store, "a1", "INBOX", &opts).unwrap();
+    let m = store.load_folder("a1", "INBOX").unwrap().messages[0].clone();
+    assert!(m.flags.flagged, "{:?}", m.flags);
+    assert_eq!(m.flags.follow_up.title, "", "the flag's request is not the title: {:?}", m.flags.follow_up);
+    assert_eq!(m.subject, "Proofs of the film");
     let _ = std::fs::remove_dir_all(&dir);
 }
