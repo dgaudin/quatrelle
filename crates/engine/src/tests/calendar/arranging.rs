@@ -452,3 +452,18 @@ fn a_microsoft_365_group_that_still_holds_calendars_is_not_deleted() {
     s.run("calendar.group.delete", &json!({"account": "sample", "group": "Vide"})).unwrap();
     assert!(applied(&mut s).iter().any(|op| matches!(op, Op::DeleteCalendarGroup { group } if group == "Vide")), "the empty group is sent");
 }
+
+/// Folded calendar groups are remembered by name: a run of commands can't fill the setting.
+#[test]
+fn folded_calendar_groups_are_bounded() {
+    let mut s = sample_session("arranging-folded-cap");
+    for i in 0..200 {
+        s.run("calendar.groupFold", &json!({"group": format!("Groupe {i}")})).unwrap();
+    }
+    assert!(s.prefs.folded_calendar_groups.len() <= 128, "{} kept", s.prefs.folded_calendar_groups.len());
+    // A name already kept still unfolds, even at the cap.
+    let kept = s.prefs.folded_calendar_groups.iter().next().cloned().expect("one folded");
+    s.run("calendar.groupFold", &json!({"group": kept.clone(), "folded": false})).unwrap();
+    assert!(!s.prefs.folded_calendar_groups.contains(&kept), "one kept can still be unfolded");
+    done(s);
+}
