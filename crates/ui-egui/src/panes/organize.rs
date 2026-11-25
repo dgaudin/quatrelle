@@ -94,11 +94,13 @@ pub fn follow_up_menu(ui: &mut Ui, s: &Session, t: &Tokens, acts: &mut Vec<Actio
         acts.push(Action::Run("mail.flag", params(json!({"due": "none", "start": "none"}))));
         ui.close();
     }
-    if ui.button(tl!("Custom…")).clicked() {
+    // A key that doesn't resolve (the message is gone from everywhere kept): no dialog.
+    let keyed = key.map(|k| s.message_by_id(k).is_some()).unwrap_or(true);
+    if keyed && ui.button(tl!("Custom…")).clicked() {
         acts.push(Action::Dialog(Dialog::FollowUp(Box::new(FollowUpForm::of(s, true, key)))));
         ui.close();
     }
-    if ui.button(tl!("Add Reminder…")).clicked() {
+    if keyed && ui.button(tl!("Add Reminder…")).clicked() {
         acts.push(Action::Dialog(Dialog::FollowUp(Box::new(FollowUpForm::of(s, false, key)))));
         ui.close();
     }

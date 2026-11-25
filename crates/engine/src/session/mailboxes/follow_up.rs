@@ -387,10 +387,18 @@ impl Session {
         self.prefs.follow_up.get(&follow_up_id(m)).copied()
     }
 
-    /// A kept message by its id ([`MessageKey::to_id`]), as the To-Do List's rows name one.
+    /// A kept message by its id ([`MessageKey::to_id`]), as the To-Do List's rows name one: the
+    /// memory cache first, then the folders read from the disk cache (a folder never opened
+    /// this session).
     pub fn message_by_id(&self, id: &str) -> Option<Arc<Summary>> {
         let key = MessageKey::from_id(id)?;
-        self.cache.get(&(key.account.clone(), key.folder.clone()))?.messages.iter().find(|m| m.key == key).cloned()
+        if let Some(st) = self.cache.get(&(key.account.clone(), key.folder.clone()))
+            && let Some(m) = st.messages.iter().find(|m| m.key == key)
+        {
+            return Some(m.clone());
+        }
+        let g = self.disk_lists.lock().unwrap_or_else(|e| e.into_inner());
+        g.map.get(&(key.account.clone(), key.folder.clone()))?.iter().find(|m| m.key == key).map(|m| Arc::new(m.clone()))
     }
 
     /// When a flag's follow-up starts: the server's own, else the day kept here.

@@ -640,3 +640,38 @@ fn a_folder_a_sync_touched_is_read_again_from_disk() {
     assert!(found, "the folder a sync touched is read again: {:?}", s.todo("", false).iter().map(|r| r.subject().to_string()).collect::<Vec<_>>());
     done(s);
 }
+
+/// A row of the To-Do List whose message is only in the disk cache (a folder never opened this
+/// session) can be flagged and edited by its key: `message_by_id` reads the disk-read lists too.
+#[test]
+fn a_disk_only_row_is_edited_by_its_key() {
+    let mut s = sample_session("todo-key-disk");
+    let today = quatrelle_model::dates::today(&s.clock);
+    let folder = quatrelle_model::Folder { account: "sample".into(), path: "Projects".into(), selectable: true, ..Default::default() };
+    s.accounts[0].folders.push(folder);
+    s.store.as_ref().unwrap().save_folders("sample", &s.accounts[0].folders).unwrap();
+    let mut st = quatrelle_store::FolderState { validity: 1, ..Default::default() };
+    st.messages.push(Summary {
+        key: MessageKey { account: "sample".into(), folder: "Projects".into(), validity: 1, uid: 77 },
+        message_id: "disk-only@x".into(),
+        subject: "On disk only".into(),
+        flags: quatrelle_model::Flags {
+            flagged: true,
+            follow_up: quatrelle_model::FollowUp { due: today.saturating_mul(86_400), ..Default::default() },
+            ..Default::default()
+        },
+        ..Default::default()
+    });
+    s.store.as_ref().unwrap().save_folder("sample", "Projects", &st).unwrap();
+    s.cache.remove(&("sample".to_string(), "Projects".to_string()));
+    s.cache_order.retain(|k| *k != ("sample".to_string(), "Projects".to_string()));
+    s.todo("", false);
+    s.wait_disk_scan();
+
+    let key = MessageKey { account: "sample".into(), folder: "Projects".into(), validity: 1, uid: 77 };
+    let id = key.to_id();
+    assert!(s.message_by_id(&id).is_some(), "the disk-read lists are searched too");
+    let r = s.run("mail.flag", &serde_json::json!({ "key": id, "due": "none" }));
+    assert!(r.is_ok(), "mail.flag by the key of a disk-only row: {r:?}");
+    done(s);
+}
