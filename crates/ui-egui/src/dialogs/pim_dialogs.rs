@@ -27,6 +27,8 @@ pub(crate) mod recurrence;
 pub(crate) mod rooms;
 pub(crate) mod scheduling;
 pub(crate) mod teams_meeting;
+#[cfg(test)]
+mod tests;
 pub(crate) mod webex;
 pub(crate) mod webex_rooms;
 
@@ -152,15 +154,19 @@ pub(super) fn form_header(ui: &mut Ui, t: &Tokens, badge: Result<Icon, String>, 
 /// `icons_used`: the form puts icons before labels, so a row without one is indented to match.
 pub(super) fn form_row(ui: &mut Ui, t: &Tokens, icons_used: bool, icon: Option<Icon>, label: &str, add: impl FnOnce(&mut Ui)) {
     ui.horizontal_top(|ui| {
-        let (r, _) = ui.allocate_exact_size(vec2(LABEL_W, FIELD_H), Sense::hover());
-        let mut x = r.left();
+        // A label longer than its column (French's "Téléphone professionnel") goes on two
+        // lines inside it, the row as tall: the field after it never runs over its end.
+        let indent = if icons_used { 24.0 } else { 0.0 };
+        let galley = ui.painter().layout(tl!(label).to_string(), theme::regular(13.0), t.dim, (LABEL_W - indent - 8.0).max(24.0));
+        let tall = FIELD_H.max(galley.size().y + 8.0);
+        let (r, _) = ui.allocate_exact_size(vec2(LABEL_W, tall), Sense::hover());
+        let line = egui::Rect::from_min_size(r.min, vec2(LABEL_W, FIELD_H));
         if let Some(icon) = icon {
-            icons::paint(ui.painter(), egui::Rect::from_center_size(egui::pos2(x + 8.0, r.center().y), vec2(16.0, 16.0)), icon, t.dim);
+            icons::paint(ui.painter(), egui::Rect::from_center_size(egui::pos2(r.left() + 8.0, line.center().y), vec2(16.0, 16.0)), icon, t.dim);
         }
-        if icons_used {
-            x += 24.0;
-        }
-        ui.painter().text(egui::pos2(x, r.center().y), egui::Align2::LEFT_CENTER, tl!(label), theme::regular(13.0), t.dim);
+        // One line: centred on the field's first line, as before; two: from the row's top.
+        let top = if galley.rows.len() <= 1 { line.center().y - galley.size().y / 2.0 } else { r.top() + 4.0 };
+        ui.painter().galley(egui::pos2(r.left() + indent, top), galley, t.dim);
         add(ui);
     });
     ui.add_space(8.0);
