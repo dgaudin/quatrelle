@@ -479,7 +479,7 @@ impl MailApp {
                             acts.push(Action::Run("view.favorites", json!({})));
                         }
                         // To-Do Bar: its parts, each ticked or not, or Off, as Outlook's menu.
-                        let r = widgets::big_more(ui, "To-Do bar", &t);
+                        let r = widgets::big_button(ui, Icon::Tasks, "To-Do bar", &t, true);
                         egui::Popup::menu(&r).show(|ui| {
                             let bar = s.prefs.todo_bar();
                             for (label, on, part) in

@@ -219,7 +219,7 @@ pub(crate) fn ribbon(s: &Session, st: &mut UiState, ui: &mut Ui, groups: &mut wi
     groups.end(ui, &t, "Tags");
     let list = list_of(&st.tasks).to_string();
     let (view, arrange) = s.task_view(&list);
-    let r = widgets::big_more(ui, "Current View", &t);
+    let r = widgets::big_button(ui, Icon::ListBullet, "Current View", &t, true);
     egui::Popup::menu(&r).show(|ui| {
         for v in TaskView::ALL {
             if ui.selectable_label(view == v, tl!(v.label())).clicked() {
@@ -228,7 +228,7 @@ pub(crate) fn ribbon(s: &Session, st: &mut UiState, ui: &mut Ui, groups: &mut wi
             }
         }
     });
-    let r = widgets::big_more(ui, "Arrange By", &t);
+    let r = widgets::big_button(ui, Icon::ListNumber, "Arrange By", &t, true);
     egui::Popup::menu(&r).show(|ui| {
         for a in TaskArrange::ALL {
             if ui.selectable_label(arrange == a, tl!(a.label())).clicked() {

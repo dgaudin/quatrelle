@@ -192,3 +192,32 @@ fn esc_leaves_a_file_page_field_before_the_page() {
     assert!(a.ui.backstage.is_none(), "the next Esc leaves the File page");
     let _ = std::fs::remove_dir_all(dir);
 }
+
+/// The ribbon's buttons that open a menu (To-Do bar in Mail's View tab, Current View and Arrange
+/// By in Tasks') show their icon and their name, as the other big buttons do, not a bare arrow.
+#[test]
+fn the_ribbons_menu_buttons_show_their_names() {
+    let (mut a, dir) = app("ribbon-menu-names");
+    let ctx = egui::Context::default();
+    let size = egui::vec2(1600.0, 900.0);
+    let drawn = |a: &mut MailApp, ctx: &egui::Context| {
+        for _ in 0..3 {
+            frame_shapes(ctx, a, vec![], size);
+        }
+        let mut out = Vec::new();
+        for s in frame_shapes(ctx, a, vec![], size) {
+            if let egui::Shape::Text(t) = s {
+                out.push(t.galley.job.text.clone());
+            }
+        }
+        out
+    };
+    a.ui.tab = crate::RibbonTab::View;
+    let mail = drawn(&mut a, &ctx);
+    assert!(mail.iter().any(|t| t == "To-Do bar"), "{mail:?}");
+    a.run("view.module", json!({"name": "tasks"}));
+    a.ui.tab = crate::RibbonTab::View;
+    let tasks = drawn(&mut a, &ctx);
+    assert!(tasks.iter().any(|t| t == "Current View") && tasks.iter().any(|t| t == "Arrange By"), "{tasks:?}");
+    let _ = std::fs::remove_dir_all(dir);
+}
