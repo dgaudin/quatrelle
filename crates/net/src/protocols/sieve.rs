@@ -9,7 +9,9 @@
 //! The script is Quatrelle's own: the settings it was made from are kept in its first lines, so
 //! reading them back never means parsing Sieve. A script the user already runs stays in charge
 //! of their other rules: ours `include`s it (RFC 6609) and becomes the active one; when ours does
-//! nothing any more (no replies, no rule) theirs becomes active again.
+//! nothing any more (no replies, no rule) theirs becomes active again. A script Quatrelle didn't
+//! write is still read — as the rules it holds, in [`parse_rules`] — so what the server runs
+//! shows up listed; it is never changed from here.
 //!
 //! Server input is hostile: a line, a literal and one whole answer (its bytes, its words, its
 //! time) are capped, from the greeting on, which is read before TLS.
@@ -17,7 +19,7 @@
 use std::io::{BufRead, BufReader, Read, Write};
 
 use quatrelle_model::job::{Vacation, is_day};
-use quatrelle_model::organize::{Condition, Rule, RuleAction};
+use quatrelle_model::organize::{Condition, ForeignRule, Rule, RuleAction};
 use quatrelle_model::{PINNED, Security, ServerConfig, keyword_for, utf7};
 
 use crate::stream::{self, Stream};
@@ -583,6 +585,10 @@ pub fn read_rules(s: &str) -> Vec<Rule> {
 fn read_previous(s: &str) -> Option<String> {
     s.lines().take(3).find_map(|l| l.strip_prefix("# quatrelle-previous ").map(|p| p.trim().to_string())).filter(|p| !p.is_empty())
 }
+
+mod parse;
+
+pub use parse::parse_rules;
 
 #[cfg(test)]
 pub(crate) mod tests;
