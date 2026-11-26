@@ -255,6 +255,7 @@ fn sync_snapshot(state: &str) -> Option<Vec<Marks>> {
                 reminder_signal: text(),
                 request: text(),
                 title: text(),
+                icon: None,
             };
             Some(Marks {
                 id,

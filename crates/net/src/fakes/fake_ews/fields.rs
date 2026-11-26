@@ -144,6 +144,9 @@ pub struct FollowUp {
     /// The task's title (`PidLidToDoTitle`, 0x85A4), what the To-Do List shows as the row's
     /// subject when Outlook set one.
     pub title: Option<String>,
+    /// The flag's colour as Outlook 2003 wrote it (`PidTagFollowupIcon`, 0x1095), kept as
+    /// written: Outlook takes a coloured flag on an item for one of its colour categories.
+    pub icon: Option<String>,
 }
 
 /// A message's follow-up as Exchange gives it, with the last thing done with it ([`Verb`]).
@@ -248,6 +251,7 @@ pub(super) fn take_flag_update(it: &mut It, u: &El) {
             it.complete = set && v.as_deref() == Some("1");
         }
         Some("0x1091") => it.complete_time = u.find("Value").map(|v| v.text.trim().to_string()).filter(|_| set),
+        Some("0x1095") => it.follow_up.icon = u.find("Value").map(|v| v.text.trim().to_string()).filter(|_| set),
         // The last thing done with it, when, and its icon (as written).
         Some(tag @ ("0x1081" | "0x1082" | "0x1080")) => {
             let v = u.find("Value").map(|v| v.text.trim().to_string()).filter(|_| set);

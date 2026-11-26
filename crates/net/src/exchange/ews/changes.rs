@@ -106,9 +106,6 @@ fn todo_title() -> String {
     lid_uri("Common", PID_LID_TO_DO_TITLE, "String")
 }
 
-/// `PidTagFollowupIcon` for a plain red flag ([MS-OXOFLAG] 2.2.1).
-const RED_FLAG: i64 = 6;
-
 /// `PidTagLastVerbExecuted`: the last thing done with a message (replied, forwarded).
 const LAST_VERB: &str = "<t:ExtendedFieldURI PropertyTag=\"0x1081\" PropertyType=\"Integer\"/>";
 /// `PidTagLastVerbExecutionTime`: when.
@@ -245,13 +242,12 @@ pub fn apply_remote(c: &Client, st: &State, op: &Op) -> Result<()> {
             &format!("<t:SetItemField><t:FieldURI FieldURI=\"message:IsRead\"/><t:Message><t:IsRead>{on}</t:IsRead></t:Message></t:SetItemField>"),
         ),
         // Flagged, as Outlook flags: status 2, no time done (a follow-up completed and flagged
-        // again), the plain red flag's icon. The flag's request (`PidLidFlagRequest`) is NOT
+        // again). No flag colour (`PidTagFollowupIcon`): Outlook takes a coloured flag for one of
+        // its colour categories and puts that category on the message. The flag's request (`PidLidFlagRequest`) is NOT
         // written: [MS-OXOFLAG] 3.1.4.1.3 sets it only when absent, and writing it would replace
         // an Outlook-given "Review" with "Follow up"; the task's title goes with the flag
         // through `SetFollowUp` instead.
-        Op::SetFlag { keys, flag: Flag::Flagged, on: true, .. } => {
-            update(keys, &format!("{}{}{}", flag_status(2), delete(COMPLETE_TIME), set_value(FOLLOW_UP_ICON, &RED_FLAG.to_string())))
-        }
+        Op::SetFlag { keys, flag: Flag::Flagged, on: true, .. } => update(keys, &format!("{}{}", flag_status(2), delete(COMPLETE_TIME))),
         // Cleared, or marked complete (the engine takes the flag off first): none of the
         // flag's own. Its dates and reminder stay — Mark Complete keeps the days it was due by,
         // as the list shows them struck through; taking them off is a SetFollowUp of its own

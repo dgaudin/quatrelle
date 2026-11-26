@@ -111,6 +111,7 @@ fn follow_up_dates_and_its_reminder_go_both_ways() {
             reminder_signal: Some("2026-11-06T09:00:00Z".into()),
             request: Some("Follow up".into()),
             title: None,
+            icon: None,
         };
     }
     let server = fake_ews::serve(d);
@@ -203,7 +204,8 @@ fn follow_up_dates_and_its_reminder_go_both_ways() {
         );
     }
 
-    // Flagged here: the plain red flag's icon and title ([MS-OXOFLAG] 3.1.4.1).
+    // Flagged here: the flag's status, and no colour (`PidTagFollowupIcon`): Outlook takes a
+    // coloured flag for one of its colour categories, and adds that category to the message.
     apply_remote(&c, &st, &Op::SetFlag { keys: keys.clone(), flag: Flag::Flagged, on: false, all: false }).unwrap();
     apply_remote(&c, &st, &Op::SetFlag { keys, flag: Flag::Flagged, on: true, all: false }).unwrap();
     let d = server.data.lock().unwrap();
@@ -211,6 +213,7 @@ fn follow_up_dates_and_its_reminder_go_both_ways() {
     // Flagging writes no PidLidFlagRequest ([MS-OXOFLAG] 3.1.4.1.3: only when absent — the
     // server's default "Follow up" applies); the task's title goes with SetFollowUp.
     assert!(i.flagged && i.follow_up.request.is_none(), "{i:?}");
+    assert_eq!(i.follow_up.icon, None, "no flag colour written: {i:?}");
     let _ = std::fs::remove_dir_all(&dir);
 }
 
@@ -418,6 +421,7 @@ fn marking_complete_keeps_the_follow_up_dates_on_exchange() {
             reminder_signal: Some("2026-11-06T09:00:00Z".into()),
             request: Some("Follow up".into()),
             title: None,
+            icon: None,
         };
     }
     let server = fake_ews::serve(d);
@@ -493,6 +497,7 @@ fn flagged_follow_ups_before_this_version_are_read_once() {
                 reminder_signal: Some("2026-11-06T09:00:00Z".into()),
                 request: Some("Review".into()),
                 title: Some("Review the proofs".into()),
+                icon: None,
             };
         }
     }
