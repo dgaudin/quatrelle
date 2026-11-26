@@ -8,6 +8,7 @@ use super::*;
 mod cancelled;
 mod contacts;
 mod files;
+mod group_moves;
 mod group_stamps;
 mod groups;
 mod notes;

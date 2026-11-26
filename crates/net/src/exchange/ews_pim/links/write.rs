@@ -219,6 +219,32 @@ fn after_group(all: &[Shortcut], group: &Shortcut, except: Option<&str>) -> Vec<
 /// folder class a calendar shortcut points at.
 const CALENDAR_FOLDER: [u8; 16] = [0x02, 0x78, 0x06, 0x00, 0x00, 0x00, 0x00, 0x00, 0xC0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x46];
 
+/// An ordinal that sorts strictly between `low` and `high` (`None`: no bound on that side), at
+/// most 16 bytes ([MS-OXOCFG] 2.2.9.7: shortcuts sort by their ordinals, byte by byte). `None`
+/// when there is none: the two are equal, `high` is empty (nothing sorts under it), or they leave
+/// no 16-byte value between them. The first length that has room is taken, so ordinals stay short.
+fn ordinal_between(low: Option<&[u8]>, high: Option<&[u8]>) -> Option<Vec<u8>> {
+    let low = low.unwrap_or_default();
+    if low.len() > 16 || high.is_some_and(|h| h.len() > 16 || h.is_empty()) {
+        return None;
+    }
+    let number =
+        |bytes: &[u8], n: usize| -> u128 { bytes.iter().chain(std::iter::repeat(&0u8)).take(n).fold(0u128, |acc, b| (acc << 8) | u128::from(*b)) };
+    for n in low.len().max(high.map_or(0, <[u8]>::len)).max(1)..=16 {
+        let lo = number(low, n);
+        let hi = match high {
+            Some(h) => number(h, n),
+            None if n == 16 => u128::MAX,
+            None => 1u128 << (8 * n),
+        };
+        if hi.checked_sub(lo).is_some_and(|gap| gap >= 2) {
+            let mid = lo.checked_add((hi - lo) / 2)?;
+            return Some(mid.to_be_bytes().get(16 - n..)?.to_vec());
+        }
+    }
+    None
+}
+
 /// A new GUID for a group header ([MS-OXOCFG] 2.2.9.3).
 fn new_guid() -> [u8; 16] {
     let mut out = [0u8; 16];
@@ -445,35 +471,16 @@ pub(crate) fn move_calendar_group(c: &Client, group: &str, up: bool) -> Result<(
     } else {
         at.checked_add(1).filter(|n| *n < list.len()).ok_or_else(|| NetError::No("it's the last calendar group already".into()))?
     };
-    let mut order: Vec<(String, Vec<u8>)> = list.iter().map(|h| (h.name.clone(), h.ordinal.clone())).collect();
-    order.swap(at, there);
-    // Each group's new ordinal: the ordinal of the place it takes, when they're all distinct
-    // one-byte ordinals; else a fresh one-byte ordinal per group (groups are few, and Outlook's
-    // own are one byte).
-    let distinct =
-        list.iter().map(|h| &h.ordinal).collect::<std::collections::BTreeSet<_>>().len() == list.len() && list.iter().all(|h| !h.ordinal.is_empty());
-    let fresh: Vec<Vec<u8>> = if distinct {
-        list.iter().map(|h| h.ordinal.clone()).collect()
-    } else {
-        (1..=order.len()).map(|n| vec![u8::try_from(n).unwrap_or(1)]).collect()
-    };
-    let mut changed: Vec<(Shortcut, Vec<u8>)> = Vec::new();
-    for (i, (name, _)) in order.iter().enumerate() {
-        let Some(shortcut) = list.iter().find(|h| h.name.eq_ignore_ascii_case(name)) else { continue };
-        let new = fresh.get(i).cloned().unwrap_or_default();
-        if new != shortcut.ordinal
-            && let Err(e) = update(c, shortcut, &[set_ext("0x684B", "Binary", &crate::imap::base64(&new))])
-        {
-            for (s, old) in &changed {
-                let _ = update(c, s, &[set_ext("0x684B", "Binary", &crate::imap::base64(old))]);
-            }
-            return Err(e);
-        }
-        if new != shortcut.ordinal {
-            changed.push(((*shortcut).clone(), shortcut.ordinal.clone()));
-        }
-    }
-    let expected: Vec<String> = order.into_iter().map(|(n, _)| n).collect();
+    // Only our header is written, given an ordinal between the two groups it ends up between
+    // ([MS-OXOCFG] 2.2.9.7): Outlook's headers are never touched. It goes before `there` when
+    // moving up, after it when moving down.
+    let (below, above) = if up { (at.checked_sub(2), Some(there)) } else { (Some(there), there.checked_add(1)) };
+    let ordinal_of = |i: Option<usize>| i.and_then(|i| list.get(i)).map(|h| h.ordinal.as_slice());
+    let (low, high) = (ordinal_of(below), ordinal_of(above));
+    let new = ordinal_between(low, high).ok_or_else(|| NetError::No("there is no room between the two calendar groups to put this one".into()))?;
+    update(c, list[at], &[set_ext("0x684B", "Binary", &crate::imap::base64(&new))])?;
+    let mut expected: Vec<String> = list.iter().map(|h| h.name.clone()).collect();
+    expected.swap(at, there);
     groups_are(c, &expected)
 }
 
@@ -561,5 +568,31 @@ mod tests {
         let value = crate::imap::base64(&CALENDAR_FOLDER);
         assert_eq!(value, "AngGAAAAAADAAAAAAAAARg==");
         assert!(written.contains(&format!("PropertyTag=\"0x684F\" PropertyType=\"Binary\"/><t:Value>{value}</t:Value>")), "{written}");
+    }
+
+    /// An ordinal between two others sorts strictly between them, byte by byte, in at most 16
+    /// bytes; none is made where there is no room.
+    #[test]
+    fn an_ordinal_is_made_between_two_others() {
+        let cases: [(Option<&[u8]>, Option<&[u8]>); 8] = [
+            (None, Some(&[0x10])),
+            (Some(&[0x10]), None),
+            (Some(&[0x10]), Some(&[0x30])),
+            (Some(&[0x10]), Some(&[0x11])),
+            (Some(&[0xff]), None),
+            (Some(&[0x7f, 0xff]), Some(&[0x80])),
+            (None, Some(&[0x00, 0x01])),
+            (Some(&[]), Some(&[0x01])),
+        ];
+        for (low, high) in cases {
+            let x = ordinal_between(low, high).unwrap_or_default();
+            assert!(!x.is_empty() && x.len() <= 16, "{low:?} {high:?} gave {x:?}");
+            assert!(low.is_none_or(|l| l < x.as_slice()) && high.is_none_or(|h| x.as_slice() < h), "{low:?} {high:?} gave {x:?}");
+        }
+        assert_eq!(ordinal_between(Some(&[0x10]), Some(&[0x10])), None);
+        assert_eq!(ordinal_between(None, Some(&[])), None);
+        assert_eq!(ordinal_between(Some(&[0x20]), Some(&[0x10])), None);
+        assert_eq!(ordinal_between(Some(&[0u8; 17]), None), None);
+        assert_eq!(ordinal_between(Some(&[0xff; 16]), None), None);
     }
 }
