@@ -228,6 +228,29 @@ impl Session {
         Ok(json!({"account": account, "calendar": calendar, "order": ids}))
     }
 
+    /// Put `calendar` just before `target` (or after it), as a drag in the pane puts it: in
+    /// target's group, moved there first (on the server) when it's another, then in that place,
+    /// the order kept on this computer as Move up and Move down keep it. On itself: nothing.
+    pub fn place_calendar(&mut self, account: &str, calendar: &str, target: &str, after: bool) -> CmdResult {
+        let c = self.calendar_named(account, calendar)?.clone();
+        let x = self.calendar_named(account, target)?.clone();
+        self.listed(account, calendar)?;
+        self.listed(account, target)?;
+        if calendar == target {
+            return Ok(json!({"account": account, "calendar": calendar}));
+        }
+        if !listed_together(&x, &c) {
+            self.move_calendar_to_group(account, calendar, &x.group)?;
+        }
+        let list = self.ordered_calendars(account);
+        let mut ids: Vec<String> = list.iter().map(|k| k.id.clone()).filter(|id| id != calendar).collect();
+        let at = ids.iter().position(|id| id == target).ok_or_else(|| CmdError::Params("no calendar with that id".into()))?;
+        ids.insert(if after { at + 1 } else { at }, calendar.to_string());
+        self.prefs.calendar_order.insert(account.to_string(), ids.clone());
+        self.pim_revision = self.pim_revision.wrapping_add(1);
+        Ok(json!({"account": account, "calendar": calendar, "order": ids}))
+    }
+
     /// Show this calendar, and hide every other (of every account).
     pub fn show_only_calendar(&mut self, account: &str, calendar: &str) -> CmdResult {
         self.calendar_named(account, calendar)?;

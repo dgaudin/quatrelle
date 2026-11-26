@@ -398,16 +398,25 @@ pub(super) fn calendar_row(
             opened: extra.opened.is_some(),
         });
     }
-    // A calendar dragged onto a row moves to that row's group (an empty title: My Calendars);
-    // Shared calendars aren't a group to move to.
+    // A calendar dragged onto a row goes just above it or just below it, as Outlook's pane
+    // inserts it, a line saying where: in the row's group (an empty title: My Calendars), moved
+    // there when it's another. Shared calendars aren't a group to move to.
     if let Some(to) = to {
-        if resp.dnd_hover_payload::<DragCalendar>().is_some() {
-            ui.painter().rect_stroke(resp.rect, 3.0, egui::Stroke::new(1.5, t.accent), egui::StrokeKind::Inside);
+        let below = |resp: &egui::Response| resp.ctx.pointer_hover_pos().is_some_and(|p| p.y > resp.rect.center().y);
+        if let Some(d) = resp.dnd_hover_payload::<DragCalendar>()
+            && d.account == a.config.id
+            && d.calendar != c.id
+        {
+            let y = if below(&resp) { resp.rect.bottom() } else { resp.rect.top() };
+            ui.painter().line_segment([egui::pos2(resp.rect.left(), y), egui::pos2(resp.rect.right(), y)], egui::Stroke::new(2.0, t.accent));
         }
         if let Some(d) = dropped::<DragCalendar>(&resp) {
             let same = if to.is_empty() { d.group.is_empty() } else { d.group.eq_ignore_ascii_case(to) };
-            if !same && !d.opened {
-                acts.push(Action::Run("calendar.moveTo", json!({"account": d.account, "calendar": d.calendar, "group": to})));
+            if d.account == a.config.id && (same || !d.opened) {
+                acts.push(Action::Run(
+                    "calendar.place",
+                    json!({"account": d.account, "calendar": d.calendar, "target": c.id, "after": below(&resp)}),
+                ));
             }
         }
     }

@@ -467,3 +467,26 @@ fn folded_calendar_groups_are_bounded() {
     assert!(!s.prefs.folded_calendar_groups.contains(&kept), "one kept can still be unfolded");
     done(s);
 }
+
+/// A calendar dragged before or after another (`calendar.place`, as Outlook's pane inserts it)
+/// takes that place in its group, kept on this computer; on itself nothing changes; into another
+/// group where the server can't move it (Microsoft 365), refused, the order unchanged.
+#[test]
+fn a_calendar_is_placed_before_or_after_another() {
+    let mut s = graph_session("arranging-place", true);
+    let own = |s: &Session| shown_ids(s).into_iter().filter(|c| [MAIN, TRIPS, BIRTHDAYS].contains(&c.as_str())).collect::<Vec<_>>();
+    assert_eq!(own(&s), [MAIN, TRIPS, BIRTHDAYS]);
+    let place = |s: &mut Session, c: &str, target: &str, after: bool| {
+        s.run("calendar.place", &json!({"account": "sample", "calendar": c, "target": target, "after": after}))
+    };
+    place(&mut s, BIRTHDAYS, MAIN, false).unwrap();
+    assert_eq!(own(&s), [BIRTHDAYS, MAIN, TRIPS], "before the main one");
+    place(&mut s, BIRTHDAYS, TRIPS, true).unwrap();
+    assert_eq!(own(&s), [MAIN, TRIPS, BIRTHDAYS], "after Trips");
+    place(&mut s, TRIPS, TRIPS, true).unwrap();
+    assert_eq!(own(&s), [MAIN, TRIPS, BIRTHDAYS], "on itself, unchanged");
+    let order = s.prefs.calendar_order.clone();
+    assert!(place(&mut s, TRIPS, TEAM, false).is_err(), "Microsoft 365 can't move it to the Team group");
+    assert_eq!(s.prefs.calendar_order, order, "unchanged by a refusal");
+    done(s);
+}

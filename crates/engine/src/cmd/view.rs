@@ -368,6 +368,10 @@ pub(super) fn commands() -> Vec<CommandSpec> {
             s.move_calendar(p::req_str(v, "account")?, p::req_str(v, "calendar")?, false)
         })
         .params(r#"{"account": string, "calendar": string} (after the one below it in its group, kept on this computer)"#),
+        CommandSpec::new("calendar.place", "Move calendar", "Calendar › Calendars", |s, v| {
+            s.place_calendar(p::req_str(v, "account")?, p::req_str(v, "calendar")?, p::req_str(v, "target")?, p::bool(v, "after").unwrap_or(false))
+        })
+        .params(r#"{"account": string, "calendar": string, "target": string, "after"?: bool} (put just before, or after, `target`, as a drag in the pane puts it: in target's group, moved there on the server when it's another; the order kept on this computer)"#),
         CommandSpec::new("calendar.create", "New calendar", "Calendar › Calendars", |s, v| s.create_calendar(p::req_str(v, "account")?, p::req_str(v, "name")?))
             .params(r#"{"account": string, "name": string (up to 255 characters)} (made on the account's server, Microsoft 365's or Exchange's; it shows once the calendars are read again)"#)
             .when(calendars_made),
