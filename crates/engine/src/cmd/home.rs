@@ -100,7 +100,7 @@ pub(super) fn commands() -> Vec<CommandSpec> {
         CommandSpec::new("mail.toggleRead", "Read / Unread", "Home › Tags", |s, _| s.flag_selection(Flag::Seen, None)).when(has_selection),
         CommandSpec::new("mail.flag", "Flag / Unflag", "Home › Tags", flag)
             .key("Insert")
-            .params(r#"{"key"?: string (that message, from the To-Do List), "on"?: bool, "due"?: "today"|"tomorrow"|"thisWeek"|"nextWeek"|"none"|"YYYY-MM-DD" (Follow Up: flag, due then), "start"?: "YYYY-MM-DD"|"none" (the follow-up's start), "reminder"?: "YYYY-MM-DDTHH:MM"|unix seconds|false|"none" (when it rings), "complete"?: true (Mark Complete: unflag, mark it done today; flagging again or "on": false clears that)}"#),
+            .params(r#"{"key"?: string (that message, from the To-Do List), "on"?: bool, "due"?: "today"|"tomorrow"|"thisWeek"|"nextWeek"|"none"|"YYYY-MM-DD" (Follow Up: flag, due then), "start"?: "YYYY-MM-DD"|"none" (the follow-up's start), "reminder"?: "YYYY-MM-DDTHH:MM"|unix seconds|false|"none" (when it rings), "title"?: string|false|"none" (the flag's title, the task's PidLidToDoTitle on Exchange), "complete"?: true (Mark Complete: unflag, mark it done today; flagging again or "on": false clears that)}"#),
         CommandSpec::new("mail.markAllRead", "Mark all as read", "Folder", mark_all_read).when(has_account),
         CommandSpec::new("mail.categorize", "Categorize", "Home › Tags", |s, v| s.categorize_selection(p::req_str(v, "category")?, p::bool(v, "on")))
             .params(r#"{"category": string, "on"?: bool}"#)
@@ -301,8 +301,16 @@ pub(super) fn flag(s: &mut Session, v: &Value) -> CmdResult {
             }
         }
     };
+    // The flag's title (`false`, `none` or null: taken off); absent: left as it is.
+    let title = match v.get("title") {
+        None => None,
+        Some(Value::Null) | Some(Value::Bool(false)) => Some(None),
+        Some(Value::String(x)) if matches!(x.trim(), "" | "none") => Some(None),
+        Some(Value::String(x)) => Some(Some(x.trim().chars().take(255).collect::<String>())),
+        Some(_) => return Err(CmdError::Params("`title` is a string, false or none".into())),
+    };
     let (start, due) = (day("start")?, day("due")?);
-    if start.is_none() && due.is_none() && reminder.is_none() {
+    if start.is_none() && due.is_none() && reminder.is_none() && title.is_none() {
         if v.get("key").is_some() {
             let on = p::bool(v, "on").unwrap_or_else(|| !sel.first().is_some_and(|m| m.flags.flagged));
             let was = s.follow_up_days_of(&sel);
@@ -312,11 +320,12 @@ pub(super) fn flag(s: &mut Session, v: &Value) -> CmdResult {
         }
         return s.flag_selection(Flag::Flagged, p::bool(v, "on"));
     }
-    // Just a due day keeps the start and the reminder (`follow_up_for`); the others are named.
-    if start.is_none() && reminder.is_none() {
+    // Just a due day keeps the start, the reminder and the title (`follow_up_for`); the others
+    // are named.
+    if start.is_none() && reminder.is_none() && title.is_none() {
         return s.follow_up_for(&sel, due.flatten());
     }
-    s.follow_up_set_for(&sel, start, due, reminder)
+    s.follow_up_set_for(&sel, start, due, reminder, title)
 }
 
 pub(super) fn mark_all_read(s: &mut Session, _: &Value) -> CmdResult {

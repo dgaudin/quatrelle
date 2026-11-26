@@ -592,7 +592,7 @@ fn a_named_start_does_not_rewrite_the_servers_due() {
     s.cache.insert((id.clone(), "INBOX".into()), st);
 
     let day = quatrelle_model::dates::days_from_civil(2026, 12, 1);
-    s.follow_up_set_for(&[with_due, without_due], Some(Some(day)), None, None).unwrap();
+    s.follow_up_set_for(&[with_due, without_due], Some(Some(day)), None, None, None).unwrap();
     let jobs = s.take_jobs();
     let ops: Vec<&quatrelle_model::Op> = jobs
         .iter()
@@ -666,5 +666,70 @@ fn a_reminder_moved_on_the_server_rings_again() {
         s.due_reminders(now).iter().any(|r| r.message.as_ref() == Some(&m.key)),
         "a reminder moved on the server rings again, not answered under the old time"
     );
+    done(s);
+}
+
+/// `mail.flag`'s "title" sets the flag's title: on a local account it is kept in the
+/// preferences and `follow_up_title` reads it back (and no SetFollowUp carries it — the server
+/// has nowhere for it); "none" takes it off; Undo puts it back.
+#[test]
+fn a_flag_title_is_set_kept_here_and_undone() {
+    let mut s = sample_session("flag-title");
+    let k = key_of(&s, "Character turnarounds");
+    let r = s.run("mail.flag", &json!({ "key": k["key"], "title": "Review the proofs", "due": "2026-12-01" })).unwrap();
+    assert_eq!(r["title"], json!("Review the proofs"));
+    assert_eq!(s.follow_up_title(&turnaround(&s)), Some("Review the proofs"));
+    assert!(
+        s.take_jobs().iter().all(|j| !matches!(j, Job::Apply { op: Op::SetFollowUp { title: Some(_), .. }, .. })),
+        "no title op for an account whose server has nowhere for it"
+    );
+    // "none" takes it off.
+    s.run("mail.flag", &json!({ "key": k["key"], "title": "none" })).unwrap();
+    assert_eq!(s.follow_up_title(&turnaround(&s)), None);
+    // Undo puts it back.
+    s.run("edit.undo", &json!({})).unwrap();
+    assert_eq!(s.follow_up_title(&turnaround(&s)), Some("Review the proofs"));
+    done(s);
+}
+
+/// On Exchange the title goes with the follow-up change as the task's `PidLidToDoTitle`, and
+/// the cache reads it back at once; Clear Flag takes it off there too (its SetFollowUp says so).
+#[test]
+fn a_flag_title_goes_to_exchange_as_the_todo_title() {
+    let mut s = sample_session("flag-title-ews");
+    let account = s
+        .run("account.add", &json!({"email": "riley@contoso.example", "password": "pw", "ews": "https://ews.contoso.example/EWS/Exchange.asmx"}))
+        .unwrap()["account"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    s.take_jobs();
+    let mut m = turnaround(&s);
+    m.key.account = account.clone();
+    let m = std::sync::Arc::new(m);
+    // The message as the account's cache has it (`mail.flag`'s `key` reads the cache).
+    {
+        let st = s.cache.entry((account.clone(), m.key.folder.clone())).or_default();
+        st.validity = m.key.validity;
+        st.messages.push(m.clone());
+    }
+    let day = quatrelle_model::dates::days_from_civil(2026, 12, 1);
+    s.follow_up_set_for(std::slice::from_ref(&m), None, Some(Some(day)), None, Some(Some("Review the proofs".into()))).unwrap();
+    let title_op = s
+        .take_jobs()
+        .iter()
+        .find_map(|j| match j {
+            Job::Apply { op: Op::SetFollowUp { title: Some(Some(t)), due, .. }, .. } if due.is_some() => Some(t.clone()),
+            _ => None,
+        })
+        .expect("the title went with the follow-up change that names a due day");
+    assert_eq!(title_op, "Review the proofs");
+    // The cache reads it back at once.
+    let in_cache = s.cache.get(&(account.clone(), m.key.folder.clone())).unwrap().messages.iter().find(|x| x.key.uid == m.key.uid).unwrap();
+    assert_eq!(in_cache.flags.follow_up.title, "Review the proofs");
+    // Clear Flag takes the title off the server too.
+    s.run("mail.flag", &json!({"key": m.key.to_id(), "on": false})).unwrap();
+    let cleared = s.take_jobs().iter().any(|j| matches!(j, Job::Apply { op: Op::SetFollowUp { title: Some(None), .. }, .. }));
+    assert!(cleared, "Clear Flag's SetFollowUp takes the title off");
     done(s);
 }

@@ -44,7 +44,7 @@ impl Echoes {
             match op {
                 Op::SetFlag { flag, on, all, .. } => flag.apply(&mut m.flags, *on, *all),
                 Op::SetKeyword { keyword, on, name, .. } => m.flags.set_category(keyword, name.as_deref(), *on),
-                Op::SetFollowUp { start, due, reminder, .. } => {
+                Op::SetFollowUp { start, due, reminder, title, .. } => {
                     // Only the fields the change names: an unnamed one keeps what it had.
                     if let Some(c) = start {
                         m.flags.follow_up.start = c.value().unwrap_or(0);
@@ -54,6 +54,9 @@ impl Echoes {
                     }
                     if let Some(c) = reminder {
                         m.flags.follow_up.reminder = c.value().unwrap_or(0);
+                    }
+                    if let Some(t) = title {
+                        m.flags.follow_up.title = t.clone().unwrap_or_default();
                     }
                 }
                 _ => {}
@@ -128,11 +131,12 @@ impl Session {
         let has = |f: &Flags| match &op {
             Op::SetFlag { flag, on, .. } => flag.get(f) == *on,
             Op::SetKeyword { keyword, on, .. } => f.has(keyword) == *on,
-            Op::SetFollowUp { start, due, reminder, .. } => {
+            Op::SetFollowUp { start, due, reminder, title, .. } => {
                 // Every field the change names already has its value; unnamed ones don't count.
                 start.is_none_or(|c| f.follow_up.start == c.value().unwrap_or(0))
                     && due.is_none_or(|c| f.follow_up.due == c.value().unwrap_or(0))
                     && reminder.is_none_or(|c| f.follow_up.reminder == c.value().unwrap_or(0))
+                    && title.as_ref().is_none_or(|t| f.follow_up.title == t.clone().unwrap_or_default())
             }
             _ => true,
         };
@@ -145,7 +149,7 @@ impl Session {
             match &op {
                 Op::SetFlag { flag, on, all, .. } => flag.apply(&mut m.flags, *on, *all),
                 Op::SetKeyword { keyword, on, name, .. } => m.flags.set_category(keyword, name.as_deref(), *on),
-                Op::SetFollowUp { start, due, reminder, .. } => {
+                Op::SetFollowUp { start, due, reminder, title, .. } => {
                     // Only the fields the change names: an unnamed one keeps what it had.
                     if let Some(c) = start {
                         m.flags.follow_up.start = c.value().unwrap_or(0);
@@ -155,6 +159,9 @@ impl Session {
                     }
                     if let Some(c) = reminder {
                         m.flags.follow_up.reminder = c.value().unwrap_or(0);
+                    }
+                    if let Some(t) = title {
+                        m.flags.follow_up.title = t.clone().unwrap_or_default();
                     }
                 }
                 _ => {}
