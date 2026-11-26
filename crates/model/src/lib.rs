@@ -417,6 +417,11 @@ impl Flags {
     /// categories by name, and they're read back as [`keyword_for`] the name.
     pub fn set_category(&mut self, keyword: &str, name: Option<&str>, on: bool) {
         self.set_keyword(keyword, on);
+        // Done is not flagged: Exchange's Mark Complete sends the keyword alone (the flag's own
+        // text stays on the server), so the flag goes here, at once, as the server's state 1 does.
+        if on && keyword.eq_ignore_ascii_case(FOLLOW_UP_COMPLETE) {
+            self.flagged = false;
+        }
         if !on && let Some(alias) = name.map(keyword_for).filter(|a| !a.eq_ignore_ascii_case(keyword)) {
             self.set_keyword(&alias, false);
         }

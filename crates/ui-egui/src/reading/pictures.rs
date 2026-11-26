@@ -42,6 +42,9 @@ pub(super) fn picture(
     // Tracking pixels and spacers that set no size: nothing to see.
     let Some(at) = shown_size(own, size, width) else { return (true, None) };
     let r = ui.add(egui::Image::new(&tex).fit_to_exact_size(at * zoom).maintain_aspect_ratio(false).sense(Sense::click()));
+    if r.secondary_clicked() {
+        super::body::text_selection::take_right_click(ui.ctx());
+    }
     r.context_menu(|ui| {
         if ui.button(tl!("Copy picture")).clicked() {
             if let Some(img) = picture_bytes(s, &st.pictures, key, p, src).and_then(|b| color_image(&b)) {

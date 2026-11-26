@@ -220,6 +220,8 @@ impl Session {
                 total = total.saturating_sub(st.messages.len());
             }
             self.cache_order.remove(i);
+            // The To-Do List counted it as read while it was here: it is read from the disk again.
+            self.disk_folder_changed(&k.0, &k.1);
         }
     }
 

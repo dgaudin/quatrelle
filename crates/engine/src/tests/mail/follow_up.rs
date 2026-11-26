@@ -134,8 +134,13 @@ fn a_flag_set_again_elsewhere_wins_over_a_stale_complete_mark() {
     s.run("mail.flag", &json!({"due": "2026-12-01"})).unwrap();
     let due = s.follow_up_due(&turnaround(&s));
     assert!(due.is_some());
+    // As a sync brings it: the keyword left behind on a message flagged again (a keyword set
+    // here would take the flag off, as Mark Complete does).
     let key = turnaround(&s).key.clone();
-    s.apply_op(&key.account.clone(), Op::SetKeyword { keys: vec![key], keyword: FOLLOW_UP_COMPLETE.into(), on: true, name: None });
+    let slot = s.cache.get_mut(&(key.account.clone(), key.folder.clone())).and_then(|st| st.messages.iter_mut().find(|m| m.key == key)).unwrap();
+    std::sync::Arc::make_mut(slot).flags.set_keyword(FOLLOW_UP_COMPLETE, true);
+    let row = s.list.iter_mut().find(|m| m.key == key).unwrap();
+    std::sync::Arc::make_mut(row).flags.set_keyword(FOLLOW_UP_COMPLETE, true);
     let m = turnaround(&s);
     assert!(m.flags.flagged && m.flags.has(FOLLOW_UP_COMPLETE) && !m.flags.follow_up_complete());
     assert_eq!(s.run("search.run", &json!({"query": "is:complete"})).unwrap()["results"], 0);
@@ -482,12 +487,11 @@ fn mail_flag_needs_a_message() {
     done(s);
 }
 
-/// Mark Complete on an Exchange account keeps the flag's own text (no SetFlag off — the
-/// keyword's status covers it), and Undo puts the task's title and the reminder back.
-#[test]
-fn marking_complete_on_exchange_keeps_the_flag_text_and_undo_restores_title_and_reminder() {
+/// A session with an Exchange account and one flagged message (due, with a reminder) in its
+/// Inbox cache.
+fn ews_flagged_session(name: &str) -> (Session, MessageKey) {
     use quatrelle_model::AccountConfig;
-    let mut s = Session::open(Some(temp("ews-complete")), quatrelle_model::dates::Clock::new(NOW, 0));
+    let mut s = Session::open(Some(temp(name)), quatrelle_model::dates::Clock::new(NOW, 0));
     let config = AccountConfig {
         name: "Riley".into(),
         email: "riley@contoso.example".into(),
@@ -517,6 +521,14 @@ fn marking_complete_on_exchange_keeps_the_flag_text_and_undo_restores_title_and_
         ..Default::default()
     }));
     s.cache.insert((id.clone(), "INBOX".into()), st);
+    (s, key)
+}
+
+/// Mark Complete on an Exchange account keeps the flag's own text (no SetFlag off — the
+/// keyword's status covers it), and Undo puts the task's title and the reminder back.
+#[test]
+fn marking_complete_on_exchange_keeps_the_flag_text_and_undo_restores_title_and_reminder() {
+    let (mut s, key) = ews_flagged_session("ews-complete");
 
     s.run("mail.flag", &serde_json::json!({ "key": key.to_id(), "complete": true })).unwrap();
     let jobs = s.take_jobs();
@@ -550,6 +562,21 @@ fn marking_complete_on_exchange_keeps_the_flag_text_and_undo_restores_title_and_
         applies.iter().any(|o| matches!(o, quatrelle_model::Op::SetFollowUp { reminder: Some(_), .. })),
         "undo restores the reminder: {applies:?}"
     );
+    done(s);
+}
+
+/// Mark Complete on Exchange takes the message out of follow-up here and now: its state, the
+/// To-Do List and the reminders see it done before the server answers (or when it never does).
+#[test]
+fn marking_complete_on_exchange_is_seen_at_once() {
+    let (mut s, key) = ews_flagged_session("ews-complete-now");
+    assert!(s.todo("", false).iter().any(|r| matches!(r, crate::TodoRef::Mail(m) if m.key == key)), "listed before");
+    s.run("mail.flag", &serde_json::json!({ "key": key.to_id(), "complete": true })).unwrap();
+    s.wait_disk_scan();
+    let m = s.cache.get(&(key.account.clone(), "INBOX".to_string())).and_then(|st| st.messages.first().cloned()).unwrap();
+    assert!(m.flags.follow_up_complete(), "done in the cache: {:?}", m.flags);
+    assert!(!s.todo("", false).iter().any(|r| matches!(r, crate::TodoRef::Mail(m) if m.key == key)), "no longer listed as to do");
+    assert!(s.due_reminders(NOW + 7200).iter().all(|r| !r.key.contains("|mail|")), "its reminder no longer rings");
     done(s);
 }
 

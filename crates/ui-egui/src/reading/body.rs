@@ -746,7 +746,11 @@ fn edges(ui: &Ui, rect: Rect, e: &mime::layout::Edges, page: [u8; 3], t: &Tokens
 /// Right-click on right-to-left text (selectable too): copy the line, or the whole message, as
 /// written.
 pub(super) fn rtl_copy_menu(r: &egui::Response, line: Option<&str>, whole: &str) {
-    r.interact(Sense::click()).context_menu(|ui| {
+    let r = r.interact(Sense::click());
+    if r.secondary_clicked() {
+        text_selection::take_right_click(&r.ctx);
+    }
+    r.context_menu(|ui| {
         if let Some(line) = line
             && ui.button(tl!("Copy")).clicked()
         {
