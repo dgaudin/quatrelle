@@ -51,3 +51,25 @@ fn an_undocumented_group_is_read_and_left_alone() {
     assert!(crate::ews_pim::delete_calendar_group(&c, "Mon équipe").is_err(), "not deleted");
     assert_eq!(server.data.lock().unwrap().wlinks, before, "nothing written");
 }
+
+/// A group moved beside an undocumented one counts it as the pane shows it: A, then the team
+/// group (type 5), then B; A moved down goes just after the team group, not after B, and only
+/// A's place is written.
+#[test]
+fn a_group_moved_beside_an_undocumented_one_counts_it() {
+    let mut d = Data::default();
+    d.folder("Inbox", None, Some("inbox"), "IPF.Note");
+    d.folder("Calendar", None, Some("calendar"), "IPF.Appointment");
+    let link = "IPM.Microsoft.WunderBar.Link";
+    let header = |kind: i64, name: &str, id: u8, ordinal: u8| {
+        wlink_of(link, 3, kind, name, &[("0x6842", "Binary", crate::imap::base64(&[id; 16])), ("0x684B", "Binary", crate::imap::base64(&[ordinal]))])
+    };
+    d.wlinks = vec![header(4, "A", 0x01, 0x10), header(5, "Équipe", 0x02, 0x20), header(4, "B", 0x03, 0x30)];
+    let server = serve(d);
+    let c = crate::ews::Client::connect(&server.url, &format!("{DOMAIN}\\{USER}"), PASSWORD, "riley@contoso.example").unwrap();
+    let names = |c: &crate::ews::Client| crate::ews_pim::calendar_links(c).unwrap().groups.iter().map(|g| g.name.clone()).collect::<Vec<_>>();
+    assert_eq!(names(&c), ["A", "Équipe", "B"]);
+    crate::ews_pim::move_calendar_group(&c, "A", false).unwrap();
+    assert_eq!(names(&c), ["Équipe", "A", "B"], "past the team group only");
+    assert!(crate::ews_pim::move_calendar_group(&c, "Équipe", true).is_err(), "the team group itself isn't moved");
+}

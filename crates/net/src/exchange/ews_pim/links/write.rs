@@ -98,7 +98,8 @@ fn shortcut_of(it: &El) -> Option<Shortcut> {
     }
     let calendar = section == Some(CALENDAR_SECTION);
     let usable = match kind {
-        Some(WLINK_HEADER) => calendar && !name.is_empty() && header_id.len() == 16,
+        // Outlook's team group's header (undocumented, never written) is read for its place.
+        Some(WLINK_HEADER | WLINK_RO_HEADER) => calendar && !name.is_empty() && header_id.len() == 16,
         Some(WLINK_OWN) => calendar && !name.is_empty(),
         Some(WLINK_SHARED) => calendar && address_book_dn(&address_book).is_some(),
         _ => false,
@@ -129,6 +130,18 @@ fn shortcut_of(it: &El) -> Option<Shortcut> {
 fn headers(all: &[Shortcut]) -> Vec<&Shortcut> {
     let mut out: Vec<&Shortcut> =
         all.iter().filter(|s| s.section == Some(CALENDAR_SECTION) && s.kind == Some(WLINK_HEADER) && !s.name.is_empty()).collect();
+    out.sort_by(|a, b| a.ordinal.cmp(&b.ordinal));
+    out
+}
+
+/// The Calendar section's group headers as the pane shows them, those of the undocumented type
+/// Outlook keeps its team group with ([`WLINK_RO_HEADER`], never written) among them: what a
+/// move counts its neighbours in.
+fn shown_headers(all: &[Shortcut]) -> Vec<&Shortcut> {
+    let mut out: Vec<&Shortcut> = all
+        .iter()
+        .filter(|s| s.section == Some(CALENDAR_SECTION) && matches!(s.kind, Some(WLINK_HEADER | WLINK_RO_HEADER)) && !s.name.is_empty())
+        .collect();
     out.sort_by(|a, b| a.ordinal.cmp(&b.ordinal));
     out
 }
@@ -314,9 +327,14 @@ fn delete(c: &Client, s: &Shortcut) -> Result<()> {
 
 /// `groups_are` checks the read-back names, in Outlook's order.
 fn groups_are(c: &Client, expected: &[String]) -> Result<()> {
+    groups_in_order(c, expected, headers)
+}
+
+/// [`groups_are`], the headers taken by `pick`.
+fn groups_in_order(c: &Client, expected: &[String], pick: fn(&[Shortcut]) -> Vec<&Shortcut>) -> Result<()> {
     let after = read_raw(c)?;
     let mut seen: Vec<String> = Vec::new();
-    for h in headers(&after) {
+    for h in pick(&after) {
         if !seen.iter().any(|n| n.eq_ignore_ascii_case(&h.name)) {
             seen.push(h.name.clone());
         }
@@ -446,8 +464,13 @@ pub(crate) fn delete_calendar_group(c: &Client, group: &str) -> Result<()> {
 /// Move the group `group` up or down among the groups, by its ordinal ([MS-OXOCFG] 2.2.9.7).
 pub(crate) fn move_calendar_group(c: &Client, group: &str, up: bool) -> Result<()> {
     let before = read_raw(c)?;
-    let list = headers(&before);
-    let at = list.iter().position(|h| h.name.eq_ignore_ascii_case(group)).ok_or_else(|| NetError::No("no calendar group with that name".into()))?;
+    // Its neighbours as the pane shows them (Outlook's team group among them); it is one of
+    // the documented headers itself, the only one written.
+    let list = shown_headers(&before);
+    let at = list
+        .iter()
+        .position(|h| h.name.eq_ignore_ascii_case(group) && h.kind == Some(WLINK_HEADER))
+        .ok_or_else(|| NetError::No("no calendar group with that name".into()))?;
     let there = if up {
         at.checked_sub(1).ok_or_else(|| NetError::No("it's the first calendar group already".into()))?
     } else {
@@ -463,7 +486,7 @@ pub(crate) fn move_calendar_group(c: &Client, group: &str, up: bool) -> Result<(
     update(c, list[at], &[set_ext("0x684B", "Binary", &crate::imap::base64(&new))])?;
     let mut expected: Vec<String> = list.iter().map(|h| h.name.clone()).collect();
     expected.swap(at, there);
-    groups_are(c, &expected)
+    groups_in_order(c, &expected, shown_headers)
 }
 
 impl Shortcut {
