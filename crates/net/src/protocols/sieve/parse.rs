@@ -177,15 +177,26 @@ fn parse_test(p: &mut P, depth: usize) -> Test {
         Test { conds: Vec::new(), all: true, text: format!("not {}", inner.text), ok: false, combined: None }
     } else if head.eq_ignore_ascii_case("header") {
         p.next();
-        // Only `:contains` is what Quatrelle's rules look with.
-        let mut contains = true;
-        if let Some(Word::Atom(c)) = p.peek()
+        // Without an option a test is `:is` (RFC 5228), an exact match: only an explicit
+        // `:contains` is what Quatrelle's rules look with; any other option (`:matches`,
+        // `:regex`, `:comparator`…) makes the test one it can't say.
+        let mut contains = false;
+        let mut other = false;
+        while let Some(Word::Atom(c)) = p.peek()
             && c.starts_with(':')
         {
             let c = c.clone();
             p.next();
-            contains = c.eq_ignore_ascii_case(":contains");
+            if c.eq_ignore_ascii_case(":contains") {
+                contains = true;
+            } else {
+                other = true;
+                if c.eq_ignore_ascii_case(":comparator") {
+                    str_list(p);
+                }
+            }
         }
+        let contains = contains && !other;
         match (str_list(p), str_list(p)) {
             (Some((f, _)), Some((v, was_list))) => header_test(&f, &v, was_list, contains),
             _ => {
