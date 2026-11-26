@@ -130,24 +130,27 @@ pub(super) fn loose_item(m: &Loose<'_>, named: &crate::pst_pim::Named, depth: us
         .iter()
         .filter_map(|f| match f {
             LooseFile::Data { name, mime, cid, data, picture } if *picture && is(&class, "ipm.contact") => {
+                // A picture the card can't keep (too big, or not a picture at all) stays an
+                // ordinary file: it would otherwise be gone from both.
+                let as_file = || Some(File::Data { name: name.clone(), mime: mime.clone(), cid: cid.clone(), data: data.clone() });
                 if data.len() > quatrelle_model::vcard::MAX_PHOTO {
-                    log::info!("a contact's picture of {} bytes was left out", data.len());
-                    *left_out.entry(FileLeftOut::TooBig).or_insert(0) += 1;
+                    log::info!("a contact's picture of {} bytes is too big for its card: kept as a file", data.len());
+                    as_file()
                 } else if photo.is_none() {
                     photo = crate::pst_pim::contact_photo(true, mime, Some(data.as_slice()));
                     if photo.is_none() {
-                        // A flagged attachment that isn't a picture (no image type, no picture
-                        // magic): counted, as it would otherwise go unsaid.
-                        log::info!("a contact's flagged attachment wasn't a picture (mime `{mime}`, {} bytes): left out", data.len());
-                        *left_out.entry(FileLeftOut::Unreadable).or_insert(0) += 1;
+                        log::info!("a contact's flagged attachment wasn't a picture (mime `{mime}`, {} bytes): kept as a file", data.len());
+                        as_file()
+                    } else {
+                        None
                     }
                 } else {
                     // A card keeps one picture: the further flagged ones are counted, not
                     // dropped silently.
                     log::info!("a contact's flagged picture was left out: the card already has one");
                     *left_out.entry(FileLeftOut::NoPlace).or_insert(0) += 1;
+                    None
                 }
-                None
             }
             LooseFile::Data { name, mime, cid, data, .. } => {
                 Some(File::Data { name: name.clone(), mime: mime.clone(), cid: cid.clone(), data: data.clone() })
@@ -410,30 +413,41 @@ pub(super) fn attachment(a: &dyn Attachment, code_page: u32, class: &str, top: b
     let props = a.properties();
     let p = |id: u16| props.get(id).map(|v| val(v, code_page));
     let s = |id: u16| p(id).and_then(Val::into_text).unwrap_or_default();
-    // A contact's picture goes on its card (`picture_of`), not among its files; one past what a
-    // card keeps is counted (it is hidden, so it would otherwise go unsaid).
+    // A contact's picture goes on its card (`picture_of`), not among its files; one the card
+    // can't keep (too big, or not a picture at all) is an ordinary file, as it would otherwise
+    // be gone from both.
     if is_picture(&p) && is(class, "ipm.contact") {
-        return Some(match a.data() {
-            Some(AttachmentData::Binary(b)) if b.buffer().len() > quatrelle_model::vcard::MAX_PHOTO => {
-                log::info!("a contact's picture of {} bytes was left out", b.buffer().len());
-                Got::Left(FileLeftOut::TooBig)
+        let keeps = match a.data() {
+            Some(AttachmentData::Binary(b)) => {
+                b.buffer().len() <= quatrelle_model::vcard::MAX_PHOTO && crate::pst_pim::contact_photo(true, &s(0x370E), Some(b.buffer())).is_some()
             }
-            _ => Got::Nothing,
-        });
+            _ => true,
+        };
+        if keeps {
+            return Some(Got::Nothing);
+        }
+        log::info!("a contact's picture the card can't keep: kept as a file");
+        return file_of(a, &s, link(&p));
     }
     if hidden(&p, class, top) {
         return Some(Got::Nothing);
     }
+    file_of(a, &s, link(&p))
+}
+
+/// An attachment as a file: by value as its bytes (within [`MAX_ATTACHMENT`]), a link counted, a
+/// message `None` (the caller reads it).
+fn file_of(a: &dyn Attachment, s: &dyn Fn(u16) -> String, link: bool) -> Option<Got> {
     Some(match a.data() {
         Some(AttachmentData::Binary(b)) => {
             if b.buffer().len() > MAX_ATTACHMENT {
                 log::info!("an attachment of {} bytes was left out", b.buffer().len());
                 return Some(Got::Left(FileLeftOut::TooBig));
             }
-            Got::File(File::Data { name: name_of(&s), mime: s(0x370E), cid: s(0x3712), data: b.buffer().to_vec() })
+            Got::File(File::Data { name: name_of(s), mime: s(0x370E), cid: s(0x3712), data: b.buffer().to_vec() })
         }
         Some(AttachmentData::Message(_)) => return None,
-        None if link(&p) => Got::Left(FileLeftOut::Link),
+        None if link => Got::Left(FileLeftOut::Link),
         None => Got::Nothing,
     })
 }
