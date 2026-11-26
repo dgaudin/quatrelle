@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 // Copyright (c) 2026 Didier Gaudin
-//! Follow Up › Custom… and Add Reminder…: a flagged message's start and due days and the time
-//! its reminder rings, as Outlook's small Follow Up window has them.
+//! Follow Up › Custom… and Add Reminder…: a flagged message's title, its start and due days
+//! and the time its reminder rings, as Outlook's small Follow Up window has them.
 
 use quatrelle_engine::model::dates;
 use serde_json::Value;
@@ -14,6 +14,10 @@ use crate::pim_dialogs::pickers;
 pub struct FollowUpForm {
     pub start: String,
     pub due: String,
+    /// The flag's title as typed, and as it was when the form opened (to tell an untouched one
+    /// from a cleared one: an untouched empty one is left to the server's own, the subject).
+    pub title: String,
+    pub title0: String,
     pub remind: bool,
     pub remind_day: String,
     pub remind_time: String,
@@ -46,9 +50,12 @@ impl FollowUpForm {
             }
             None => (String::new(), String::new()),
         };
+        let title = s.follow_up_title(m).unwrap_or_default().to_string();
         FollowUpForm {
             start: day(s.follow_up_start(m)),
             due: day(s.follow_up_due(m)),
+            title: title.clone(),
+            title0: title,
             remind: s.follow_up_reminder(m).is_some(),
             remind_day,
             remind_time,
@@ -59,8 +66,9 @@ impl FollowUpForm {
     }
 
     /// What `mail.flag` is given: the message's `key` when the form was opened on a To-Do List
-    /// row or a To-Do bar entry, the days (`none` for an empty one) and the reminder's time, or
-    /// `false` for none.
+    /// row or a To-Do bar entry, the days (`none` for an empty one), the title (`none` for an
+    /// emptied one; an untouched empty one is left out, so the server's own title stays), and
+    /// the reminder's time, or `false` for none.
     pub(crate) fn params(&self) -> Value {
         let day = |text: &str| {
             let text = text.trim();
@@ -72,6 +80,14 @@ impl FollowUpForm {
         } else {
             json!({ "reminder": reminder })
         };
+        if self.dates
+            && let Some(o) = p.as_object_mut()
+        {
+            let title = self.title.trim();
+            if self.title != self.title0 || !title.is_empty() {
+                o.insert("title".into(), if title.is_empty() { json!("none") } else { json!(title.chars().take(255).collect::<String>()) });
+            }
+        }
         if let (Some(k), Some(o)) = (&self.key, p.as_object_mut()) {
             o.insert("key".into(), json!(k));
         }
@@ -119,6 +135,12 @@ pub(super) fn draw(ui: &mut Ui, d: &mut Dialog, s: &Session, t: &Tokens, acts: &
     title(ui, t, if f.dates { "Custom Follow Up" } else { "Add Reminder" });
     let today = dates::today(&s.clock);
     if f.dates {
+        egui::Grid::new("follow-up-title").num_columns(2).spacing([14.0, 10.0]).show(ui, |ui| {
+            ui.label(RichText::new(tl!("Title")).color(t.dim));
+            ui.add(egui::TextEdit::singleline(&mut f.title).desired_width(280.0).hint_text(tl!("Follow up")));
+            ui.end_row();
+        });
+        ui.add_space(4.0);
         egui::Grid::new("follow-up-dates").num_columns(2).spacing([14.0, 10.0]).show(ui, |ui| {
             for (label, text, id) in [("Start date", &mut f.start, "follow-up-start"), ("Due date", &mut f.due, "follow-up-due")] {
                 ui.label(RichText::new(tl!(label)).color(t.dim));

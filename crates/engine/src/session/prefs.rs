@@ -247,6 +247,11 @@ pub struct Prefs {
     /// keyword; Exchange keeps the day too, and its own wins (`Session::follow_up_done`).
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty", deserialize_with = "checked_days")]
     pub follow_up_done: BTreeMap<String, i64>,
+    /// A follow-up's title (the task's `PidLidToDoTitle` on Exchange): Message-ID → title. Kept
+    /// here where the server has nowhere for it (IMAP, JMAP, POP, local accounts, and Graph);
+    /// Exchange's own wins (`Session::follow_up_title`).
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub follow_up_title: BTreeMap<String, String>,
     /// Words the writer added to the dictionary (the spelling check keeps them).
     #[serde(default)]
     pub spelling: Vec<String>,
@@ -427,6 +432,7 @@ impl Default for Prefs {
             follow_up_start: BTreeMap::new(),
             follow_up_reminder: BTreeMap::new(),
             follow_up_done: BTreeMap::new(),
+            follow_up_title: BTreeMap::new(),
             reminders: BTreeMap::new(),
             search_folders: Vec::new(),
             animations: true,

@@ -887,5 +887,40 @@ fn a_sieve_rule_is_shown_as_managed_on_the_server() {
         })
         .collect();
     assert!(texts.iter().any(|t| t == "These rules are managed on the server; change them where they were made."), "{texts:?}");
+/// The Custom Follow Up form has the flag's title: it opens with the message's own, an edited
+/// one goes to `mail.flag` as "title", an emptied one as "none", and an untouched empty one is
+/// left out (so the server's own title, the subject, stays). Add Reminder… has no title field
+/// in its params.
+#[test]
+fn the_follow_up_dialog_edits_the_flags_title() {
+    let (mut a, dir) = app("follow-up-title-dialog");
+    let ctx = egui::Context::default();
+    frame(&ctx, &mut a, vec![]);
+    let k = a.session.list[1].key.clone();
+    a.run("list.select", json!({"key": k.to_id()}));
+    // An untouched empty title is left out of the params.
+    let f = crate::dialogs::FollowUpForm::of(&a.session, true, None);
+    assert!(f.title.is_empty() && f.title0.is_empty());
+    assert!(f.params().get("title").is_none(), "an untouched empty title stays out: {}", f.params());
+    // Drawn with the field; typed over.
+    let mut f = crate::dialogs::FollowUpForm::of(&a.session, true, None);
+    a.ui.dialog = Some(Dialog::FollowUp(Box::new(f.clone())));
+    let size = egui::vec2(1280.0, 800.0);
+    let _ = frame_shapes(&ctx, &mut a, vec![], size);
+    let shapes = frame_shapes(&ctx, &mut a, vec![], size);
+    assert!(text_at(&shapes, "Title").is_some(), "the Title label is drawn");
+    f.title = "Review the proofs".into();
+    assert_eq!(f.params()["title"], json!("Review the proofs"));
+    a.act(crate::Action::Run("mail.flag", f.params()));
+    let m = a.session.list.iter().find(|m| m.key == k).cloned().unwrap();
+    assert_eq!(a.session.follow_up_title(&m), Some("Review the proofs"));
+    // Emptied: "none" goes, and the title is taken off.
+    let mut f = crate::dialogs::FollowUpForm::of(&a.session, true, None);
+    assert_eq!(f.title, "Review the proofs", "the form opens with the message's title");
+    f.title.clear();
+    assert_eq!(f.params()["title"], json!("none"));
+    // Add Reminder… sends no title.
+    let r = crate::dialogs::FollowUpForm::of(&a.session, false, None);
+    assert!(r.params().get("title").is_none());
     let _ = std::fs::remove_dir_all(dir);
 }

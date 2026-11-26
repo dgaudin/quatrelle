@@ -619,7 +619,7 @@ fn a_named_start_does_not_rewrite_the_servers_due() {
     s.cache.insert((id.clone(), "INBOX".into()), st);
 
     let day = quatrelle_model::dates::days_from_civil(2026, 12, 1);
-    s.follow_up_set_for(&[with_due, without_due], Some(Some(day)), None, None).unwrap();
+    s.follow_up_set_for(&[with_due, without_due], Some(Some(day)), None, None, None).unwrap();
     let jobs = s.take_jobs();
     let ops: Vec<&quatrelle_model::Op> = jobs
         .iter()
@@ -784,5 +784,202 @@ fn a_message_under_several_labels_is_one_row_of_the_todo_list() {
     let rows: Vec<String> =
         s.todo("", false).iter().filter_map(|r| r.mail()).filter(|m| m.subject == "Under four labels").map(|m| m.key.folder.clone()).collect();
     assert_eq!(rows, vec!["INBOX".to_string()], "once, from the Inbox");
+/// `mail.flag`'s "title" sets the flag's title: on a local account it is kept in the
+/// preferences and `follow_up_title` reads it back (and no SetFollowUp carries it — the server
+/// has nowhere for it); "none" takes it off; Undo puts it back.
+#[test]
+fn a_flag_title_is_set_kept_here_and_undone() {
+    let mut s = sample_session("flag-title");
+    let k = key_of(&s, "Character turnarounds");
+    let r = s.run("mail.flag", &json!({ "key": k["key"], "title": "Review the proofs", "due": "2026-12-01" })).unwrap();
+    assert_eq!(r["title"], json!("Review the proofs"));
+    assert_eq!(s.follow_up_title(&turnaround(&s)), Some("Review the proofs"));
+    assert!(
+        s.take_jobs().iter().all(|j| !matches!(j, Job::Apply { op: Op::SetFollowUp { title: Some(_), .. }, .. })),
+        "no title op for an account whose server has nowhere for it"
+    );
+    // "none" takes it off.
+    s.run("mail.flag", &json!({ "key": k["key"], "title": "none" })).unwrap();
+    assert_eq!(s.follow_up_title(&turnaround(&s)), None);
+    // Undo puts it back.
+    s.run("edit.undo", &json!({})).unwrap();
+    assert_eq!(s.follow_up_title(&turnaround(&s)), Some("Review the proofs"));
+    done(s);
+}
+
+/// On Exchange the title goes with the follow-up change as the task's `PidLidToDoTitle`, and
+/// the cache reads it back at once; Clear Flag takes it off there too (its SetFollowUp says so).
+#[test]
+fn a_flag_title_goes_to_exchange_as_the_todo_title() {
+    let mut s = sample_session("flag-title-ews");
+    let account = s
+        .run("account.add", &json!({"email": "riley@contoso.example", "password": "pw", "ews": "https://ews.contoso.example/EWS/Exchange.asmx"}))
+        .unwrap()["account"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    s.take_jobs();
+    let mut m = turnaround(&s);
+    m.key.account = account.clone();
+    let m = std::sync::Arc::new(m);
+    // The message as the account's cache has it (`mail.flag`'s `key` reads the cache).
+    {
+        let st = s.cache.entry((account.clone(), m.key.folder.clone())).or_default();
+        st.validity = m.key.validity;
+        st.messages.push(m.clone());
+    }
+    let day = quatrelle_model::dates::days_from_civil(2026, 12, 1);
+    s.follow_up_set_for(std::slice::from_ref(&m), None, Some(Some(day)), None, Some(Some("Review the proofs".into()))).unwrap();
+    let title_op = s
+        .take_jobs()
+        .iter()
+        .find_map(|j| match j {
+            Job::Apply { op: Op::SetFollowUp { title: Some(Some(t)), due, .. }, .. } if due.is_some() => Some(t.clone()),
+            _ => None,
+        })
+        .expect("the title went with the follow-up change that names a due day");
+    assert_eq!(title_op, "Review the proofs");
+    // The cache reads it back at once.
+    let in_cache = s.cache.get(&(account.clone(), m.key.folder.clone())).unwrap().messages.iter().find(|x| x.key.uid == m.key.uid).unwrap();
+    assert_eq!(in_cache.flags.follow_up.title, "Review the proofs");
+    // Clear Flag takes the title off the server too.
+    s.run("mail.flag", &json!({"key": m.key.to_id(), "on": false})).unwrap();
+    let cleared = s.take_jobs().iter().any(|j| matches!(j, Job::Apply { op: Op::SetFollowUp { title: Some(None), .. }, .. }));
+    assert!(cleared, "Clear Flag's SetFollowUp takes the title off");
+    done(s);
+}
+
+/// Clear Flag takes a title that is all a message has left off Exchange too: after Mark
+/// Complete and the synchro, the flag is off and the title alone is there — the `SetFollowUp`
+/// Clear Flag sends says `title: None`, and the cache doesn't show it anymore.
+#[test]
+fn clear_flag_takes_a_title_left_alone_off_exchange() {
+    let mut s = sample_session("clear-title-ews");
+    let account = s
+        .run("account.add", &json!({"email": "riley@contoso.example", "password": "pw", "ews": "https://ews.contoso.example/EWS/Exchange.asmx"}))
+        .unwrap()["account"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    s.take_jobs();
+    // The message as the cache has it after Mark Complete and the synchro: flag off, complete,
+    // the title alone left.
+    let mut m = turnaround(&s);
+    m.key.account = account.clone();
+    m.flags.flagged = false;
+    m.flags.set_category(FOLLOW_UP_COMPLETE, None, true);
+    m.flags.follow_up.title = "Review".into();
+    let m = std::sync::Arc::new(m);
+    {
+        let st = s.cache.entry((account.clone(), m.key.folder.clone())).or_default();
+        st.validity = m.key.validity;
+        st.messages.push(m.clone());
+    }
+    let in_cache = |s: &Session| {
+        s.cache.get(&(account.clone(), m.key.folder.clone())).unwrap().messages.iter().find(|x| x.key.uid == m.key.uid).unwrap().clone()
+    };
+    assert_eq!(s.follow_up_title(&in_cache(&s)), Some("Review"), "the title is all that's left");
+    s.run("mail.flag", &json!({"key": m.key.to_id(), "on": false})).unwrap();
+    let jobs = s.take_jobs();
+    assert!(
+        jobs.iter().any(|j| matches!(j, Job::Apply { op: Op::SetFollowUp { title: Some(None), .. }, .. })),
+        "Clear Flag takes the title off the server too: {jobs:?}"
+    );
+    assert_eq!(s.follow_up_title(&in_cache(&s)), None, "the cache doesn't show it anymore");
+    done(s);
+}
+
+/// Same for a Graph account: the title is kept in the preferences, and the cache's copy must go
+/// with the Clear Flag — otherwise the cache's title still shows once the preferences are gone.
+#[test]
+fn clear_flag_takes_a_title_left_alone_off_the_graph_cache() {
+    let mut s = sample_session("clear-title-graph");
+    let account = s
+        .run("account.add", &json!({"email": "zoe@contoso.example", "graph": true, "oauthClientId": "11111111-2222-3333-4444-555555555555"}))
+        .unwrap()["account"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    s.take_jobs();
+    let mut m = turnaround(&s);
+    m.key.account = account.clone();
+    m.flags.flagged = false;
+    m.flags.set_category(FOLLOW_UP_COMPLETE, None, true);
+    m.flags.follow_up.title = "Review".into();
+    let m = std::sync::Arc::new(m);
+    s.prefs.follow_up_title.insert(id(&m), "Review".into());
+    {
+        let st = s.cache.entry((account.clone(), m.key.folder.clone())).or_default();
+        st.validity = m.key.validity;
+        st.messages.push(m.clone());
+    }
+    let in_cache = |s: &Session| {
+        s.cache.get(&(account.clone(), m.key.folder.clone())).unwrap().messages.iter().find(|x| x.key.uid == m.key.uid).unwrap().clone()
+    };
+    assert_eq!(s.follow_up_title(&in_cache(&s)), Some("Review"));
+    s.run("mail.flag", &json!({"key": m.key.to_id(), "on": false})).unwrap();
+    let jobs = s.take_jobs();
+    assert!(
+        jobs.iter().any(|j| matches!(j, Job::Apply { op: Op::SetFollowUp { title: Some(None), .. }, .. })),
+        "Clear Flag's write reaches the cache through the job: {jobs:?}"
+    );
+    assert_eq!(s.follow_up_title(&in_cache(&s)), None, "the cache's copy went too, not only the preferences'");
+    done(s);
+}
+
+/// Flagging again a message that already has a title of its own (after Mark Complete) keeps
+/// that title on Exchange; a fresh one gets its subject, as before.
+#[test]
+fn reflagging_keeps_a_custom_title_and_a_fresh_flag_gets_the_subject() {
+    let mut s = sample_session("reflag-title");
+    let account = s
+        .run("account.add", &json!({"email": "riley@contoso.example", "password": "pw", "ews": "https://ews.contoso.example/EWS/Exchange.asmx"}))
+        .unwrap()["account"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    s.take_jobs();
+    let mut titled = turnaround(&s);
+    titled.key.account = account.clone();
+    titled.flags.flagged = false;
+    titled.flags.follow_up.title = "Review".into();
+    let mut fresh = turnaround(&s);
+    fresh.key.account = account.clone();
+    fresh.key.uid += 1;
+    fresh.subject = "Fresh mail".into();
+    fresh.flags.flagged = false;
+    let (titled, fresh) = (std::sync::Arc::new(titled), std::sync::Arc::new(fresh));
+    s.set_flagged(&[titled.clone(), fresh.clone()], true);
+    let titles: Vec<(u32, String)> = s
+        .take_jobs()
+        .iter()
+        .filter_map(|j| match j {
+            Job::Apply { op: Op::SetFollowUp { keys, title: Some(Some(t)), .. }, .. } => Some((keys[0].uid, t.clone())),
+            _ => None,
+        })
+        .collect();
+    assert!(titles.contains(&(titled.key.uid, "Review".to_string())), "the custom title survives the new flag: {titles:?}");
+    assert!(titles.contains(&(fresh.key.uid, "Fresh mail".to_string())), "the fresh flag gets the subject: {titles:?}");
+    done(s);
+}
+
+/// `"none"` in any case takes a flag's title (and reminder) off, as `null` and `false` do.
+#[test]
+fn none_in_any_case_takes_the_title_and_reminder_off() {
+    let mut s = sample_session("title-none-case");
+    let mut p = key_of(&s, "Character turnarounds");
+    p["title"] = json!("Review");
+    s.run("mail.flag", &p).unwrap();
+    assert_eq!(s.follow_up_title(&turnaround(&s)), Some("Review"));
+    p["title"] = json!("NONE");
+    s.run("mail.flag", &p).unwrap();
+    assert_eq!(s.follow_up_title(&turnaround(&s)), None, "\"NONE\" takes the title off too");
+    let mut p = key_of(&s, "Character turnarounds");
+    p["reminder"] = json!("2026-12-01T09:00");
+    s.run("mail.flag", &p).unwrap();
+    assert!(s.follow_up_reminder(&turnaround(&s)).is_some());
+    p["reminder"] = json!("None");
+    s.run("mail.flag", &p).unwrap();
+    assert_eq!(s.follow_up_reminder(&turnaround(&s)), None, "\"None\" takes the reminder off too");
     done(s);
 }

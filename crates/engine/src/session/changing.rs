@@ -156,7 +156,7 @@ impl Session {
                         Arc::make_mut(m).flags.set_category(keyword, name.as_deref(), *on);
                     }
                 }
-                Op::SetFollowUp { start, due, reminder, .. } => {
+                Op::SetFollowUp { start, due, reminder, title, .. } => {
                     for m in st.messages.iter_mut().filter(|m| mine.contains(&m.key.uid)) {
                         let m = Arc::make_mut(m);
                         // Only the fields the change names: an unnamed one keeps what it had.
@@ -168,6 +168,9 @@ impl Session {
                         }
                         if let Some(c) = reminder {
                             m.flags.follow_up.reminder = c.value().unwrap_or(0);
+                        }
+                        if let Some(t) = title {
+                            m.flags.follow_up.title = t.clone().unwrap_or_default();
                         }
                     }
                 }
