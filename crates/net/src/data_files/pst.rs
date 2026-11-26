@@ -69,7 +69,14 @@ pub(crate) struct Loose<'a> {
 
 /// One of a [`Loose`] message's files.
 pub(crate) enum LooseFile<'a> {
-    Data { name: String, mime: String, cid: String, data: Vec<u8> },
+    /// `picture`: flagged as the contact's picture (PidTagAttachmentContactPhoto).
+    Data {
+        name: String,
+        mime: String,
+        cid: String,
+        data: Vec<u8>,
+        picture: bool,
+    },
     Message(Box<Loose<'a>>),
 }
 

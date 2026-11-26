@@ -301,3 +301,49 @@ fn write_msg_fuzz_seed() {
     std::fs::write(dir.join("outlook.msg"), sample()).unwrap();
     std::fs::write(dir.join("inflated.msg"), inflated(12, 16 << 10)).unwrap();
 }
+
+/// A contact as Outlook saves one: a picture flagged as the contact's (PidTagAttachmentContactPhoto)
+/// and a plain file.
+pub(crate) fn contact() -> Vec<u8> {
+    let mut cf = CompoundFile::create(Cursor::new(Vec::new())).unwrap();
+    write_props(&mut cf, "", TOP_HEADER, &[(0x001A_001F, P::Text("IPM.Contact")), (0x3001_001F, P::Text("Ada Byron")), (0x3FFD_0003, P::Int(65001))]);
+    let pic = "/__attach_version1.0_#00000000";
+    cf.create_storage(pic).unwrap();
+    write_props(
+        &mut cf,
+        pic,
+        PART_HEADER,
+        &[
+            (0x3707_001F, P::Text("ContactPicture.png")),
+            (0x370E_001F, P::Text("image/png")),
+            (0x3705_0003, P::Int(1)),
+            (0x7FFF_000B, P::Int(1)),
+            (0x3701_0102, P::Bin(b"\x89PNG\r\n\x1a\n fake".to_vec())),
+        ],
+    );
+    let cv = "/__attach_version1.0_#00000001";
+    cf.create_storage(cv).unwrap();
+    write_props(
+        &mut cf,
+        cv,
+        PART_HEADER,
+        &[
+            (0x3707_001F, P::Text("cv.pdf")),
+            (0x370E_001F, P::Text("application/pdf")),
+            (0x3705_0003, P::Int(1)),
+            (0x3701_0102, P::Bin(b"%PDF-1.4".to_vec())),
+        ],
+    );
+    cf.flush().unwrap();
+    cf.into_inner().into_inner()
+}
+
+/// A contact file's flagged picture goes on the contact, not among the files of the message the
+/// `.msg` is filed as (the same as in a data file).
+#[test]
+fn a_contact_msgs_flagged_picture_is_not_an_attachment() {
+    let raw = to_mime(&contact()).unwrap();
+    let s = String::from_utf8_lossy(&raw);
+    assert!(s.contains("cv.pdf"), "the plain file is filed: {s}");
+    assert!(!s.contains("ContactPicture"), "the flagged picture is not an attachment: {s}");
+}

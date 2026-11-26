@@ -119,11 +119,26 @@ pub(super) fn loose_item(m: &Loose<'_>, named: &crate::pst_pim::Named, depth: us
     fn find<'a>(list: &[(u16, Val<'a>)], id: u16) -> Option<Val<'a>> {
         list.iter().find(|(i, _)| *i == id).map(|(_, v)| v.clone())
     }
+    let class = find(&m.props, 0x001A).and_then(Val::into_text).unwrap_or_default().to_ascii_lowercase();
+    // A contact's picture (the attachment Outlook flags as one) goes on its card, not among
+    // its files — the same as in a data file (`picture_of`); one past what a card keeps is
+    // counted (it is hidden, so it would otherwise go unsaid).
+    let mut photo = None;
+    let mut left_out = std::collections::BTreeMap::new();
     let files: Vec<File> = m
         .files
         .iter()
         .filter_map(|f| match f {
-            LooseFile::Data { name, mime, cid, data } => {
+            LooseFile::Data { name, mime, cid, data, picture } if *picture && is(&class, "ipm.contact") => {
+                if data.len() > quatrelle_model::vcard::MAX_PHOTO {
+                    log::info!("a contact's picture of {} bytes was left out", data.len());
+                    *left_out.entry(FileLeftOut::TooBig).or_insert(0) += 1;
+                } else if photo.is_none() {
+                    photo = crate::pst_pim::contact_photo(true, mime, Some(data.as_slice()));
+                }
+                None
+            }
+            LooseFile::Data { name, mime, cid, data, .. } => {
                 Some(File::Data { name: name.clone(), mime: mime.clone(), cid: cid.clone(), data: data.clone() })
             }
             LooseFile::Message(inner) if depth + 1 < MAX_NESTING => Some(File::Message(Box::new(loose_item(inner, named, depth + 1)))),
@@ -131,7 +146,16 @@ pub(super) fn loose_item(m: &Loose<'_>, named: &crate::pst_pim::Named, depth: us
         })
         .collect();
     let rows: Vec<_> = m.recipients.iter().map(|r| move |id: u16| find(r, id)).collect();
-    item_of(&|id| find(&m.props, id), &rows, files, named)
+    let mut it = item_of(&|id| find(&m.props, id), &rows, files, named);
+    for (reason, n) in left_out {
+        *it.left_out.entry(reason).or_insert(0) += n;
+    }
+    if is(&class, "ipm.contact")
+        && let Some(extra) = &mut it.extra
+    {
+        extra.photo = photo;
+    }
+    it
 }
 
 /// An item from its properties (`p`) and its recipients' (one getter per recipient).
