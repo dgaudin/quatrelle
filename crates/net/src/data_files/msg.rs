@@ -58,7 +58,14 @@ struct Read1 {
 }
 
 enum ReadFile {
-    Data { name: String, mime: String, cid: String, data: Vec<u8> },
+    /// `picture`: the attachment is flagged as a contact's picture (PidTagAttachmentContactPhoto).
+    Data {
+        name: String,
+        mime: String,
+        cid: String,
+        data: Vec<u8>,
+        picture: bool,
+    },
     Message(Box<Read1>),
 }
 
@@ -163,8 +170,11 @@ impl Reader<'_> {
                 }
                 continue;
             }
+            // PidTagAttachmentContactPhoto: Outlook flags a contact's picture with it, so the
+            // import can tell it from the files (as a data file's attachment carries the flag).
+            let picture = p.iter().any(|x| x.id == 0x7FFF && matches!(val(x, cp), Val::Bool(true)));
             if let Some(Stored::Bytes(data)) = p.into_iter().find(|x| x.id == 0x3701 && x.ty == 0x0102).map(|x| x.value) {
-                files.push(ReadFile::Data { name, mime, cid, data });
+                files.push(ReadFile::Data { name, mime, cid, data, picture });
             }
         }
         Read1 { props, recipients, files }
@@ -269,9 +279,13 @@ fn loose(m: &mut Read1) -> Loose<'_> {
         files: files
             .iter_mut()
             .map(|f| match f {
-                ReadFile::Data { name, mime, cid, data } => {
-                    LooseFile::Data { name: std::mem::take(name), mime: std::mem::take(mime), cid: std::mem::take(cid), data: std::mem::take(data) }
-                }
+                ReadFile::Data { name, mime, cid, data, picture } => LooseFile::Data {
+                    name: std::mem::take(name),
+                    mime: std::mem::take(mime),
+                    cid: std::mem::take(cid),
+                    data: std::mem::take(data),
+                    picture: *picture,
+                },
                 ReadFile::Message(inner) => LooseFile::Message(Box::new(loose(inner))),
             })
             .collect(),

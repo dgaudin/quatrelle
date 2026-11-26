@@ -353,6 +353,17 @@ fn a_contact_picture_is_a_hidden_picture() {
         Some(("image/png".to_string(), jpeg.to_vec())),
         "the item's own type wins"
     );
+    let png = crate::data_files::msg::tests::PNG_1PX;
+    assert_eq!(
+        crate::pst_pim::contact_photo(true, "", Some(&png)),
+        Some(("image/png".to_string(), png.to_vec())),
+        "a real PNG is recognized by its magic, with no type given"
+    );
+    assert_eq!(
+        crate::pst_pim::contact_photo(true, "image/png", Some(b"not an image at all")),
+        Some(("image/png".to_string(), b"not an image at all".to_vec())),
+        "a stated image type wins over the bytes, as in a data file: the bytes aren't re-checked"
+    );
     assert_eq!(crate::pst_pim::contact_photo(false, "image/jpeg", Some(&jpeg)), None, "a visible attachment isn't the picture");
     assert_eq!(crate::pst_pim::contact_photo(true, "text/plain", Some(b"hello")), None, "not a picture");
     assert_eq!(crate::pst_pim::contact_photo(true, "", Some(b"")), None);
@@ -518,4 +529,34 @@ fn a_folder_s_name_is_kept_within_a_length() {
     assert_eq!(out.clean(" Projects/2026 "), "Projects∕2026");
     assert_eq!(out.clean("   "), "Folder");
     let _ = std::fs::remove_dir_all(dir);
+}
+
+/// A loose message's (a `.msg`'s) contact carries its flagged picture on its card, and the
+/// picture is not one of the item's files; one past what a card keeps is counted as left out.
+#[test]
+fn a_loose_contacts_flagged_picture_goes_on_its_card() {
+    use super::item::loose_item;
+    let png = b"\x89PNG\r\n\x1a\n fake".to_vec();
+    let contact = |files: Vec<LooseFile<'static>>| Loose { props: vec![(0x001A, Val::Text("IPM.Contact".into()))], recipients: Vec::new(), files };
+    let it = loose_item(
+        &contact(vec![
+            LooseFile::Data { name: "ContactPicture.png".into(), mime: "image/png".into(), cid: String::new(), data: png.clone(), picture: true },
+            LooseFile::Data { name: "cv.pdf".into(), mime: "application/pdf".into(), cid: String::new(), data: b"%PDF".to_vec(), picture: false },
+        ]),
+        &crate::pst_pim::Named::default(),
+        0,
+    );
+    let extra = it.extra.as_ref().expect("a contact's own properties");
+    assert_eq!(extra.photo.as_ref().map(|(m, d)| (m.as_str(), d.as_slice())), Some(("image/png", png.as_slice())), "the picture is on the card");
+    assert_eq!(it.files.len(), 1, "the picture is not a file");
+    // Past what a card keeps: left out and counted, not on the card, not a file.
+    let big = vec![0u8; quatrelle_model::vcard::MAX_PHOTO + 1];
+    let it = loose_item(
+        &contact(vec![LooseFile::Data { name: "p.png".into(), mime: "image/png".into(), cid: String::new(), data: big, picture: true }]),
+        &crate::pst_pim::Named::default(),
+        0,
+    );
+    assert!(it.extra.as_ref().expect("a contact's own properties").photo.is_none());
+    assert!(it.files.is_empty());
+    assert_eq!(it.left_out.get(&FileLeftOut::TooBig), Some(&1), "counted as left out");
 }
