@@ -131,6 +131,192 @@ fn rules_become_sieve() {
     assert!(s.find("fileinto").unwrap() < s.find("include :personal").unwrap(), "our rules first, then the user's own");
 }
 
+/// A script the user wrote is read as the rules it holds: each `if` block one rule, in
+/// Quatrelle's terms when every part of it can be said there, not runnable when it can't (a
+/// body test), and said in the summary either way.
+#[test]
+fn a_foreign_script_is_parsed_as_rules() {
+    let script = r#"require ["fileinto", "imap4flags"];
+# the user's own filters
+if header :contains "subject" "invoice" {
+    fileinto "INBOX/Archives";
+    addflag "\\Seen";
+    stop;
+}
+if anyof(header :contains "from" ["a@x.example", "b@x.example"], header :contains ["to", "cc"] "team@x.example") {
+    addflag "\\Flagged";
+} elsif header :contains "subject" "news" {
+    addflag "$Pinned";
+}
+if body :contains "viagra" {
+    discard;
+}
+"#;
+    let rules = parse_rules("a1", "filters", script, true, &[]);
+    assert_eq!(rules.len(), 4, "{rules:?}");
+    let r0 = &rules[0];
+    assert_eq!(r0.id, "sieve:filters#0");
+    assert_eq!(r0.name, "filters #0");
+    assert_eq!(r0.account, "a1");
+    assert!(r0.enabled);
+    assert!(r0.runnable, "{r0:?}");
+    let rule = r0.rule.as_ref().expect("runnable");
+    assert_eq!(rule.conditions, vec![Condition::Subject("invoice".into())]);
+    assert!(rule.match_all);
+    assert_eq!(rule.actions, vec![RuleAction::MoveTo(utf7::encode("INBOX/Archives")), RuleAction::MarkRead]);
+    assert!(rule.stop);
+    assert_eq!(rule.remote_id.as_deref(), Some("sieve:filters#0"));
+    assert_eq!(r0.summary, "subject \"invoice\" → file into \"INBOX/Archives\", mark as read, then stops", "{}", r0.summary);
+    // anyof: any one condition matches; a list of values is the "one of these" condition.
+    let r1 = &rules[1];
+    assert!(r1.runnable, "{r1:?}");
+    let rule = r1.rule.as_ref().expect("runnable");
+    assert!(!rule.match_all);
+    assert_eq!(rule.conditions, vec![Condition::FromAny(vec!["a@x.example".into(), "b@x.example".into()]), Condition::To("team@x.example".into())]);
+    assert_eq!(rule.actions, vec![RuleAction::Flag]);
+    assert!(!rule.stop);
+    // The elsif block is an entry of its own.
+    let r2 = &rules[2];
+    assert_eq!(r2.id, "sieve:filters#2");
+    assert_eq!(r2.rule.as_ref().map(|r| r.actions.clone()), Some(vec![RuleAction::Pin]));
+    // A body test Quatrelle can't say: not runnable, no rule, but the summary says what it was.
+    let r3 = &rules[3];
+    assert!(!r3.runnable);
+    assert!(r3.rule.is_none());
+    assert!(r3.summary.contains("body"), "{}", r3.summary);
+    assert!(r3.summary.contains("delete"), "{}", r3.summary);
+    // A script that isn't the active one lists its rules as off.
+    assert!(!parse_rules("a1", "filters", script, false, &[])[0].enabled);
+    // A script with no `if` in it parses to nothing (the caller keeps it as one entry).
+    assert!(parse_rules("a1", "filters", "require \"fileinto\";\r\nvacation :days 1 \"away\";\r\n", true, &[]).is_empty());
+}
+
+/// What Quatrelle writes parses back to the same rules — the folder path back in modified
+/// UTF-7, a category by its keyword — so a script of ours read as a foreign one is its rule.
+#[test]
+fn a_written_script_parses_back_to_the_same_rules() {
+    let categories = vec![("Work".to_string(), "$label2".to_string())];
+    let base = Rule {
+        name: "Invoices".into(),
+        enabled: true,
+        account: Some("a1".into()),
+        conditions: Vec::new(),
+        match_all: true,
+        actions: Vec::new(),
+        stop: false,
+        server: true,
+        remote_id: None,
+        priority: None,
+        refused: None,
+    };
+    let rules = vec![
+        Rule {
+            conditions: vec![Condition::From("billing@x.example".into()), Condition::Subject("invoice".into())],
+            actions: vec![RuleAction::MoveTo(utf7::encode("INBOX/Factures é")), RuleAction::MarkRead, RuleAction::Categorize("Work".into())],
+            stop: true,
+            ..base.clone()
+        },
+        Rule {
+            name: "Urgent".into(),
+            conditions: vec![Condition::ToAny(vec!["ann@x.example".into()]), Condition::AnyText("urgent".into())],
+            match_all: false,
+            actions: vec![RuleAction::Flag, RuleAction::Pin],
+            ..base
+        },
+    ];
+    let s = script(&Settings { rules: rules.clone(), categories: categories.clone(), ..Default::default() }, None);
+    let back = parse_rules("a1", SCRIPT, &s, true, &categories);
+    assert_eq!(back.len(), 2, "{back:?}");
+    for (b, r) in back.iter().zip(&rules) {
+        assert!(b.runnable, "{b:?}");
+        let got = b.rule.as_ref().expect("runnable");
+        assert_eq!(&got.conditions, &r.conditions, "{}", b.name);
+        assert_eq!(got.match_all, r.match_all, "{}", b.name);
+        assert_eq!(&got.actions, &r.actions, "{}", b.name);
+        assert_eq!(got.stop, r.stop, "{}", b.name);
+    }
+}
+
+/// A hostile script can't make the parser work without bound: tokens are capped, nesting too.
+#[test]
+fn a_hostile_script_is_capped() {
+    let deep = format!("if {} {{ keep; }}", "allof(".repeat(5000) + &")".repeat(5000));
+    assert!(parse_rules("a1", "x", &deep, true, &[])[0].rule.is_none());
+    let huge = format!("if header :contains \"subject\" \"{}\" {{ discard; }}", "x".repeat(10 << 20));
+    assert!(parse_rules("a1", "x", &huge, true, &[])[0].rule.is_some(), "one long string is fine when it came in");
+    let many = "if true { keep; }\n".repeat(100_000);
+    assert_eq!(parse_rules("a1", "x", &many, true, &[]).len(), 1_000, "the rules are capped (MAX_PARSE_RULES)");
+}
+
+/// The `if` and its `elsif`/`else` blocks count together against the same cap: a hostile chain
+/// of them can't make the parser work without bound either.
+#[test]
+fn the_elsif_chain_is_capped_like_the_ifs() {
+    let mut s = String::from(r#"if header :contains "subject" "x" { discard; }"#);
+    for _ in 0..5_000 {
+        s.push_str(r#" elsif header :contains "from" "y" { discard; }"#);
+    }
+    s.push_str(r#" else { discard; }"#);
+    assert_eq!(parse_rules("a1", "x", &s, true, &[]).len(), 1_000, "the if and its elsif/else are capped together (MAX_PARSE_RULES)");
+}
+
+/// A rule that nests `anyof` inside `allof` (or the other way) can't be run here: running is one
+/// list of conditions, all or any, and flattening only works inside the same combinator.
+#[test]
+fn a_mixed_allof_anyof_rule_is_not_runnable() {
+    let mixed =
+        r#"if allof(header :contains "subject" "a", anyof(header :contains "from" "x", header :contains "subject" "z")) { addflag "\\Flagged"; }"#;
+    let rules = parse_rules("a1", "x", mixed, true, &[]);
+    assert_eq!(rules.len(), 1, "{rules:?}");
+    assert!(!rules[0].runnable, "{rules:?}");
+    assert!(rules[0].rule.is_none(), "{rules:?}");
+    assert!(!rules[0].summary.is_empty(), "it still says what it was: {rules:?}");
+    // The same combinator inside the same combinator flattens, and runs.
+    let same =
+        r#"if allof(allof(header :contains "subject" "a", header :contains "from" "x"), header :contains "subject" "b") { addflag "\\Flagged"; }"#;
+    let rules = parse_rules("a1", "x", same, true, &[]);
+    assert!(rules[0].runnable, "{rules:?}");
+    let rule = rules[0].rule.as_ref().expect("runnable");
+    assert!(rule.match_all);
+    assert_eq!(rule.conditions.len(), 3, "{rule:?}");
+}
+
+/// IMAP flags are case-insensitive: `\seen` marks as read the same as `\Seen`, `\FLAGGED` flags.
+#[test]
+fn flag_keywords_are_case_insensitive() {
+    for (kw, action) in [(r#"\\seen"#, RuleAction::MarkRead), (r#"\\FLAGGED"#, RuleAction::Flag), (r#"\\sEeN"#, RuleAction::MarkRead)] {
+        let s = format!(r#"if header :contains "subject" "x" {{ addflag "{kw}"; }}"#);
+        let rules = parse_rules("a1", "x", &s, true, &[]);
+        assert_eq!(rules[0].rule.as_ref().map(|r| r.actions.clone()), Some(vec![action.clone()]), "{kw}: {rules:?}");
+    }
+}
+
+/// What a script puts in a value is made safe to keep and show: control characters and bidi
+/// overrides are out (they would only serve to spoof what's shown), the value is capped, and
+/// the summary too.
+#[test]
+fn script_values_are_cleaned_and_the_summary_is_capped() {
+    let bad = ['\u{202E}', '\u{0007}', '\u{2066}', '\u{202A}'];
+    let is_spoof = |c: char| c.is_control() || matches!(c, '\u{202A}'..='\u{202E}' | '\u{2066}'..='\u{2069}');
+    let value = format!("ab\u{202E}cd\u{0007}ef{}", "x".repeat(600));
+    let s = format!(r#"if header :contains "subject" "{value}" {{ addflag "\\Flagged"; }}"#);
+    let rules = parse_rules("a1", "x", &s, true, &[]);
+    let r = &rules[0];
+    assert!(r.runnable, "{r:?}");
+    let rule = r.rule.as_ref().expect("runnable");
+    let Condition::Subject(got) = &rule.conditions[0] else { panic!("{:?}", rule.conditions) };
+    assert!(!got.chars().any(is_spoof), "{got:?}");
+    assert_eq!(got.chars().count(), 200, "the value is capped: {got:?}");
+    assert!(!bad.iter().any(|c| got.contains(*c)));
+    assert!(r.summary.chars().count() <= 500, "the summary is capped: {}", r.summary.len());
+    assert!(!r.summary.chars().any(is_spoof), "the summary is clean: {:?}", r.summary);
+    // The script's own name is cleaned where it's shown, but the id keeps it as the server has it.
+    let s = "if header :contains \"subject\" \"x\" { addflag \"\\\\Flagged\"; }";
+    let rules = parse_rules("a1", "evil\u{202E}script", s, true, &[]);
+    assert_eq!(rules[0].id, "sieve:evil\u{202E}script#0", "the id goes back to the server as it is");
+    assert!(!rules[0].name.chars().any(is_spoof), "the name shown is clean: {}", rules[0].name);
+}
+
 /// A ManageSieve server for tests: scripts in memory, one connection at a time.
 pub(crate) struct Fake {
     pub scripts: Vec<(String, String)>,

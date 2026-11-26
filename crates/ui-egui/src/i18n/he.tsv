@@ -2544,3 +2544,7 @@ presence	Offline	לא מחובר
 	Organisation	ארגון
 	Open in People	פתח באנשי קשר
 	Open business card	פתח כרטיס ביקור
+	Managed on the server	מנוהלת בשרת
+	These rules are managed on the server; change them where they were made.	חוקים אלה מנוהלים בשרת; שנו אותם במקום שבו נוצרו.
+	a Sieve script	סקריפט Sieve
+	Run this rule on this computer's Inbox	להפעיל את הכלל הזה בתיבת הדואר הנכנס של מחשב זה

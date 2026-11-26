@@ -9,7 +9,9 @@
 //! The script is Quatrelle's own: the settings it was made from are kept in its first lines, so
 //! reading them back never means parsing Sieve. A script the user already runs stays in charge
 //! of their other rules: ours `include`s it (RFC 6609) and becomes the active one; when ours does
-//! nothing any more (no replies, no rule) theirs becomes active again.
+//! nothing any more (no replies, no rule) theirs becomes active again. A script Quatrelle didn't
+//! write is still read — as the rules it holds, in [`parse_rules`] — so what the server runs
+//! shows up listed; it is never changed from here.
 //!
 //! Server input is hostile: a line, a literal and one whole answer (its bytes, its words, its
 //! time) are capped, from the greeting on, which is read before TLS.
@@ -17,7 +19,7 @@
 use std::io::{BufRead, BufReader, Read, Write};
 
 use quatrelle_model::job::{Vacation, is_day};
-use quatrelle_model::organize::{Condition, Rule, RuleAction};
+use quatrelle_model::organize::{Condition, ForeignRule, Rule, RuleAction};
 use quatrelle_model::{PINNED, Security, ServerConfig, keyword_for, utf7};
 
 use crate::stream::{self, Stream};
@@ -583,6 +585,38 @@ pub fn read_rules(s: &str) -> Vec<Rule> {
 fn read_previous(s: &str) -> Option<String> {
     s.lines().take(3).find_map(|l| l.strip_prefix("# quatrelle-previous ").map(|p| p.trim().to_string())).filter(|p| !p.is_empty())
 }
+
+/// The scripts our script runs through itself when it is the active one: the one it replaced
+/// (`# quatrelle-previous`) and the ones it `include :personal`s (RFC 6609). The server runs
+/// those too, so they are on when ours is.
+pub fn included_scripts(script: &str) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    if let Some(p) = read_previous(script) {
+        out.push(p);
+    }
+    for line in script.lines() {
+        let t = line.trim();
+        if !t.get(..7).is_some_and(|h| h.eq_ignore_ascii_case("include")) {
+            continue;
+        }
+        // `include :personal "filters";`
+        let Some(q) = t.find('"') else { continue };
+        if !t[..q].contains(":personal") {
+            continue;
+        }
+        if let Some(end) = t[q + 1..].find('"') {
+            let name = &t[q + 1..q + 1 + end];
+            if !name.is_empty() && !out.iter().any(|n| n == name) {
+                out.push(name.to_string());
+            }
+        }
+    }
+    out
+}
+
+mod parse;
+
+pub use parse::parse_rules;
 
 #[cfg(test)]
 pub(crate) mod tests;

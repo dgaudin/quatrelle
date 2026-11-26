@@ -2549,3 +2549,7 @@ presence	Offline	Desconectado
 	Organisation	Organización
 	Open in People	Abrir en Contactos
 	Open business card	Abrir tarjeta de visita
+	Managed on the server	Gestionada en el servidor
+	These rules are managed on the server; change them where they were made.	Estas reglas las gestiona el servidor; cámbielas donde se crearon.
+	a Sieve script	un script de Sieve
+	Run this rule on this computer's Inbox	Ejecutar esta regla en la bandeja de entrada de este equipo

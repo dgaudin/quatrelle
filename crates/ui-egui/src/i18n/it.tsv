@@ -2547,3 +2547,7 @@ presence	Offline	Offline
 	Organisation	Organizzazione
 	Open in People	Apri in Contatti
 	Open business card	Apri biglietto da visita
+	Managed on the server	Gestita sul server
+	These rules are managed on the server; change them where they were made.	Queste regole sono gestite sul server; modificale dove sono state create.
+	a Sieve script	uno script Sieve
+	Run this rule on this computer's Inbox	Esegui questa regola sulla Posta in arrivo di questo computer

@@ -201,12 +201,19 @@ pub(super) fn draw(ui: &mut Ui, d: &mut Dialog, s: &Session, people: &mut People
                 // rather than pushing the dialog's buttons off the screen.
                 egui::ScrollArea::vertical().max_height(150.0).auto_shrink([false, true]).id_salt("server-rules").show(ui, |ui| {
                     for f in &s.foreign_rules {
+                        // A rule in an IMAP account's Sieve script is managed on the server:
+                        // listed and runnable here, never changed from here.
+                        let sieve = f.id.starts_with("sieve:");
                         ui.horizontal(|ui| {
-                            // The server's own rule: it runs whether Quatrelle is open or not, so
-                            // its switch acts there, not here.
-                            let mut on = f.enabled;
-                            if ui.checkbox(&mut on, "").on_hover_text(tl!("On / off on the server")).changed() {
-                                acts.push(Action::Run("rules.server.enabled", json!({"account": f.account, "id": f.id, "enabled": on})));
+                            if sieve {
+                                ui.label(RichText::new(tl!("Managed on the server")).color(t.faint).small());
+                            } else {
+                                // The server's own rule: it runs whether Quatrelle is open or not, so
+                                // its switch acts there, not here.
+                                let mut on = f.enabled;
+                                if ui.checkbox(&mut on, "").on_hover_text(tl!("On / off on the server")).changed() {
+                                    acts.push(Action::Run("rules.server.enabled", json!({"account": f.account, "id": f.id, "enabled": on})));
+                                }
                             }
                             let who = if s.accounts.len() > 1 {
                                 s.account(&f.account).map(|a| a.config.email.clone()).unwrap_or_default()
@@ -217,37 +224,52 @@ pub(super) fn draw(ui: &mut Ui, d: &mut Dialog, s: &Session, people: &mut People
                             // Its buttons first, at the right; its name in what's left, cut there.
                             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                                 ui.spacing_mut().item_spacing.x = 2.0;
-                                if widgets::tiny_icon_button(ui, Icon::Delete, "Delete", t).clicked() {
+                                if !sieve && widgets::tiny_icon_button(ui, Icon::Delete, "Delete", t).clicked() {
                                     acts.push(Action::Run("rules.server.delete", json!({"account": f.account, "id": f.id})));
                                 }
-                                if f.runnable && widgets::tiny_icon_button(ui, Icon::Sync, "Run now", t).clicked() {
-                                    acts.push(Action::Run("rules.server.run", json!({"account": f.account, "id": f.id})));
+                                if f.runnable {
+                                    // On this computer's Inbox, for a Sieve rule too: the server's
+                                    // own "Run now" is not what Quatrelle can do there.
+                                    let tip = if sieve { "Run this rule on this computer's Inbox" } else { "Run now" };
+                                    if widgets::tiny_icon_button(ui, Icon::Sync, tip, t).clicked() {
+                                        acts.push(Action::Run("rules.server.run", json!({"account": f.account, "id": f.id})));
+                                    }
                                 }
                                 // A rule every part of which Quatrelle knows can be changed here
                                 // (its place among the server's rules stays); the others are
                                 // shown with why, and stay as the program that made them has them.
-                                if f.runnable {
+                                if f.runnable && !sieve {
                                     if widgets::tiny_icon_button(ui, Icon::Drafts, "Edit", t).clicked()
                                         && let Some(form) = RuleForm::from_server(&f.account, f)
                                     {
                                         acts.push(Action::Dialog(Dialog::EditRule(Box::new(form))));
                                     }
-                                } else {
+                                } else if !f.runnable {
                                     ui.label(RichText::new(tl!("Quatrelle doesn't know every part of this rule yet")).color(t.faint).small());
                                 }
                                 ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
                                     let name = RichText::new(text).color(if f.enabled { t.text } else { t.faint }).small();
-                                    ui.add(egui::Label::new(name).truncate()).on_hover_text(&f.summary);
+                                    // A rule Quatrelle can say in its own terms is described in the
+                                    // interface's language; the others keep the server's words.
+                                    let hover =
+                                        f.rule.as_ref().map(|r| describe(s, r)).unwrap_or_else(|| {
+                                            if f.summary.is_empty() { tl!("a Sieve script").to_string() } else { f.summary.clone() }
+                                        });
+                                    ui.add(egui::Label::new(name).truncate()).on_hover_text(hover);
                                 });
                             });
                         });
                     }
                 });
-                ui.label(
-                    RichText::new(tl!("These rules run on the server. Turn them off, run them, change them or remove them here."))
-                        .color(t.faint)
-                        .small(),
-                );
+                if s.foreign_rules.iter().all(|f| f.id.starts_with("sieve:")) {
+                    ui.label(RichText::new(tl!("These rules are managed on the server; change them where they were made.")).color(t.faint).small());
+                } else {
+                    ui.label(
+                        RichText::new(tl!("These rules run on the server. Turn them off, run them, change them or remove them here."))
+                            .color(t.faint)
+                            .small(),
+                    );
+                }
             }
             ui.add_space(8.0);
             ui.horizontal(|ui| {

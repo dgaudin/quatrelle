@@ -822,3 +822,70 @@ fn the_follow_up_dialog_refuses_a_start_after_the_due() {
     assert_eq!(f.check(), None, "before is fine");
     let _ = std::fs::remove_dir_all(dir);
 }
+
+/// A rule in an IMAP account's Sieve script is shown as managed on the server: no switch, no
+/// Delete or Edit for it, and the dialog says where it is changed — while a rule the server
+/// runs but Quatrelle made itself keeps its switch.
+#[test]
+fn a_sieve_rule_is_shown_as_managed_on_the_server() {
+    let (mut a, dir) = app("sieve-rules");
+    let ctx = egui::Context::default();
+    let rule = Rule {
+        name: "filters #0".into(),
+        enabled: true,
+        account: Some("sample".into()),
+        conditions: vec![Condition::Subject("invoice".into())],
+        match_all: true,
+        actions: vec![RuleAction::MarkRead],
+        stop: false,
+        server: true,
+        remote_id: Some("sieve:filters#0".into()),
+        priority: None,
+        refused: None,
+    };
+    a.session.foreign_rules.push(quatrelle_engine::model::organize::ForeignRule {
+        account: "sample".into(),
+        id: "sieve:filters#0".into(),
+        name: "filters #0".into(),
+        enabled: true,
+        runnable: true,
+        rule: Some(rule),
+        summary: String::new(),
+    });
+    a.session.foreign_rules.push(quatrelle_engine::model::organize::ForeignRule {
+        account: "sample".into(),
+        id: "R3".into(),
+        name: "Outlook rule".into(),
+        enabled: true,
+        runnable: true,
+        rule: Some(Rule { remote_id: Some("R3".into()), ..a.session.foreign_rules[0].rule.clone().unwrap() }),
+        summary: "subject \"x\" → mark as read".into(),
+    });
+    open(&ctx, &mut a, Dialog::Rules);
+    let shapes = frame_shapes(&ctx, &mut a, vec![], SIZE);
+    let texts: Vec<String> = shapes
+        .iter()
+        .filter_map(|s| match s {
+            egui::Shape::Text(t) => Some(t.galley.text().to_string()),
+            _ => None,
+        })
+        .collect();
+    assert!(texts.iter().any(|t| t == "Managed on the server"), "the Sieve rule says so: {texts:?}");
+    // Only the Sieve rules are managed on the server, so the dialog keeps its own sentence.
+    assert!(texts.iter().any(|t| t.starts_with("These rules run on the server")), "{texts:?}");
+    // The non-Sieve rule still has its switch drawn (a small square widget, not a label).
+    assert!(texts.iter().any(|t| t == "Outlook rule"), "{texts:?}");
+    assert!(texts.iter().any(|t| t == "filters #0"), "{texts:?}");
+    // Only Sieve rules: the dialog says they are changed where they were made.
+    a.session.foreign_rules.truncate(1);
+    let shapes = frame_shapes(&ctx, &mut a, vec![], SIZE);
+    let texts: Vec<String> = shapes
+        .iter()
+        .filter_map(|s| match s {
+            egui::Shape::Text(t) => Some(t.galley.text().to_string()),
+            _ => None,
+        })
+        .collect();
+    assert!(texts.iter().any(|t| t == "These rules are managed on the server; change them where they were made."), "{texts:?}");
+    let _ = std::fs::remove_dir_all(dir);
+}

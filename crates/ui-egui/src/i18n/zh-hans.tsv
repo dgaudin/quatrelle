@@ -2548,3 +2548,7 @@ presence	Offline	离线
 	Organisation	组织
 	Open in People	在“联系人”中打开
 	Open business card	打开名片
+	Managed on the server	在服务器上管理
+	These rules are managed on the server; change them where they were made.	这些规则由服务器管理；请在创建它们的地方进行修改。
+	a Sieve script	一个 Sieve 脚本
+	Run this rule on this computer's Inbox	在此计算机的收件箱上运行此规则

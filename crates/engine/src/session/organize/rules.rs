@@ -197,6 +197,9 @@ impl Session {
         if !found {
             return Err(CmdError::Params(format!("no rule `{id}` on that server")));
         }
+        if let Some(e) = sieve_guard(id) {
+            return Err(e);
+        }
         let ours = self.our_server_ids(account);
         self.jobs.push(Job::SetServerRuleEnabled { account: account.to_string(), id: id.to_string(), enabled, ours });
         Ok(serde_json::json!({ "enabled": enabled }))
@@ -207,6 +210,9 @@ impl Session {
         let found = self.foreign_rules.iter().any(|r| r.account == account && r.id == id);
         if !found {
             return Err(CmdError::Params(format!("no rule `{id}` on that server")));
+        }
+        if let Some(e) = sieve_guard(id) {
+            return Err(e);
         }
         let ours = self.our_server_ids(account);
         self.jobs.push(Job::DeleteServerRule { account: account.to_string(), id: id.to_string(), ours });
@@ -219,6 +225,9 @@ impl Session {
         let Some(f) = self.foreign_rules.iter().find(|r| r.account == account && r.id == id) else {
             return Err(CmdError::Params(format!("no rule `{id}` on that server")));
         };
+        if let Some(e) = sieve_guard(id) {
+            return Err(e);
+        }
         if !f.runnable {
             return Err(CmdError::Failed(format!("Quatrelle doesn't know every part of \"{}\" yet", f.name)));
         }
@@ -332,4 +341,11 @@ impl Session {
         self.set_rules(rules)?;
         Ok(serde_json::json!({ "added": added, "turnedOff": off, "rules": self.rules.len() }))
     }
+}
+
+/// A rule in an IMAP account's Sieve script (`sieve:…`): listed and runnable here, but managed
+/// on the server — Quatrelle never changes it there, so the commands that would are refused
+/// before any job is sent.
+fn sieve_guard(id: &str) -> Option<CmdError> {
+    id.starts_with("sieve:").then(|| CmdError::Disabled("rules in an IMAP account's Sieve script are managed on the server".into()))
 }

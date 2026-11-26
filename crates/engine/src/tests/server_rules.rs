@@ -378,3 +378,64 @@ fn outlooks_copy_of_the_rules_is_replaced_when_the_user_says_so() {
     assert!(matches!(jobs.get(1), Some(Job::SetServerRules { rules, .. }) if rules.len() == 1), "then the rules: {jobs:?}");
     assert!(!s.outlook_keeps_rules(&account) && s.rules[0].refused.is_none());
 }
+
+/// A rule in an IMAP account's Sieve script (`sieve:…`) is listed here and can be run on this
+/// computer's Inbox, but it is managed on the server: turning it off, changing it or removing
+/// it from here is refused before any job is sent.
+#[test]
+fn a_sieve_rule_is_refused_before_any_job_is_sent() {
+    use quatrelle_model::organize::{Condition, ForeignRule, Rule, RuleAction};
+
+    let mut s = sample_session("sieve-guard");
+    let account = s.accounts[0].config.id.clone();
+    s.take_jobs();
+    let rule = Rule {
+        name: "filters #0".into(),
+        enabled: true,
+        account: Some(account.clone()),
+        conditions: vec![Condition::Subject("invoice".into())],
+        match_all: true,
+        actions: vec![RuleAction::MarkRead],
+        stop: false,
+        server: true,
+        remote_id: Some("sieve:filters#0".into()),
+        priority: None,
+        refused: None,
+    };
+    s.foreign_rules.push(ForeignRule {
+        account: account.clone(),
+        id: "sieve:filters#0".into(),
+        name: "filters #0".into(),
+        enabled: true,
+        runnable: true,
+        rule: Some(rule.clone()),
+        summary: "subject \"invoice\" → mark as read".into(),
+    });
+    // Refused, with no job sent: the engine stops before the network.
+    for (cmd, params) in [
+        ("rules.server.enabled", json!({"account": account, "id": "sieve:filters#0", "enabled": false})),
+        ("rules.server.delete", json!({"account": account, "id": "sieve:filters#0"})),
+        ("rules.server.save", json!({"account": account, "id": "sieve:filters#0", "rule": rule})),
+    ] {
+        let err = s.run(cmd, &params).unwrap_err();
+        assert!(matches!(err, CmdError::Disabled(_)), "{cmd}: {err:?}");
+    }
+    assert!(s.take_jobs().is_empty(), "no job was sent for a Sieve rule");
+    // Running it on this computer's Inbox stays allowed (it runs here, no job is sent).
+    s.run("rules.server.run", &json!({"account": account, "id": "sieve:filters#0"})).unwrap();
+    assert!(s.notices.iter().any(|n| n.text.contains("The rule ran")), "{:?}", s.notices);
+    assert!(s.take_jobs().is_empty(), "running it here sends no job");
+    // A rule that isn't Sieve's is still changed as before.
+    s.foreign_rules.push(ForeignRule {
+        account: account.clone(),
+        id: "R3".into(),
+        name: "Exchange rule".into(),
+        enabled: true,
+        runnable: true,
+        rule: Some(Rule { remote_id: Some("R3".into()), ..rule.clone() }),
+        summary: String::new(),
+    });
+    s.run("rules.server.enabled", &json!({"account": account, "id": "R3", "enabled": false})).unwrap();
+    assert!(s.take_jobs().iter().any(|j| matches!(j, Job::SetServerRuleEnabled { id, .. } if id == "R3")));
+    done(s);
+}
