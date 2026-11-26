@@ -276,15 +276,18 @@ impl MailApp {
                 }
                 Err(e) => self.session.notice(e.to_string(), true),
             },
-            Action::OpenPerson(uid) => {
-                self.session.module = quatrelle_engine::Module::People;
-                self.ui.people_query.clear();
-                self.ui.person = Some(uid);
-            }
             Action::OpenTask(uid) => {
                 self.session.module = Module::Tasks;
                 self.ui.tasks.query.clear();
                 self.ui.tasks.selected = Some(uid.clone());
+                self.ui.focus_main = true;
+            }
+            Action::OpenPerson { uid, cards } => {
+                self.session.module = Module::People;
+                self.ui.people_query.clear();
+                self.ui.people_book = None;
+                self.ui.person = Some(uid.clone());
+                self.ui.people_view = if cards { crate::panes::people::PeopleView::Cards } else { crate::panes::people::PeopleView::People };
                 self.ui.focus_main = true;
             }
             Action::Search(q) => {

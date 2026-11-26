@@ -676,7 +676,7 @@ fn people_part(s: &Session, t: &Tokens, ui: &mut Ui, acts: &mut Vec<Action>) {
         ui.painter().galley(egui::pos2(rect.left() + 34.0, rect.center().y - size.y / 2.0), g, t.text);
         if resp.clicked() {
             match &person {
-                Some(p) => acts.push(Action::OpenPerson(p.card.uid.clone())),
+                Some(p) => acts.push(Action::OpenPerson { uid: p.card.uid.clone(), cards: false }),
                 None => acts.push(Action::Run("mail.new", json!({"to": email}))),
             }
         }
@@ -688,7 +688,7 @@ fn people_part(s: &Session, t: &Tokens, ui: &mut Ui, acts: &mut Vec<Action>) {
             if let Some(p) = &person
                 && ui.button(tl!("Open contact")).clicked()
             {
-                acts.push(Action::OpenPerson(p.card.uid.clone()));
+                acts.push(Action::OpenPerson { uid: p.card.uid.clone(), cards: false });
                 ui.close();
             }
             if ui.button(tl!("Remove from Favorites")).clicked() {

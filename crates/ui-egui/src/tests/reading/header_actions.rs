@@ -132,3 +132,103 @@ fn the_reply_group_goes_under_the_header_when_the_pane_is_narrower() {
     assert!(group.y > from.y + 30.0, "under the header: {group:?} {from:?}");
     let _ = std::fs::remove_dir_all(dir);
 }
+
+const SIZE: egui::Vec2 = egui::vec2(1280.0, 800.0);
+
+/// The text a frame drew, on every layer (a card and its menu are popups).
+fn texts(shapes: &[egui::Shape]) -> Vec<String> {
+    shapes
+        .iter()
+        .filter_map(|s| match s {
+            egui::Shape::Text(t) => Some(t.galley.text().to_string()),
+            _ => None,
+        })
+        .collect()
+}
+
+/// A right click at `at`, and the frames that settle the popups.
+fn right_click(ctx: &egui::Context, a: &mut MailApp, at: egui::Pos2) {
+    for _ in 0..20 {
+        frame_sized(ctx, a, vec![], SIZE);
+    }
+    frame_sized(ctx, a, vec![Event::PointerMoved(at)], SIZE);
+    let button = |pressed| Event::PointerButton { pos: at, button: egui::PointerButton::Secondary, pressed, modifiers: Modifiers::NONE };
+    frame_sized(ctx, a, vec![button(true)], SIZE);
+    frame_sized(ctx, a, vec![button(false)], SIZE);
+    for _ in 0..10 {
+        frame_sized(ctx, a, vec![], SIZE);
+    }
+}
+
+/// The sample's first message open, its sender in an address book with a company: the app, the
+/// folder, the sender's name, and the contact's uid.
+fn opened_for_card(name: &str) -> (MailApp, std::path::PathBuf, String, String) {
+    let (mut a, dir) = app(name);
+    let key = a.session.list.first().expect("a message").key.clone();
+    a.run("list.open", json!({"key": key.to_id()}));
+    let from = a.session.reading.as_ref().and_then(|r| r.parsed.as_ref()).map(|p| p.from.clone()).expect("the sender");
+    let made = a
+        .session
+        .run("contact.create", &json!({"name": from.display(), "emails": [from.email.clone()], "org": "Studio Lantern", "title": "Producer"}))
+        .expect("the contact");
+    let uid = made["uid"].as_str().expect("its uid").to_string();
+    (a, dir, from.display().to_string(), uid)
+}
+
+#[test]
+fn a_right_click_shows_the_contact_card_and_its_actions() {
+    let (mut a, dir, sender, _) = opened_for_card("contact-card-menu");
+    let ctx = egui::Context::default();
+    let at = settled_text_at(&ctx, &mut a, &sender, SIZE).expect("the sender");
+    right_click(&ctx, &mut a, at);
+    let shown = texts(&frame_shapes(&ctx, &mut a, vec![], SIZE));
+    assert!(shown.iter().any(|t| t == "Send email"), "the card's action: {shown:?}");
+    assert!(shown.iter().any(|t| t == "Open in People"), "the contact's People action: {shown:?}");
+    assert!(shown.iter().any(|t| t == "Open business card"), "the business card action: {shown:?}");
+    assert!(shown.iter().any(|t| t == "Copy address"), "the menu's action: {shown:?}");
+    assert!(shown.iter().any(|t| t == "Show more"), "the arrow's words: {shown:?}");
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
+fn the_arrow_unfolds_the_contact_card() {
+    let (mut a, dir, sender, _) = opened_for_card("contact-card-unfold");
+    let ctx = egui::Context::default();
+    let at = settled_text_at(&ctx, &mut a, &sender, SIZE).expect("the sender");
+    right_click(&ctx, &mut a, at);
+    let more = settled_text_at(&ctx, &mut a, "Show more", SIZE).expect("the card's arrow");
+    click_at(&ctx, &mut a, more, 1, SIZE);
+    let shown = texts(&frame_shapes(&ctx, &mut a, vec![], SIZE));
+    assert!(shown.iter().any(|t| t == "Organisation"), "the work section: {shown:?}");
+    assert!(shown.iter().any(|t| t == "Company: Studio Lantern"), "the company: {shown:?}");
+    assert!(shown.iter().any(|t| t == "Show less"), "the arrow turned: {shown:?}");
+    // It folds back.
+    let less = settled_text_at(&ctx, &mut a, "Show less", SIZE).expect("the arrow again");
+    click_at(&ctx, &mut a, less, 1, SIZE);
+    let shown = texts(&frame_shapes(&ctx, &mut a, vec![], SIZE));
+    assert!(!shown.iter().any(|t| t == "Organisation"), "folded again: {shown:?}");
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
+fn open_in_people_shows_the_persons_card() {
+    let (mut a, dir, _, uid) = opened_for_card("contact-card-people");
+    a.act(crate::Action::OpenPerson { uid: uid.clone(), cards: false });
+    assert_eq!(a.session.module, quatrelle_engine::Module::People);
+    assert_eq!(a.ui.person.as_deref(), Some(uid.as_str()));
+    assert_eq!(a.ui.people_view, crate::panes::people::PeopleView::People);
+    a.act(crate::Action::OpenPerson { uid: uid.clone(), cards: true });
+    assert_eq!(a.ui.people_view, crate::panes::people::PeopleView::Cards);
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
+fn a_click_shows_the_contact_card() {
+    let (mut a, dir, sender, _) = opened_for_card("contact-card-click");
+    let ctx = egui::Context::default();
+    let at = settled_text_at(&ctx, &mut a, &sender, SIZE).expect("the sender");
+    click_at(&ctx, &mut a, at, 1, SIZE);
+    let shown = texts(&frame_shapes(&ctx, &mut a, vec![], SIZE));
+    assert!(shown.iter().any(|t| t == "Send email"), "the card: {shown:?}");
+    let _ = std::fs::remove_dir_all(dir);
+}

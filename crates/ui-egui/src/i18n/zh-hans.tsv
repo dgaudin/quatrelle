@@ -2544,3 +2544,7 @@ presence	Offline	离线
 	the account's main calendar stays in the list	帐户的主日历保留在列表中
 	one opened by its owner's address or subscribed to by its link goes by its own Remove	通过所有者地址打开或通过其链接订阅的日历，用其自己的“删除”移除
 	Outlook keeps this calendar group itself; calendars aren't moved into it here	此日历组由 Outlook 自行管理；不能在这里将日历移入其中
+	Show less	收起
+	Organisation	组织
+	Open in People	在“联系人”中打开
+	Open business card	打开名片

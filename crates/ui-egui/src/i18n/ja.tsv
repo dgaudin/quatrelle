@@ -2541,3 +2541,7 @@ presence	Offline	オフライン
 	the account's main calendar stays in the list	アカウントのメイン予定表は一覧に残ります
 	one opened by its owner's address or subscribed to by its link goes by its own Remove	所有者のアドレスで開いたもの、またはリンクで購読したものは、それぞれの [削除] で消えます
 	Outlook keeps this calendar group itself; calendars aren't moved into it here	この予定表グループは Outlook が自分で管理しています。ここから予定表を移すことはできません
+	Show less	表示を減らす
+	Organisation	組織
+	Open in People	連絡先で開く
+	Open business card	名刺を開く
