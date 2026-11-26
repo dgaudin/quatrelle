@@ -259,9 +259,12 @@ fn a_group_is_made_renamed_moved_and_deleted() {
     crate::ews_pim::move_calendar_to_group(&c, "shared:ana@contoso.example", "Ana Exemple", "Salles Studio").unwrap();
     assert_eq!(ana(&c).as_deref(), Some("Salles Studio"));
 
+    // Not while it holds a calendar: moved out first, then the group goes.
+    assert!(crate::ews_pim::delete_calendar_group(&c, "Salles Studio").is_err(), "a group holding a calendar stays");
+    crate::ews_pim::move_calendar_to_group(&c, "shared:ana@contoso.example", "Ana Exemple", "Équipe").unwrap();
     crate::ews_pim::delete_calendar_group(&c, "Salles Studio").unwrap();
     assert_eq!(names(&c), ["Équipe"]);
-    assert_eq!(ana(&c), None, "the group's shared calendar left the list");
+    assert_eq!(ana(&c).as_deref(), Some("Équipe"), "the calendar moved out stays");
     let kept = server.data.lock().unwrap();
     assert!(kept.wlinks.contains(&favorites), "another section's shortcut is untouched, byte for byte");
 }
@@ -493,10 +496,12 @@ fn a_group_whose_calendars_all_fail_to_resolve_is_kept() {
     assert!(shortcuts.links.is_empty(), "no address resolved");
 }
 
-/// A group Outlook made (its header has Outlook's save stamp, not ours) is protected: its
-/// rename and move are refused, and it can only be deleted while it holds no calendar.
+/// A group Outlook made (its header has Outlook's save stamp, not ours: Outlook writes its own
+/// each time it saves a shortcut, so a group made here becomes "Outlook's" as soon as Outlook
+/// touches it) is renamed and moved as any group read whole, as Outlook's own pane does; no group
+/// is deleted while it holds calendars, an empty one may go.
 #[test]
-fn an_outlook_group_is_protected() {
+fn an_outlook_group_is_renamed_and_moved_but_deleted_only_empty() {
     let mut d = Data::default();
     d.folder("Inbox", None, Some("inbox"), "IPF.Note");
     d.folder("Calendar", None, Some("calendar"), "IPF.Appointment");
@@ -533,9 +538,13 @@ fn an_outlook_group_is_protected() {
     ];
     let server = serve(d);
     let c = crate::ews::Client::connect(&server.url, &format!("{DOMAIN}\\{USER}"), PASSWORD, "riley@contoso.example").unwrap();
-    assert!(crate::ews_pim::rename_calendar_group(&c, "Équipe", "Équipe 2").is_err(), "Outlook's group isn't renamed");
-    assert!(crate::ews_pim::delete_calendar_group(&c, "Équipe").is_err(), "a group that holds calendars isn't deleted");
-    assert!(crate::ews_pim::move_calendar_group(&c, "Équipe", true).is_err(), "Outlook's group isn't moved");
+    crate::ews_pim::rename_calendar_group(&c, "Équipe", "Équipe 2").unwrap();
+    let groups = |c: &crate::ews::Client| crate::ews_pim::calendar_links(c).unwrap().groups.iter().map(|g| g.name.clone()).collect::<Vec<_>>();
+    assert_eq!(groups(&c), ["Équipe 2", "Autres calendriers"], "Outlook's group renamed");
+    assert!(crate::ews_pim::calendar_links(&c).unwrap().links.iter().all(|l| l.group == "Équipe 2"), "its calendars with it");
+    crate::ews_pim::move_calendar_group(&c, "Autres calendriers", true).unwrap();
+    assert_eq!(groups(&c), ["Autres calendriers", "Équipe 2"], "Outlook's group moved");
+    assert!(crate::ews_pim::delete_calendar_group(&c, "Équipe 2").is_err(), "a group that holds calendars isn't deleted");
     crate::ews_pim::delete_calendar_group(&c, "Autres calendriers").unwrap();
     assert!(!crate::ews_pim::calendar_links(&c).unwrap().groups.iter().any(|g| g.name == "Autres calendriers"), "an empty group may go");
 }
@@ -590,9 +599,9 @@ fn a_failed_common_views_probe_is_not_remembered_as_none() {
     assert_eq!(shortcuts.groups.len(), 1, "the next probe found the group: {:?}", shortcuts.groups);
 }
 
-/// Deleting a group one of whose calendars can't be deleted says what was already deleted.
+/// Deleting a group that holds calendars deletes nothing: neither its calendars nor its header.
 #[test]
-fn deleting_a_group_says_what_was_already_deleted() {
+fn deleting_a_group_that_holds_calendars_deletes_nothing() {
     let mut d = Data::default();
     d.folder("Inbox", None, Some("inbox"), "IPF.Note");
     d.folder("Calendar", None, Some("calendar"), "IPF.Appointment");
@@ -629,13 +638,11 @@ fn deleting_a_group_says_what_was_already_deleted() {
     {
         let mut data = server.data.lock().unwrap();
         data.wlinks = vec![header, ana, tom];
-        data.delete_busy.push("Wtom".into());
     }
     let e = crate::ews_pim::delete_calendar_group(&c, "Salles").unwrap_err();
-    assert!(e.to_string().contains("ana"), "the already deleted calendar is named: {e}");
+    assert!(e.to_string().contains("holds calendars"), "{e}");
     let kept = server.data.lock().unwrap();
-    assert!(!kept.wlinks.iter().any(|w| w.contains("Id=\"Wana\"")), "the first calendar was deleted");
-    assert!(kept.wlinks.iter().any(|w| w.contains("Id=\"Wtom\"")), "the one that failed stays");
+    assert_eq!(kept.wlinks.len(), 3, "nothing deleted");
 }
 
 /// Two headers may carry the same name (Outlook allows it): renaming one only changes that one.

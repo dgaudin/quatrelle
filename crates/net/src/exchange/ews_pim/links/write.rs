@@ -45,8 +45,7 @@ fn read_pages(c: &Client) -> Result<Vec<El>> {
             "<m:FindItem Traversal=\"Associated\"><m:ItemShape><t:BaseShape>IdOnly</t:BaseShape>\
              <t:AdditionalProperties>{props}</t:AdditionalProperties></m:ItemShape>\
              <m:IndexedPageItemView MaxEntriesReturned=\"{PAGE}\" Offset=\"{offset}\" BasePoint=\"Beginning\"/>\
-             <m:Restriction><t:IsEqualTo><t:FieldURIOrConstant><t:FieldURI FieldURI=\"message:MessageClass\"/></t:FieldURIOrConstant>\
-             <t:FieldURIOrConstant><t:Constant Value=\"{WLINK_CLASS}\"/></t:FieldURIOrConstant></t:IsEqualTo></m:Restriction>\
+             {WLINK_RESTRICTION}\
              <m:ParentFolderIds><t:FolderId Id=\"{}\"/></m:ParentFolderIds></m:FindItem>",
             esc(&views)
         ))?;
@@ -293,7 +292,7 @@ fn set_ext(tag: &str, kind: &str, value: &str) -> String {
 fn update(c: &Client, s: &Shortcut, updates: &[String]) -> Result<()> {
     let updates = updates.concat();
     c.call_one(&format!(
-        "<m:UpdateItem ConflictResolution=\"AutoResolve\"><m:ItemChanges><t:ItemChange>\
+        "<m:UpdateItem MessageDisposition=\"SaveOnly\" ConflictResolution=\"AutoResolve\"><m:ItemChanges><t:ItemChange>\
          <t:ItemId Id=\"{}\" ChangeKey=\"{}\"/><t:Updates>{updates}</t:Updates>\
          </t:ItemChange></m:ItemChanges></m:UpdateItem>",
         esc(&s.id),
@@ -302,11 +301,11 @@ fn update(c: &Client, s: &Shortcut, updates: &[String]) -> Result<()> {
     .map(drop)
 }
 
-/// A shortcut deleted with `SoftDelete` (into Recoverable Items, where Exchange keeps a deleted
-/// associated item), as Outlook deletes one.
+/// A shortcut deleted for good (`HardDelete`): Exchange refuses any other way for an associated
+/// item ("The DisposalType must be set to HardDelete when deleting associated items").
 fn delete(c: &Client, s: &Shortcut) -> Result<()> {
     c.call_one(&format!(
-        "<m:DeleteItem DeleteType=\"SoftDelete\"><m:ItemIds><t:ItemId Id=\"{}\" ChangeKey=\"{}\"/></m:ItemIds></m:DeleteItem>",
+        "<m:DeleteItem DeleteType=\"HardDelete\"><m:ItemIds><t:ItemId Id=\"{}\" ChangeKey=\"{}\"/></m:ItemIds></m:DeleteItem>",
         esc(&s.id),
         esc(&s.change_key)
     ))
@@ -363,11 +362,6 @@ pub(crate) fn create_calendar_group(c: &Client, name: &str) -> Result<()> {
     Ok(())
 }
 
-/// Whether Quatrelle made the header: its save stamp is the one its own id gives.
-fn ours(header: &Shortcut) -> bool {
-    header.save_stamp == Some(i64::from(crate::ews::group_stamp(&header.header_id)))
-}
-
 /// Rename the group `group` to `name`, its entries with it.
 pub(crate) fn rename_calendar_group(c: &Client, group: &str, name: &str) -> Result<()> {
     let name = clean(name);
@@ -376,9 +370,8 @@ pub(crate) fn rename_calendar_group(c: &Client, group: &str, name: &str) -> Resu
     }
     let before = read_raw(c)?;
     let header = group_named(&before, group).cloned().ok_or_else(|| NetError::No("no calendar group with that name".into()))?;
-    if !ours(&header) {
-        return Err(NetError::No("Outlook's own calendar group can't be renamed here".into()));
-    }
+    // Any group read whole, Outlook's too, as its own pane renames one: a group made here becomes
+    // "Outlook's" as soon as Outlook saves its shortcut (its save stamp is per session).
     if header.name.eq_ignore_ascii_case(&name) {
         return Ok(());
     }
@@ -430,26 +423,18 @@ pub(crate) fn rename_calendar_group(c: &Client, group: &str, name: &str) -> Resu
     Ok(())
 }
 
-/// Delete the group `group`: its entries go with it (the account's own calendars stay, and come
-/// back under My Calendars; other people's leave the list).
+/// Delete the group `group`, once it holds no calendar (they're moved out first).
 pub(crate) fn delete_calendar_group(c: &Client, group: &str) -> Result<()> {
     let pages = read_pages(c)?;
     let before: Vec<Shortcut> = pages.iter().filter_map(shortcut_of).collect();
     let header = group_named(&before, group).cloned().ok_or_else(|| NetError::No("no calendar group with that name".into()))?;
     let members: Vec<Shortcut> = members_of(&before, &header).into_iter().cloned().collect();
-    if !ours(&header) && !members.is_empty() {
-        return Err(NetError::No("a calendar group Outlook made can't be deleted while it holds calendars".into()));
+    // No group goes while it holds calendars, whoever made it: those are moved out first.
+    if !members.is_empty() {
+        return Err(NetError::No("a calendar group can't be deleted while it holds calendars".into()));
     }
     if let Some(name) = unreadable_member(&pages, &header) {
         return Err(NetError::No(format!("the calendar group still holds {name}, which this can't read")));
-    }
-    let mut deleted: Vec<String> = Vec::new();
-    for m in &members {
-        match delete(c, m) {
-            Ok(()) => deleted.push(m.owner_said().to_string()),
-            Err(e) if deleted.is_empty() => return Err(e),
-            Err(e) => return Err(NetError::No(format!("{} was already deleted; {e}", deleted.join(", ")))),
-        }
     }
     delete(c, &header)?;
     if group_named(&read_raw(c)?, group).is_some() {
@@ -463,17 +448,14 @@ pub(crate) fn move_calendar_group(c: &Client, group: &str, up: bool) -> Result<(
     let before = read_raw(c)?;
     let list = headers(&before);
     let at = list.iter().position(|h| h.name.eq_ignore_ascii_case(group)).ok_or_else(|| NetError::No("no calendar group with that name".into()))?;
-    if !ours(list[at]) {
-        return Err(NetError::No("Outlook's own calendar group can't be moved here".into()));
-    }
     let there = if up {
         at.checked_sub(1).ok_or_else(|| NetError::No("it's the first calendar group already".into()))?
     } else {
         at.checked_add(1).filter(|n| *n < list.len()).ok_or_else(|| NetError::No("it's the last calendar group already".into()))?
     };
-    // Only our header is written, given an ordinal between the two groups it ends up between
-    // ([MS-OXOCFG] 2.2.9.7): Outlook's headers are never touched. It goes before `there` when
-    // moving up, after it when moving down.
+    // Only the moved header is written, given an ordinal between the two groups it ends up
+    // between ([MS-OXOCFG] 2.2.9.7): the other headers are never touched. It goes before `there`
+    // when moving up, after it when moving down.
     let (below, above) = if up { (at.checked_sub(2), Some(there)) } else { (Some(there), there.checked_add(1)) };
     let ordinal_of = |i: Option<usize>| i.and_then(|i| list.get(i)).map(|h| h.ordinal.as_slice());
     let (low, high) = (ordinal_of(below), ordinal_of(above));

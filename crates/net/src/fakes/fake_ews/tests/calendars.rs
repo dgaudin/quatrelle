@@ -13,6 +13,7 @@ mod group_stamps;
 mod groups;
 mod notes;
 mod occurrences;
+mod read_only_groups;
 mod refused_delete;
 mod removed;
 mod secondary;

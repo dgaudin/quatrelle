@@ -347,3 +347,22 @@ pub(super) fn kinds_search(restriction: &El) -> Option<KindsSearch> {
         .collect();
     Some(KindsSearch { starts, verbs })
 }
+
+/// Whether a restriction is one Exchange refuses as invalid (`ErrorInvalidRequest`): a
+/// comparison names its field first ([MS-OXWSSRCH] `IsEqualTo` and the others), not wrapped in a
+/// `FieldURIOrConstant`, and that field is one EWS has (a message's class is `item:ItemClass`;
+/// there is no `message:MessageClass`).
+pub(super) fn restriction_refused(restriction: &El) -> bool {
+    const COMPARISONS: [&str; 6] = ["IsEqualTo", "IsNotEqualTo", "IsGreaterThan", "IsGreaterThanOrEqualTo", "IsLessThan", "IsLessThanOrEqualTo"];
+    const PATHS: [&str; 3] = ["FieldURI", "ExtendedFieldURI", "IndexedFieldURI"];
+    let mut fields = Vec::new();
+    restriction.all("FieldURI", &mut fields);
+    if fields.iter().any(|f| f.attr("FieldURI") == Some("message:MessageClass")) {
+        return true;
+    }
+    COMPARISONS.iter().any(|name| {
+        let mut found = Vec::new();
+        restriction.all(name, &mut found);
+        found.iter().any(|c| c.kids.first().is_none_or(|first| !PATHS.contains(&first.name.as_str())))
+    })
+}

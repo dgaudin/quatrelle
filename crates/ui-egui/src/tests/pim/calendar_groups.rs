@@ -279,18 +279,21 @@ fn move_to_group_is_greyed_for_a_calendar_opened_by_address() {
     let _ = std::fs::remove_dir_all(dir);
 }
 
-/// Deleting a group puts its own calendars back under My Calendars, not out of the list.
+/// A group that holds calendars isn't deleted, even one made here: Delete group… is greyed with
+/// why, and the calendars stay where they are (they're moved out first).
 #[test]
-fn deleting_a_group_puts_its_own_calendars_back_under_my_calendars() {
+fn a_group_holding_calendars_is_not_deleted() {
     let (mut a, dir, ctx) = with_ews_groups("calendar-groups-delete-own");
     let account = a.session.accounts[0].config.id.clone();
     a.session.pim_mut(&account).own_calendar_groups.push("Salles".into());
     right_click(&ctx, &mut a, "Salles");
+    point_at(&ctx, &mut a, "Delete group…");
+    let shown = texts(&frame_shapes(&ctx, &mut a, vec![], SIZE));
+    assert!(shown.iter().any(|t| t == "A calendar group that still holds calendars can't be deleted here"), "{shown:?}");
     click_text(&ctx, &mut a, "Delete group…");
-    click_text(&ctx, &mut a, "Delete");
     assert!(
-        a.session.pim.values().any(|p| p.calendars.iter().any(|c| c.name == "Salle Lyon" && c.group.is_empty())),
-        "Salle Lyon is back under My Calendars"
+        a.session.pim.values().any(|p| p.calendars.iter().any(|c| c.name == "Salle Lyon" && c.group == "Salles")),
+        "Salle Lyon stays in its group"
     );
     let _ = std::fs::remove_dir_all(dir);
 }
@@ -315,21 +318,22 @@ fn a_server_without_calendar_groups_says_so() {
     let _ = std::fs::remove_dir_all(dir);
 }
 
-/// On Exchange, a group Outlook made cannot be renamed, moved, or deleted while it holds
-/// calendars: the menu says so.
+/// On Exchange, a group Outlook made is renamed and moved from its menu as any group (a group
+/// made here becomes Outlook's as soon as Outlook saves it); it is deleted only once it holds no
+/// calendar: that entry alone says why it's greyed.
 #[test]
-fn an_outlook_group_cannot_be_renamed_or_deleted_on_exchange() {
+fn an_outlook_group_is_renamed_and_moved_and_deleted_once_empty_on_exchange() {
     let (mut a, dir, ctx) = with_ews_groups("calendar-groups-outlook-menu");
     right_click(&ctx, &mut a, "Équipe");
     point_at(&ctx, &mut a, "Rename group…");
     let shown = texts(&frame_shapes(&ctx, &mut a, vec![], SIZE));
-    assert!(shown.iter().any(|t| t == "Outlook's own calendar group can't be changed here"), "{shown:?}");
+    assert!(!shown.iter().any(|t| t == "Outlook's own calendar group can't be changed here"), "renamed: {shown:?}");
     point_at(&ctx, &mut a, "Delete group…");
     let shown = texts(&frame_shapes(&ctx, &mut a, vec![], SIZE));
     assert!(shown.iter().any(|t| t == "A calendar group that still holds calendars can't be deleted here"), "{shown:?}");
     point_at(&ctx, &mut a, "Move down");
     let shown = texts(&frame_shapes(&ctx, &mut a, vec![], SIZE));
-    assert!(shown.iter().any(|t| t == "Outlook's own calendar group can't be changed here"), "{shown:?}");
+    assert!(!shown.iter().any(|t| t == "Outlook's own calendar group can't be changed here"), "moved: {shown:?}");
     let _ = std::fs::remove_dir_all(dir);
 }
 

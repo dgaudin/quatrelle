@@ -2539,3 +2539,4 @@ presence	Offline	غير متصل
 	this account's server doesn't allow it	خادم هذا الحساب لا يسمح بذلك
 	the account's main calendar stays in the list	يبقى التقويم الرئيسي للحساب في القائمة
 	one opened by its owner's address or subscribed to by its link goes by its own Remove	التقويم المفتوح بعنوان مالكه أو المشترك عبر رابطه يزول بزر الإزالة الخاص به
+	Outlook keeps this calendar group itself; calendars aren't moved into it here	يدير Outlook مجموعة التقويمات هذه بنفسه؛ لا تُنقل التقويمات إليها هنا

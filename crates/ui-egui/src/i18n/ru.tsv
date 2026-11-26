@@ -2544,3 +2544,4 @@ presence	Offline	Не в сети
 	this account's server doesn't allow it	Сервер этой учётной записи не разрешает это
 	the account's main calendar stays in the list	Основной календарь учётной записи остаётся в списке
 	one opened by its owner's address or subscribed to by its link goes by its own Remove	Открытый по адресу владельца или подписанный по ссылке убирается своим Удалить
+	Outlook keeps this calendar group itself; calendars aren't moved into it here	Outlook сам ведёт эту группу календарей; здесь в неё календари не перемещаются

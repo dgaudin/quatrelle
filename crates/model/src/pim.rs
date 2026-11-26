@@ -383,10 +383,13 @@ pub struct Pim {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub calendar_groups: Vec<String>,
     /// The groups Quatrelle wrote (their header carries this session's save stamp,
-    /// [MS-OXOCFG] 2.2.9.4): only these may be renamed, moved, or deleted when not empty; a
-    /// group Outlook or another client made is protected.
+    /// [MS-OXOCFG] 2.2.9.4), until Outlook saves them again.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub own_calendar_groups: Vec<String>,
+    /// The groups Outlook keeps with shortcut types [MS-OXOCFG] doesn't document (a "My Team"
+    /// group): listed, never renamed, moved or deleted here.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub read_only_calendar_groups: Vec<String>,
     /// The server's own name for My Calendars, the group the account's main calendar is in
     /// (empty: the server doesn't say); moving a calendar back there names it.
     #[serde(default, skip_serializing_if = "String::is_empty")]
@@ -514,6 +517,9 @@ pub struct DavSync {
     /// The groups whose Exchange header carries this session's save stamp; `None`: not read.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub own_calendar_groups: Option<Vec<String>>,
+    /// The groups kept with undocumented shortcut types, never written; `None`: not read.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub read_only_calendar_groups: Option<Vec<String>>,
     /// The server's own name for My Calendars, read with the shortcuts; `None`: not read.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub my_calendar_group: Option<String>,

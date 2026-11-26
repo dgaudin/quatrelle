@@ -179,10 +179,13 @@ impl Session {
         if let Some(own) = &sync.own_calendar_groups {
             p.own_calendar_groups = own.clone();
         }
-        if let Some(groups) = &sync.calendar_groups {
-            p.calendar_groups = groups.clone();
+        if let Some(fixed) = &sync.read_only_calendar_groups {
+            p.read_only_calendar_groups = fixed.clone();
         }
         self.note_new_calendars();
+        if let Some(groups) = &sync.calendar_groups {
+            self.take_calendar_groups(account, groups);
+        }
         if refiled > 0 {
             log::info!("{account}: {refiled} appointments not yet sent moved to the main calendar, theirs gone from the server");
             self.notice("Appointments not yet sent went to the main calendar: the calendar they were in was deleted elsewhere", false);

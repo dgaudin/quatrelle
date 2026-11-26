@@ -32,6 +32,9 @@ pub(crate) struct CalendarLink {
 pub(crate) struct CalendarGroup {
     pub name: String,
     pub ours: bool,
+    /// Kept with a shortcut type [MS-OXOCFG] doesn't document ([`WLINK_RO_HEADER`]): never
+    /// written here.
+    pub read_only: bool,
 }
 
 /// What the Common Views folder says of the Calendar pane: its groups in Outlook's order, and the
@@ -44,10 +47,21 @@ pub(crate) struct Shortcuts {
 
 /// The shortcut's message class ([MS-OXOCFG] 2.2.9.1).
 const WLINK_CLASS: &str = "IPM.Microsoft.WunderBar.Link";
+/// The restriction that finds the shortcuts by their class ([`WLINK_CLASS`]): EWS names a
+/// message's class `item:ItemClass` (it has no `message:MessageClass`), and a comparison gives
+/// its field first, bare, then the constant ([MS-OXWSSRCH] `IsEqualTo`). Exchange refuses
+/// anything else as an invalid request.
+const WLINK_RESTRICTION: &str = "<m:Restriction><t:IsEqualTo><t:FieldURI FieldURI=\"item:ItemClass\"/>\
+     <t:FieldURIOrConstant><t:Constant Value=\"IPM.Microsoft.WunderBar.Link\"/></t:FieldURIOrConstant></t:IsEqualTo></m:Restriction>";
 /// The Calendar section of the pane ([MS-OXOCFG] 2.2.9.14).
 const CALENDAR_SECTION: i64 = 3;
 /// The shortcut points at a group header ([MS-OXOCFG] 2.2.9.5).
 const WLINK_HEADER: i64 = 4;
+/// Types [MS-OXOCFG] 2.2.9.5 doesn't list, seen in a real mailbox's Calendar section: one item of
+/// type 5 and a dozen of type 6, where Outlook shows a "My Team"-like group. Read as a group
+/// header and its people's calendars (by their address book entry, as type 2), never written.
+const WLINK_RO_HEADER: i64 = 5;
+const WLINK_RO_MEMBER: i64 = 6;
 /// The shortcut points at another user's folder ([MS-OXOCFG] 2.2.9.5).
 const WLINK_SHARED: i64 = 2;
 /// The shortcut points at a folder of the account's own ([MS-OXOCFG] 2.2.9.5).
@@ -176,8 +190,7 @@ fn holds_shortcuts(c: &Client, folder: &str) -> Result<bool> {
     let m = c.call_one(&format!(
         "<m:FindItem Traversal=\"Associated\"><m:ItemShape><t:BaseShape>IdOnly</t:BaseShape></m:ItemShape>\
          <m:IndexedPageItemView MaxEntriesReturned=\"1\" Offset=\"0\" BasePoint=\"Beginning\"/>\
-         <m:Restriction><t:IsEqualTo><t:FieldURIOrConstant><t:FieldURI FieldURI=\"message:MessageClass\"/></t:FieldURIOrConstant>\
-         <t:FieldURIOrConstant><t:Constant Value=\"{WLINK_CLASS}\"/></t:FieldURIOrConstant></t:IsEqualTo></m:Restriction>\
+         {WLINK_RESTRICTION}\
          <m:ParentFolderIds><t:FolderId Id=\"{}\"/></m:ParentFolderIds></m:FindItem>",
         esc(folder)
     ))?;
@@ -240,8 +253,7 @@ fn read_shortcuts(c: &Client, views: &str) -> Result<Shortcuts> {
             "<m:FindItem Traversal=\"Associated\"><m:ItemShape><t:BaseShape>IdOnly</t:BaseShape>\
              <t:AdditionalProperties>{props}</t:AdditionalProperties></m:ItemShape>\
              <m:IndexedPageItemView MaxEntriesReturned=\"{PAGE}\" Offset=\"{offset}\" BasePoint=\"Beginning\"/>\
-             <m:Restriction><t:IsEqualTo><t:FieldURIOrConstant><t:FieldURI FieldURI=\"message:MessageClass\"/></t:FieldURIOrConstant>\
-             <t:FieldURIOrConstant><t:Constant Value=\"{WLINK_CLASS}\"/></t:FieldURIOrConstant></t:IsEqualTo></m:Restriction>\
+             {WLINK_RESTRICTION}\
              <m:ParentFolderIds><t:FolderId Id=\"{}\"/></m:ParentFolderIds></m:FindItem>",
             esc(views)
         ))?;
@@ -279,7 +291,7 @@ fn shape(c: &Client, items: &[El], pages: usize) -> Shortcuts {
     let mut headers: HashMap<String, String> = HashMap::new();
     for w in &wlinks {
         if w.section == Some(CALENDAR_SECTION)
-            && w.kind == Some(WLINK_HEADER)
+            && matches!(w.kind, Some(WLINK_HEADER | WLINK_RO_HEADER))
             && let (Some(id), false) = (&w.header_id, w.name.is_empty())
         {
             headers.entry(id.clone()).or_insert_with(|| w.name.clone());
@@ -290,26 +302,45 @@ fn shape(c: &Client, items: &[El], pages: usize) -> Shortcuts {
     // The groups, in Outlook's order: the headers by their ordinals, then a group a member
     // names without a header (it may hold only an entry that doesn't resolve).
     let group_of = |w: &Wlink| w.group_id.as_ref().and_then(|id| headers.get(id)).cloned().unwrap_or_else(|| w.group_name.clone());
-    let mut group_headers: Vec<&Wlink> =
-        wlinks.iter().filter(|w| w.section == Some(CALENDAR_SECTION) && w.kind == Some(WLINK_HEADER) && !w.name.is_empty()).collect();
+    let mut group_headers: Vec<&Wlink> = wlinks
+        .iter()
+        .filter(|w| w.section == Some(CALENDAR_SECTION) && matches!(w.kind, Some(WLINK_HEADER | WLINK_RO_HEADER)) && !w.name.is_empty())
+        .collect();
     group_headers.sort_by(|a, b| a.ordinal.cmp(&b.ordinal));
     let mut groups: Vec<CalendarGroup> = Vec::new();
     for w in group_headers {
         let ours = w.ours;
+        let read_only = w.kind == Some(WLINK_RO_HEADER);
         if let Some(g) = groups.iter_mut().find(|g| g.name.eq_ignore_ascii_case(&w.name)) {
             g.ours |= ours;
+            g.read_only |= read_only;
         } else {
-            groups.push(CalendarGroup { name: w.name.clone(), ours });
+            groups.push(CalendarGroup { name: w.name.clone(), ours, read_only });
         }
     }
     for w in &wlinks {
-        if w.section != Some(CALENDAR_SECTION) || !matches!(w.kind, Some(WLINK_OWN | WLINK_SHARED)) {
+        if w.section != Some(CALENDAR_SECTION) || !matches!(w.kind, Some(WLINK_OWN | WLINK_SHARED | WLINK_RO_MEMBER)) {
             continue;
         }
         let group = group_of(w);
         if !group.is_empty() && !groups.iter().any(|g| g.name.eq_ignore_ascii_case(&group)) {
-            groups.push(CalendarGroup { name: group, ours: false });
+            groups.push(CalendarGroup { name: group, ours: false, read_only: w.kind == Some(WLINK_RO_MEMBER) });
         }
+    }
+    // What the undocumented types carry, said once a read: what a "where is My Team?" needs.
+    let odd: Vec<&Wlink> =
+        wlinks.iter().filter(|w| w.section == Some(CALENDAR_SECTION) && matches!(w.kind, Some(WLINK_RO_HEADER | WLINK_RO_MEMBER))).collect();
+    if !odd.is_empty() {
+        let heads: Vec<&str> = odd.iter().filter(|w| w.kind == Some(WLINK_RO_HEADER)).map(|w| w.name.as_str()).collect();
+        let members: Vec<&&Wlink> = odd.iter().filter(|w| w.kind == Some(WLINK_RO_MEMBER)).collect();
+        log::info!(
+            "navigation shortcuts: types 5/6: header(s) {heads:?} ({} with an id), {} member(s): {} with an address book entry, {} pointing at a header, {} naming a group",
+            odd.iter().filter(|w| w.kind == Some(WLINK_RO_HEADER) && w.header_id.is_some()).count(),
+            members.len(),
+            members.iter().filter(|w| w.address_book_eid.is_some()).count(),
+            members.iter().filter(|w| w.group_id.as_ref().is_some_and(|id| headers.contains_key(id))).count(),
+            members.iter().filter(|w| !w.group_name.is_empty()).count(),
+        );
     }
     if groups.len() > MAX_GROUPS {
         groups.truncate(MAX_GROUPS);
@@ -323,7 +354,7 @@ fn shape(c: &Client, items: &[El], pages: usize) -> Shortcuts {
         }
         let own = match w.kind {
             Some(WLINK_OWN) => true,
-            Some(WLINK_SHARED) => false,
+            Some(WLINK_SHARED | WLINK_RO_MEMBER) => false,
             _ => continue,
         };
         let email = if own {

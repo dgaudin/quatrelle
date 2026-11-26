@@ -10,6 +10,10 @@ use serde_json::json;
 
 use super::*;
 
+/// How long, in seconds, a calendar group moved here keeps its place against reads of the server
+/// that still show the order before the move.
+const GROUP_ORDER_WAIT: i64 = 90;
+
 /// The colours a calendar can be given on this computer, the palette's.
 pub const PALETTE_COLORS: u8 = 16;
 /// A calendar colour from this one on is the palette's (`PALETTE_COLOR + i`, `i` below
@@ -366,30 +370,27 @@ impl Session {
         }
     }
 
-    /// Whether `group` may be renamed here: only a header this session wrote (or, on Microsoft
-    /// 365, a group the account keeps through Graph). Outlook's own headers have its save stamp,
-    /// not ours ([MS-OXOCFG] 2.2.9.4).
+    /// Whether `group` may be renamed here: any group the server keeps, Outlook's too, as its own
+    /// pane renames one (a group made here becomes Outlook's as soon as Outlook saves it: the
+    /// save stamp is per session, [MS-OXOCFG] 2.2.9.4). Exchange refuses a header it can't read
+    /// whole.
     pub fn calendar_group_rename(&self, account: &str, group: &str) -> Result<(), GroupRefusal> {
         match self.account(account).map(|a| (&a.config.ews, &a.config.graph)) {
-            Some((ews, _)) if ews.is_some() => {
-                if self.own_group(account, group) {
-                    Ok(())
-                } else {
-                    Err(GroupRefusal::Outlook)
-                }
-            }
+            Some(_) if self.read_only_group(account, group) => Err(GroupRefusal::Outlook),
+            Some((ews, _)) if ews.is_some() => Ok(()),
             Some((_, graph)) if graph.is_some() => Ok(()),
             _ => Err(GroupRefusal::Server),
         }
     }
 
-    /// Whether `group` may be deleted here: ours, or (the fallback when [MS-OXOCFG] can't tell
-    /// Outlook's headers from ours) a group that holds no calendar. Microsoft 365 refuses a
-    /// group that still holds calendars, as its own behaviour on a non-empty one isn't known.
+    /// Whether `group` may be deleted here: a group that holds no calendar, whoever made it
+    /// (its calendars are moved out first). Microsoft 365 refuses one that still holds calendars
+    /// too, as its own behaviour on a non-empty one isn't known.
     pub fn calendar_group_delete(&self, account: &str, group: &str) -> Result<(), GroupRefusal> {
         match self.account(account).map(|a| (&a.config.ews, &a.config.graph)) {
+            Some(_) if self.read_only_group(account, group) => Err(GroupRefusal::Outlook),
             Some((ews, _)) if ews.is_some() => {
-                if self.own_group(account, group) || !self.group_has_calendars(account, group) {
+                if !self.group_has_calendars(account, group) {
                     Ok(())
                 } else {
                     Err(GroupRefusal::NotEmpty)
@@ -406,16 +407,12 @@ impl Session {
         }
     }
 
-    /// Whether the server orders the group (Microsoft 365 doesn't say one), and it is ours.
+    /// Whether the server orders the group (Microsoft 365 doesn't say one): any group on
+    /// Exchange, only the moved header's place being written.
     pub fn calendar_group_order(&self, account: &str, group: &str) -> Result<(), GroupRefusal> {
         match self.account(account).map(|a| (&a.config.ews, &a.config.graph)) {
-            Some((ews, _)) if ews.is_some() => {
-                if self.own_group(account, group) {
-                    Ok(())
-                } else {
-                    Err(GroupRefusal::Outlook)
-                }
-            }
+            Some(_) if self.read_only_group(account, group) => Err(GroupRefusal::Outlook),
+            Some((ews, _)) if ews.is_some() => Ok(()),
             Some((_, graph)) if graph.is_some() => Err(GroupRefusal::Order),
             _ => Err(GroupRefusal::Server),
         }
@@ -427,9 +424,29 @@ impl Session {
         if self.account(account).is_some_and(|a| a.config.ews.is_some()) { Ok(()) } else { Err(GroupRefusal::Move) }
     }
 
-    /// Whether `group` is a header Quatrelle wrote.
-    fn own_group(&self, account: &str, group: &str) -> bool {
-        self.pim.get(account).is_some_and(|p| p.own_calendar_groups.iter().any(|g| g.eq_ignore_ascii_case(group)))
+    /// The server's calendar groups as a read gives them: taken, unless a move made here is still
+    /// on its way (the same groups, still in the order before it, within [`GROUP_ORDER_WAIT`]);
+    /// the read that shows the move, or one past the wait (the move may have failed), ends it.
+    pub(crate) fn take_calendar_groups(&mut self, account: &str, groups: &[String]) {
+        if let Some((expected, at)) = self.group_order_waiting.get(account) {
+            let folded = |list: &[String]| {
+                let mut v: Vec<String> = list.iter().map(|g| g.to_lowercase()).collect();
+                v.sort();
+                v
+            };
+            let arrived = expected.len() == groups.len() && expected.iter().zip(groups).all(|(a, b)| a.eq_ignore_ascii_case(b));
+            if !arrived && folded(expected) == folded(groups) && self.clock.now.saturating_sub(*at) < GROUP_ORDER_WAIT {
+                return;
+            }
+            self.group_order_waiting.remove(account);
+        }
+        self.pim_mut(account).calendar_groups = groups.to_vec();
+    }
+
+    /// Whether `group` is one Outlook keeps with shortcut types [MS-OXOCFG] doesn't document (a
+    /// "My Team" group): listed, never written here.
+    fn read_only_group(&self, account: &str, group: &str) -> bool {
+        self.pim.get(account).is_some_and(|p| p.read_only_calendar_groups.iter().any(|g| g.eq_ignore_ascii_case(group)))
     }
 
     /// Whether a calendar of the account is listed in `group`.
@@ -535,7 +552,9 @@ impl Session {
                 .ok_or_else(|| CmdError::Disabled("it's the last calendar group already".into()))?
         };
         p.calendar_groups.swap(at, there);
+        let order = p.calendar_groups.clone();
         self.write_pim(account);
+        self.group_order_waiting.insert(account.to_string(), (order, self.clock.now));
         self.jobs.push(Job::Apply { account: account.to_string(), op: Op::MoveCalendarGroup { group: group.to_string(), up } });
         Ok(json!({"account": account, "group": group, "up": up}))
     }
@@ -561,6 +580,9 @@ impl Session {
             my
         } else {
             self.calendar_group_named(account, group)?;
+            if self.read_only_group(account, group) {
+                return Err(CmdError::Disabled("Outlook keeps this calendar group itself; calendars aren't moved into it here".into()));
+            }
             group.to_string()
         };
         if c.main {

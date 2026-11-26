@@ -376,6 +376,10 @@ pub struct Session {
     /// time: filled off the interface thread, bounded, re-read when a change touches the
     /// folder ([`Session::disk_folder_changed`]).
     pub(crate) disk_lists: std::sync::Arc<std::sync::Mutex<DiskScan>>,
+    /// Each account's calendar groups as a move made here left them, and when: a read of the
+    /// server still showing the order before the move is set aside until the move lands, or a
+    /// while has passed ([`Session::take_calendar_groups`]).
+    pub(crate) group_order_waiting: HashMap<String, (Vec<String>, i64)>,
     /// Counts the changes that can alter what the To-Do List and the reminders read (the
     /// content commands, the ops and events that touch mail): the interface rebuilds them only
     /// when it changed, not at every image or every status line.
@@ -623,6 +627,7 @@ impl Session {
                 stamp: 0,
                 started: false,
             })),
+            group_order_waiting: HashMap::new(),
             mail_stamp: 0,
             task_lists_memo: std::sync::Mutex::new(None),
             people_index: std::sync::Mutex::new(None),

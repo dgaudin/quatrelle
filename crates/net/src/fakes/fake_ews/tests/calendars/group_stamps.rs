@@ -39,6 +39,5 @@ fn a_group_made_here_stays_ours_on_a_new_connection() {
     assert_eq!(owned, [("Autres calendriers", false), ("Salles", true)], "{owned:?}");
     crate::ews_pim::rename_calendar_group(&second, "Salles", "Rooms").unwrap();
     crate::ews_pim::move_calendar_group(&second, "Rooms", true).unwrap();
-    assert!(crate::ews_pim::rename_calendar_group(&second, "Autres calendriers", "Mine").is_err(), "Outlook's group stays protected");
     crate::ews_pim::delete_calendar_group(&second, "Rooms").unwrap();
 }

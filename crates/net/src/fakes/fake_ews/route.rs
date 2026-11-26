@@ -59,6 +59,10 @@ impl Data {
                 }
             }
             "FindItem" if op.attr("Traversal") == Some("Associated") => {
+                if op.child("Restriction").is_some_and(super::fields::restriction_refused) {
+                    out.push(err("ErrorInvalidRequest"));
+                    return ("FindItemResponse".into(), out);
+                }
                 let folder = op.child("ParentFolderIds").and_then(|p| p.kids.first()).and_then(|f| self.folder_id(f)).unwrap_or_default();
                 let mut items: Vec<&String> = if folder == "COMMON-VIEWS" {
                     let hidden = &self.hidden_wlinks;
@@ -141,6 +145,10 @@ impl Data {
                 // A restriction the server knows: a message found by its `Message-ID`, or the
                 // read and flag state.
                 if let Some(restriction) = op.find("Restriction") {
+                    if super::fields::restriction_refused(restriction) {
+                        out.push(err("ErrorInvalidRequest"));
+                        return ("FindItemResponse".into(), out);
+                    }
                     let uri = restriction.find("FieldURI").and_then(|f| f.attr("FieldURI")).unwrap_or_default();
                     let value = restriction.find("Constant").and_then(|c| c.attr("Value")).unwrap_or_default();
                     if uri == "message:InternetMessageId" {
@@ -496,6 +504,12 @@ impl Data {
                     let id = ch.child("ItemId").and_then(|i| i.attr("Id")).unwrap_or_default().to_string();
                     // A navigation shortcut ([MS-OXOCFG] 2.2.9): its fields changed as asked.
                     if let Some(pos) = self.wlinks.iter().position(|w| wlink_id(w).as_deref() == Some(id.as_str())) {
+                        // A message's update names what becomes of it, as Exchange requires
+                        // ("MessageDisposition attribute is required").
+                        if op.attr("MessageDisposition").is_none() {
+                            out.push(err("ErrorMessageDispositionRequired"));
+                            continue;
+                        }
                         let mut e = parse(&self.wlinks[pos]);
                         let mut item = e.kids.remove(0);
                         let updates = ch.child("Updates").map(|u| u.kids.clone()).unwrap_or_default();
@@ -677,6 +691,13 @@ impl Data {
                         continue;
                     }
                     if let Some(pos) = self.wlinks.iter().position(|w| wlink_id(w).as_deref() == Some(id.as_str())) {
+                        // An associated item goes for good or not at all, as Exchange requires
+                        // ("The DisposalType must be set to HardDelete when deleting associated
+                        // items").
+                        if op.attr("DeleteType") != Some("HardDelete") {
+                            out.push(err("ErrorInvalidRequest"));
+                            continue;
+                        }
                         self.wlinks.remove(pos);
                         self.hidden_wlinks.retain(|h| h != &id);
                         out.push(ok(String::new()));
@@ -825,10 +846,10 @@ fn set_ext(item: &mut El, tag: &str, kind: &str, value: &str) {
 }
 
 /// The message class a `FindItem` restriction asks for, when it asks for one (`IsEqualTo` on
-/// `message:MessageClass`).
+/// `item:ItemClass`).
 fn class_wanted(op: &El) -> Option<String> {
     let eq = op.child("Restriction")?.child("IsEqualTo")?;
-    if eq.find("FieldURI")?.attr("FieldURI")? != "message:MessageClass" {
+    if eq.find("FieldURI")?.attr("FieldURI")? != "item:ItemClass" {
         return None;
     }
     Some(eq.find("Constant")?.attr("Value")?.to_string())

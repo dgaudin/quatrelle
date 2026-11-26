@@ -2544,3 +2544,4 @@ presence	Offline	Hors ligne
 	this account's server doesn't allow it	le serveur de ce compte ne l'autorise pas
 	the account's main calendar stays in the list	le calendrier principal du compte reste dans la liste
 	one opened by its owner's address or subscribed to by its link goes by its own Remove	celui ouvert par l'adresse de son propriétaire ou ajouté par son lien part par son propre Retirer
+	Outlook keeps this calendar group itself; calendars aren't moved into it here	Outlook tient ce groupe de calendriers lui-même ; on n'y déplace pas de calendrier ici
