@@ -228,6 +228,9 @@ pub struct UiState {
     /// The month the calendar's small month shows (`year * 12 + month - 1`; `None`: the day on
     /// screen's).
     pub(crate) mini_month: Option<i64>,
+    /// The To-Do bar's shares (the calendar's, People's) while its line between two parts is
+    /// dragged, before the preferences keep them.
+    pub(crate) todo_bar_drag: Option<[f32; 2]>,
     /// The hours were scrolled to the working day once.
     /// The day and week views have been scrolled to the working day once (each has its own scroll).
     pub(crate) cal_scrolled: [bool; 2],

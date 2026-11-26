@@ -179,3 +179,41 @@ fn a_panes_scroll_bars_keep_their_own_strip() {
     assert_eq!(scroll.bar_width, egui::style::ScrollStyle::solid().bar_width);
     assert_eq!(scroll.bar_outer_margin, outer, "the margin from the window's edge is kept");
 }
+
+/// The To-Do bar's parts, several ticked, each take a share of its height with a line between
+/// two: dragged down, the calendar grows, and its share is kept (`view.todoBarShares`).
+#[test]
+fn the_todo_bars_line_between_two_parts_is_dragged() {
+    let (mut a, dir) = app_big("todo-bar-drag", 10, 3);
+    let ctx = egui::Context::default();
+    let size = egui::vec2(1280.0, 800.0);
+    a.run("view.readingPane", json!({"value": "off"}));
+    a.run("view.todoBar", json!({"calendar": true, "people": false, "tasks": true}));
+    let mut shapes = Vec::new();
+    for _ in 0..5 {
+        shapes = frame_shapes(&ctx, &mut a, vec![], size);
+    }
+    // The Tasks part's heading, in the bar at the window's right.
+    let heading = shapes
+        .iter()
+        .filter_map(|s| match s {
+            egui::Shape::Text(t) if t.galley.job.text == "Tasks" => Some(t.galley.rect.translate(t.pos.to_vec2())),
+            _ => None,
+        })
+        .filter(|r| r.min.x > 900.0)
+        .max_by(|p, q| p.min.x.total_cmp(&q.min.x))
+        .expect("the Tasks part's heading");
+    assert!(heading.min.y > 200.0, "the calendar takes its share above it: {heading:?}");
+    let at = egui::pos2(heading.center().x, heading.min.y - 13.0);
+    let press = |pos, pressed| Event::PointerButton { pos, button: egui::PointerButton::Primary, pressed, modifiers: egui::Modifiers::NONE };
+    frame_shapes(&ctx, &mut a, vec![Event::PointerMoved(at)], size);
+    frame_shapes(&ctx, &mut a, vec![press(at, true)], size);
+    for step in 1..=10 {
+        frame_shapes(&ctx, &mut a, vec![Event::PointerMoved(at + egui::vec2(0.0, 10.0 * step as f32))], size);
+    }
+    frame_shapes(&ctx, &mut a, vec![press(at + egui::vec2(0.0, 100.0), false)], size);
+    frame_shapes(&ctx, &mut a, vec![], size);
+    let kept = a.session.prefs.todo_bar_shares.expect("the share kept once dragged");
+    assert!(kept[0] > 45, "the calendar grew: {kept:?}");
+    let _ = std::fs::remove_dir_all(dir);
+}

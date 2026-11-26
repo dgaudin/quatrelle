@@ -19,6 +19,7 @@ mod source;
 mod store_errors;
 mod synced;
 mod text_first;
+mod todo_bar;
 mod windows;
 
 #[test]

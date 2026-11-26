@@ -11,20 +11,115 @@ pub fn todo_bar(s: &Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Actio
     let t = st.tokens;
     let parts = s.prefs.todo_bar();
     crate::widgets::solid_scroll_bars(ui);
-    egui::ScrollArea::vertical().auto_shrink(false).id_salt("todo-bar").show(ui, |ui| {
-        if parts.calendar {
+    let shown: Vec<Part> = [(parts.calendar, Part::Calendar), (parts.people, Part::People), (parts.tasks, Part::Tasks)]
+        .into_iter()
+        .filter_map(|(on, p)| on.then_some(p))
+        .collect();
+    // One part: all the bar, as before.
+    if shown.len() < 2 {
+        egui::ScrollArea::vertical().auto_shrink(false).id_salt("todo-bar").show(ui, |ui| {
+            for p in &shown {
+                draw_part(s, st, ui, acts, *p);
+            }
+        });
+        return;
+    }
+    // Several: each in its own share of the height, scrolled by itself, a line between two
+    // that a drag moves (Outlook's bar is split so); the last takes the rest.
+    let total = ui.available_height().max(1.0);
+    let mut shares = st.todo_bar_drag.unwrap_or_else(|| {
+        let [c, p] = s.prefs.todo_bar_shares.unwrap_or(DEFAULT_SHARES);
+        [f32::from(c) / 100.0, f32::from(p) / 100.0]
+    });
+    let n = shown.len();
+    for (i, part) in shown.iter().enumerate() {
+        let last = i + 1 == n;
+        let h = if last {
+            ui.available_height()
+        } else {
+            (share_of(&shares, *part) * total).clamp(MIN_PART, (ui.available_height() - MIN_PART * (n - i - 1) as f32).max(MIN_PART))
+        };
+        ui.allocate_ui_with_layout(vec2(ui.available_width(), h), egui::Layout::top_down(egui::Align::Min), |ui| {
+            ui.set_min_height(h);
+            egui::ScrollArea::vertical().auto_shrink(false).max_height(h).id_salt(("todo-bar", i)).show(ui, |ui| {
+                draw_part(s, st, ui, acts, *part);
+            });
+        });
+        if last {
+            break;
+        }
+        // The line between this part and the next: dragged, this part grows or shrinks.
+        let (r, resp) = ui.allocate_exact_size(vec2(ui.available_width(), SPLIT), Sense::drag());
+        let resp = resp.on_hover_cursor(egui::CursorIcon::ResizeVertical);
+        let color = if resp.hovered() || resp.dragged() { t.accent } else { t.border };
+        ui.painter().line_segment([r.left_center(), r.right_center()], egui::Stroke::new(1.0, color));
+        if resp.dragged() {
+            let at = share_of(&shares, *part) + resp.drag_delta().y / total;
+            set_share(&mut shares, *part, at.clamp(0.05, 0.9));
+            st.todo_bar_drag = Some(shares);
+        }
+        if resp.drag_stopped() {
+            let pct = |v: f32| (v * 100.0).round().clamp(5.0, 90.0) as u8;
+            let (mut c, mut p) = (pct(shares[0]), pct(shares[1]));
+            // The two leave the last part some room.
+            while u16::from(c) + u16::from(p) > 95 {
+                if c >= p { c -= 1 } else { p -= 1 }
+            }
+            acts.push(Action::Run("view.todoBarShares", json!({"calendar": c, "people": p})));
+            st.todo_bar_drag = None;
+        }
+    }
+}
+
+/// A part of the To-Do bar.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Part {
+    Calendar,
+    People,
+    Tasks,
+}
+
+/// The shares the parts take until a drag sets them: the calendar 45 %, People 20 % (the
+/// tasks the rest).
+const DEFAULT_SHARES: [u8; 2] = [45, 20];
+/// A part's least height, and the line between two parts' (what a drag takes).
+const MIN_PART: f32 = 60.0;
+const SPLIT: f32 = 7.0;
+
+/// A part's share of the height (the tasks have none: they take the rest).
+fn share_of(shares: &[f32; 2], part: Part) -> f32 {
+    match part {
+        Part::Calendar => shares[0],
+        Part::People => shares[1],
+        Part::Tasks => 1.0 - shares[0] - shares[1],
+    }
+}
+
+fn set_share(shares: &mut [f32; 2], part: Part, to: f32) {
+    match part {
+        Part::Calendar => shares[0] = to,
+        Part::People => shares[1] = to,
+        Part::Tasks => {}
+    }
+}
+
+/// A part, under its heading.
+fn draw_part(s: &Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action>, part: Part) {
+    let t = st.tokens;
+    match part {
+        Part::Calendar => {
             todo_heading(ui, &t, "Calendar");
             calendar_part(s, st, ui, acts);
         }
-        if parts.people {
+        Part::People => {
             todo_heading(ui, &t, "People");
             people_part(s, &t, ui, acts);
         }
-        if parts.tasks {
+        Part::Tasks => {
             todo_heading(ui, &t, "Tasks");
             tasks_part(s, st, ui, acts);
         }
-    });
+    }
 }
 
 /// A part's small heading, with a line above it (but for the first).

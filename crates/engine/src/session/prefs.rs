@@ -157,6 +157,10 @@ pub struct Prefs {
     /// switching it back on restores them. None until set: the bool alone, as before.
     #[serde(default, rename = "todoBarParts", skip_serializing_if = "Option::is_none")]
     pub todo_bar_parts: Option<TodoBar>,
+    /// The To-Do bar's parts' shares of its height as dragged, in percent: the calendar's and
+    /// People's (the tasks take the rest). None until dragged.
+    #[serde(default, rename = "todoBarShares", skip_serializing_if = "Option::is_none")]
+    pub todo_bar_shares: Option<[u8; 2]>,
     /// Ask before deleting permanently.
     pub confirm_permanent_delete: bool,
     /// Desktop notifications for new mail in an Inbox.
@@ -404,6 +408,7 @@ impl Default for Prefs {
             list_layout: ListLayout::Auto,
             todo_bar: true,
             todo_bar_parts: None,
+            todo_bar_shares: None,
             confirm_permanent_delete: true,
             favorites: None,
             notify: true,

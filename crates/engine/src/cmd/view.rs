@@ -87,6 +87,22 @@ pub(super) fn commands() -> Vec<CommandSpec> {
             Ok(answer(bar, bar.any()))
         })
         .params(r#"{"on"?: bool (the old switch: on, the parts as they were remembered, else the calendar; off, none shown — the parts stay remembered), "calendar"?: bool, "people"?: bool, "tasks"?: bool (the parts shown, each remembered); none: switch the bar on (the calendar) or off}"#),
+        CommandSpec::new("view.todoBarShares", "To-Do bar parts' heights", "View › Layout", |s, v| {
+            // Each part keeps some room, and the last one (the tasks) some too.
+            let share = |key: &str| {
+                p::u64(v, key)
+                    .and_then(|n| u8::try_from(n).ok())
+                    .filter(|n| (5..=90).contains(n))
+                    .ok_or_else(|| CmdError::Params(format!("`{key}` is a share of the bar's height, 5 to 90 percent")))
+            };
+            let (calendar, people) = (share("calendar")?, share("people")?);
+            if u16::from(calendar) + u16::from(people) > 95 {
+                return Err(CmdError::Params("the two shares leave the last part no room".into()));
+            }
+            s.prefs.todo_bar_shares = Some([calendar, people]);
+            Ok(json!({"calendar": calendar, "people": people}))
+        })
+        .params(r#"{"calendar": number, "people": number (each part's share of the bar's height, 5 to 90 percent; the tasks take the rest, at least 5)}"#),
         CommandSpec::new("view.listLayout", "Message list layout", "View › Layout", |s, v| {
             let value = p::req_str(v, "value")?;
             s.prefs.list_layout =

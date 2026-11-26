@@ -303,6 +303,7 @@ impl MailApp {
                 find: reading::Finds::default(),
                 backstage: None,
                 mini_month: None,
+                todo_bar_drag: None,
                 cal_scrolled: [false; 2],
                 people_query: String::new(),
                 people_book: None,
