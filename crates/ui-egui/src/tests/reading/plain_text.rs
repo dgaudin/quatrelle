@@ -127,3 +127,79 @@ fn plain_text_is_in_more_actions_the_view_ribbon_and_options() {
     assert!(a.session.prefs.show_html);
     let _ = std::fs::remove_dir_all(dir);
 }
+
+/// Right-click in the message's text, as Outlook's menu: Copy the selection — greyed out, and
+/// copying nothing, when nothing is selected — and the whole message as it is written.
+#[test]
+fn right_click_in_the_message_copies_only_with_a_selection() {
+    let (mut a, dir) = app("reading-copy-menu");
+    let ctx = egui::Context::default();
+    ctx.enable_accesskit();
+    frame(&ctx, &mut a, vec![]);
+    let key = a.session.list.iter().find(|m| m.subject == "Storyboard review on Thursday").map(|m| m.key.clone()).unwrap();
+    a.run("list.open", json!({"key": key.to_id()}));
+    let body = "The animatic is in good shape.";
+    let mut at = None;
+    for _ in 0..30 {
+        let shapes = frame_shapes(&ctx, &mut a, vec![], SCREEN);
+        let found = shapes.iter().rev().find_map(|s| match s {
+            egui::Shape::Text(t) if t.galley.text().contains(body) => {
+                Some(t.pos + egui::vec2(t.galley.rect.width() * 0.5, t.galley.rect.height() - 3.0))
+            }
+            _ => None,
+        });
+        if found.is_some() {
+            at = found;
+            break;
+        }
+    }
+    let at = at.expect("the body is drawn");
+    let right_click = |a: &mut MailApp, at: egui::Pos2| {
+        let b = |pressed| Event::PointerButton { pos: at, button: egui::PointerButton::Secondary, pressed, modifiers: Modifiers::NONE };
+        tall(&ctx, a, vec![Event::PointerMoved(at)]);
+        tall(&ctx, a, vec![b(true)]);
+        tall(&ctx, a, vec![b(false)]);
+        tall(&ctx, a, vec![]);
+    };
+    // Click the menu's `label` (the last node of that name: the popup's), and what the release
+    // frame put on the clipboard.
+    let click_menu = |a: &mut MailApp, label: &str| -> Option<String> {
+        let all = nodes(&ctx, a);
+        let at = all.iter().filter(|(n, _)| n == label).filter_map(|(_, at)| *at).next_back();
+        let at = at.unwrap_or_else(|| panic!("no {label} to click: {:?}", all.iter().map(|(n, _)| n).collect::<Vec<_>>()));
+        let press = Event::PointerButton { pos: at, button: egui::PointerButton::Primary, pressed: true, modifiers: Modifiers::NONE };
+        let release = Event::PointerButton { pos: at, button: egui::PointerButton::Primary, pressed: false, modifiers: Modifiers::NONE };
+        tall(&ctx, a, vec![Event::PointerMoved(at)]);
+        tall(&ctx, a, vec![press]);
+        let input = RawInput { screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, SCREEN)), events: vec![release], ..Default::default() };
+        let out = ctx.run_ui(input, |ui| a.ui(ui));
+        out.platform_output.commands.into_iter().find_map(|c| match c {
+            egui::OutputCommand::CopyText(t) => Some(t),
+            _ => None,
+        })
+    };
+    // Nothing selected: the menu offers Copy, greyed out — clicking it copies nothing.
+    right_click(&mut a, at);
+    assert!(shows(&ctx, &mut a, "Copy"), "the menu opens with Copy");
+    // The Copy item has its icon: a small painted shape beside the label, as Outlook's menu.
+    let all = nodes(&ctx, &mut a);
+    let copy_at = all.iter().filter(|(n, _)| n == "Copy").filter_map(|(_, at)| *at).next_back().expect("Copy");
+    let shapes = frame_shapes(&ctx, &mut a, vec![], SCREEN);
+    let icon = shapes.iter().any(|s| match s {
+        egui::Shape::Text(_) => false,
+        sh => {
+            let r = sh.visual_bounding_rect();
+            let c = r.center();
+            r.width() <= 24.0 && r.height() <= 24.0 && c.x < copy_at.x && c.x > copy_at.x - 110.0 && (c.y - copy_at.y).abs() < 12.0
+        }
+    });
+    assert!(icon, "the Copy item has its icon beside the label");
+    assert!(click_menu(&mut a, "Copy").is_none(), "greyed out: nothing is copied");
+    // Something selected (Ctrl+A here): Copy is offered and copies it.
+    press(&ctx, &mut a, at);
+    tall(&ctx, &mut a, vec![Event::Key { key: Key::A, physical_key: None, pressed: true, repeat: false, modifiers: Modifiers::COMMAND }]);
+    right_click(&mut a, at);
+    let text = click_menu(&mut a, "Copy").expect("with a selection, Copy copies it");
+    assert!(text.contains(body), "the selection is copied: {text:?}");
+    let _ = std::fs::remove_dir_all(dir);
+}
