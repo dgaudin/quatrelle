@@ -267,6 +267,17 @@ fn insert_disk_read(g: &mut crate::session::DiskScan, k: (String, String), msgs:
 }
 
 impl Session {
+    /// Whether a folder is in the account's own mailbox, whose followed mail the To-Do List and
+    /// the reminders read, as Outlook's read the user's own store only: not a shared mailbox
+    /// opened here, a public folder or the online archive.
+    pub(crate) fn in_own_mailbox(&self, account: &str, folder: &str) -> bool {
+        if quatrelle_model::job::is_public_folder(folder) {
+            return false;
+        }
+        let Some(a) = self.account(account) else { return true };
+        a.folder_mailbox(folder).is_none() && !a.folders.iter().any(|f| f.path == folder && f.archive)
+    }
+
     /// Calls `keep(account, folder, message)` for each message of each folder of each known
     /// account: those in the cache first, then those of the folders read from the cache on
     /// disk into [`Session::disk_lists`] — a few a call, round-robin, so a message followed in
@@ -385,6 +396,15 @@ impl Session {
         // never rings isn't listed either.
         let roles: std::collections::HashMap<(&str, &str), quatrelle_model::FolderRole> =
             self.accounts.iter().flat_map(|a| a.folders.iter().map(move |f| ((a.config.id.as_str(), f.path.as_str()), f.role))).collect();
+        // A message under several of Gmail's labels (Inbox, Starred, All Mail…) is one row, as
+        // its reminder rings once (both by its Message-ID): the Inbox's, else an ordinary
+        // folder's, the archive's last.
+        let rank = |account: &str, folder: &str| match roles.get(&(account, folder)) {
+            Some(quatrelle_model::FolderRole::Inbox) => 0u8,
+            Some(quatrelle_model::FolderRole::Archive) => 2,
+            _ => 1,
+        };
+        let mut by_id: std::collections::HashMap<(String, String), (usize, u8)> = std::collections::HashMap::new();
         self.scan_mail(|account, folder, m| {
             // Flagged and not done, or (with the completed ones shown) a follow-up done.
             let done = m.flags.follow_up_complete();
@@ -394,11 +414,14 @@ impl Session {
             if matches!(roles.get(&(account, folder)), Some(quatrelle_model::FolderRole::Junk | quatrelle_model::FolderRole::Trash)) {
                 return;
             }
+            if !self.in_own_mailbox(account, folder) {
+                return;
+            }
             let subject = self.follow_up_title(m).unwrap_or(&m.subject).to_string();
             if !q.is_empty() && !has(&subject) && !has(&m.subject) {
                 return;
             }
-            list.push(TodoRef::Mail(FlaggedMail {
+            let row = TodoRef::Mail(FlaggedMail {
                 account: account.to_string(),
                 key: m.key.clone(),
                 subject,
@@ -407,7 +430,27 @@ impl Session {
                 reminder: self.follow_up_reminder(m),
                 categories: self.categories_of(m).into_iter().map(|c| c.name.clone()).collect(),
                 complete: done,
-            }));
+            });
+            let here = rank(account, folder);
+            if m.message_id.is_empty() {
+                list.push(row);
+                return;
+            }
+            match by_id.entry((account.to_string(), m.message_id.clone())) {
+                std::collections::hash_map::Entry::Occupied(mut seen) => {
+                    let (at, was) = *seen.get();
+                    if here < was
+                        && let Some(slot) = list.get_mut(at)
+                    {
+                        *slot = row;
+                        seen.insert((at, here));
+                    }
+                }
+                std::collections::hash_map::Entry::Vacant(v) => {
+                    v.insert((list.len(), here));
+                    list.push(row);
+                }
+            }
         });
         list.sort_by_cached_key(|r| (r.group(today), r.due().unwrap_or(i64::MAX), -r.importance(), r.subject().to_lowercase(), r.uid()));
         list

@@ -153,6 +153,9 @@ impl Session {
             if matches!(roles.get(&(account, folder)), Some(quatrelle_model::FolderRole::Junk | quatrelle_model::FolderRole::Trash)) {
                 return;
             }
+            if !self.in_own_mailbox(account, folder) {
+                return;
+            }
             let Some(at) = self.follow_up_reminder(m).filter(|t| *t > 0) else { return };
             let key = crate::session::mail_reminder_key(account, m, at);
             let due = match self.prefs.reminders.get(&key) {
