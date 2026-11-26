@@ -172,8 +172,10 @@ pub fn discover_with(email: &str, l: &mut Lookups<'_>) -> Option<Found> {
         return None;
     }
     // Asked once: they tell where the mail is (Microsoft 365?), and serve the lookups below.
-    let mx = (l.mx)(&domain);
-    let autodiscover = (l.srv)(&format!("_autodiscover._tcp.{domain}"));
+    // Only host names: a DNS answer that isn't one (or whose registrable part is empty) is
+    // dropped, as the services' are below.
+    let mx: Vec<String> = (l.mx)(&domain).into_iter().filter(|h| host_name(h) && !base_domain(h).is_empty()).collect();
+    let autodiscover = (l.srv)(&format!("_autodiscover._tcp.{domain}")).filter(|(h, _)| host_name(h));
     let found = settings_for(email, &domain, l, &mx, autodiscover.as_ref().map(|(h, _)| h.as_str()));
     if at_microsoft_365(&mx, autodiscover.as_ref().map(|(h, _)| h.as_str())) {
         return Some(microsoft_365(email, found));
@@ -329,6 +331,19 @@ mod tests {
         let mut fetch = |_: &str| None;
         let mut srv = |name: &str| name.starts_with("_autodiscover").then(|| ("evil/../x".to_string(), 443));
         assert!(discover_with("zoe@studio.example", &mut Lookups { fetch: &mut fetch, mx: &mut no_mx, srv: &mut srv }).is_none());
+        // So is a mail exchanger that isn't one (found by the fuzz target: a name of
+        // replacement characters made a source past what the window shows), and the next one
+        // is asked instead.
+        let mut asked = Vec::new();
+        let mut fetch = |url: &str| {
+            asked.push(url.to_string());
+            url.starts_with("https://autoconfig.mailhost.example/").then(|| HOSTED.to_string())
+        };
+        let mut odd_mx = |_: &str| vec!["\u{fffd}".repeat(200), ".".to_string(), "mx1.mailhost.example".to_string()];
+        let mut no_srv = |_: &str| None;
+        let f = discover_with("zoe@studio.example", &mut Lookups { fetch: &mut fetch, mx: &mut odd_mx, srv: &mut no_srv }).unwrap();
+        assert_eq!(f.source, "mailhost.example");
+        assert!(asked.iter().all(|u| !u.contains('\u{fffd}') && !u.contains("autoconfig./")), "{asked:?}");
     }
 
     /// A domain whose mail Microsoft 365 hosts is proposed as Exchange Online through Graph: by
