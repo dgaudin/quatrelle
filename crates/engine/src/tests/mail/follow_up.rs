@@ -784,6 +784,8 @@ fn a_message_under_several_labels_is_one_row_of_the_todo_list() {
     let rows: Vec<String> =
         s.todo("", false).iter().filter_map(|r| r.mail()).filter(|m| m.subject == "Under four labels").map(|m| m.key.folder.clone()).collect();
     assert_eq!(rows, vec!["INBOX".to_string()], "once, from the Inbox");
+}
+
 /// `mail.flag`'s "title" sets the flag's title: on a local account it is kept in the
 /// preferences and `follow_up_title` reads it back (and no SetFollowUp carries it — the server
 /// has nowhere for it); "none" takes it off; Undo puts it back.

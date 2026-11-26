@@ -887,6 +887,8 @@ fn a_sieve_rule_is_shown_as_managed_on_the_server() {
         })
         .collect();
     assert!(texts.iter().any(|t| t == "These rules are managed on the server; change them where they were made."), "{texts:?}");
+}
+
 /// The Custom Follow Up form has the flag's title: it opens with the message's own, an edited
 /// one goes to `mail.flag` as "title", an emptied one as "none", and an untouched empty one is
 /// left out (so the server's own title, the subject, stays). Add Reminder… has no title field
