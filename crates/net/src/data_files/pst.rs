@@ -354,8 +354,6 @@ macro_rules! reader {
                                 // A contact's picture is one of its attachments, hidden.
                                 let contact = class.get(.."ipm.contact".len()).is_some_and(|c| c.eq_ignore_ascii_case("ipm.contact"));
                                 if contact && let Ok(mut photo) = self.photo.try_borrow_mut() {
-                                    let props = a.properties();
-                                    let flagged = matches!(props.get(0x7FFF).map(|v| props::val(v, cp)), Some(Val::Bool(true)));
                                     match picture_of(&*a) {
                                         Some(pic) if photo.is_none() => *photo = Some(pic),
                                         Some(_) => {
@@ -364,14 +362,6 @@ macro_rules! reader {
                                             log::info!("a contact's flagged picture was left out: the card already has one");
                                             if let Ok(mut lo) = self.left_out.try_borrow_mut() {
                                                 *lo.entry(FileLeftOut::NoPlace).or_insert(0) += 1;
-                                            }
-                                        }
-                                        None if flagged => {
-                                            // Flagged as the contact's picture but not a picture (no
-                                            // image type, no picture magic): counted, not silent.
-                                            log::info!("a contact's flagged attachment wasn't a picture: left out");
-                                            if let Ok(mut lo) = self.left_out.try_borrow_mut() {
-                                                *lo.entry(FileLeftOut::Unreadable).or_insert(0) += 1;
                                             }
                                         }
                                         None => {}

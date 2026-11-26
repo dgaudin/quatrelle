@@ -45,14 +45,7 @@ impl Worker {
                 let included = own_body.as_deref().map(crate::sieve::included_scripts).unwrap_or_default();
                 let is_on =
                     |n: &str| active.as_deref() == Some(n) || (active.as_deref() == Some(crate::sieve::SCRIPT) && included.iter().any(|i| i == n));
-                let others = names
-                    .iter()
-                    .filter(|n| n.as_str() != crate::sieve::SCRIPT)
-                    .flat_map(|n| {
-                        let body = bodies.iter().find(|(b, _)| b == n).map(|(_, b)| b.as_str());
-                        foreign_script(&self.acc.id, n, body, is_on(n), &categories)
-                    })
-                    .collect();
+                let others = foreign_rules(&self.acc.id, &names, &bodies, is_on, &categories);
                 return Ok((ids, others));
             }
             // The folder each rule files mail into, by the id the server knows it by.
@@ -151,14 +144,7 @@ impl Worker {
             let included = own_body.as_deref().map(crate::sieve::included_scripts).unwrap_or_default();
             let is_on =
                 |n: &str| active.as_deref() == Some(n) || (active.as_deref() == Some(crate::sieve::SCRIPT) && included.iter().any(|i| i == n));
-            let others = names
-                .iter()
-                .filter(|n| n.as_str() != crate::sieve::SCRIPT)
-                .flat_map(|n| {
-                    let body = bodies.iter().find(|(b, _)| b == n).map(|(_, b)| b.as_str());
-                    foreign_script(&self.acc.id, n, body, is_on(n), &[])
-                })
-                .collect();
+            let others = foreign_rules(&self.acc.id, &names, &bodies, is_on, &[]);
             return Ok((ids, others, cleared));
         }
         let all = match self.conn.as_ref() {
@@ -379,6 +365,46 @@ fn foreign_scripts<S: std::io::Read + std::io::Write>(
     out
 }
 
+/// The rules of an account's scripts Quatrelle didn't write that are kept, in all: past them the
+/// rest is one entry that says how many.
+const MAX_FOREIGN_RULES: usize = 500;
+
+/// The rules the account's scripts Quatrelle didn't write come to, in all.
+fn foreign_rules(
+    account: &str,
+    names: &[String],
+    bodies: &[(String, String)],
+    is_on: impl Fn(&str) -> bool,
+    categories: &[(String, String)],
+) -> Vec<quatrelle_model::organize::ForeignRule> {
+    let mut rules: Vec<quatrelle_model::organize::ForeignRule> = Vec::new();
+    let mut more = 0usize;
+    for n in names.iter().filter(|n| n.as_str() != crate::sieve::SCRIPT) {
+        let body = bodies.iter().find(|(b, _)| b == n).map(|(_, b)| b.as_str());
+        for r in foreign_script(account, n, body, is_on(n), categories) {
+            if rules.len() < MAX_FOREIGN_RULES {
+                rules.push(r);
+            } else {
+                more = more.saturating_add(1);
+            }
+        }
+    }
+    if more > 0 {
+        log::warn!("ManageSieve: {more} rules past the cap of {MAX_FOREIGN_RULES} are not listed");
+        // Said once, not run, never changed: the id is no script's name.
+        rules.push(quatrelle_model::organize::ForeignRule {
+            account: account.to_string(),
+            id: "sieve:".to_string(),
+            name: format!("\u{2026} +{more}"),
+            enabled: false,
+            runnable: false,
+            rule: None,
+            summary: String::new(),
+        });
+    }
+    rules
+}
+
 /// The entries a script Quatrelle didn't write becomes: its rules read as Sieve statements when
 /// it has `if` blocks in it, else the script itself as one entry, named as it is (its summary is
 /// left empty: the interface says what it is, in its own language).
@@ -406,3 +432,6 @@ fn foreign_script(
         None => vec![stub()],
     }
 }
+
+#[cfg(test)]
+mod tests;

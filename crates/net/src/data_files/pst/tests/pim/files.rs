@@ -59,7 +59,7 @@ fn pictures_and_files_come_in_on_cards_and_events() {
 }
 
 /// A contact's further flagged pictures are counted (a card keeps one), and a flagged one that
-/// isn't a picture at all (no image type, no picture magic) is counted as unreadable — neither
+/// isn't a picture at all (no image type, no picture magic) stays a file of the card — neither
 /// is dropped silently.
 #[test]
 fn extra_and_invalid_flagged_pictures_are_counted() {
@@ -78,7 +78,8 @@ fn extra_and_invalid_flagged_pictures_are_counted() {
     let card = &b.pim().cards[0].card;
     let photo = card.photo.as_ref().expect("the valid flagged picture is kept");
     assert_eq!((photo.media.as_str(), photo.bytes(1 << 20).as_deref()), ("image/png", Some(png)));
-    assert_eq!(b.done.files_left_out.get(&FileLeftOut::Unreadable), Some(&1), "the invalid one is counted: {:?}", b.done);
+    assert_eq!(b.done.files_left_out.get(&FileLeftOut::Unreadable), None, "the invalid one is kept, not lost: {:?}", b.done);
+    assert_eq!(file_lines(&card.extra), ["X-QUATRELLE-ATTACH;X-FILENAME=\"odd.bin\""], "the invalid one is a file of the card");
     assert_eq!(b.done.files_left_out.get(&FileLeftOut::NoPlace), Some(&1), "the extra one is counted: {:?}", b.done);
 }
 
@@ -174,8 +175,8 @@ fn kept_files_read_back_from_calendar_and_address_book_files() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
-/// A contact's picture past what a card keeps of one is counted as too big: hidden, it would
-/// otherwise go unsaid.
+/// A contact's picture past what a card keeps of one stays a file of the card: hidden, it would
+/// otherwise be gone.
 #[test]
 fn a_picture_past_the_cap_is_counted() {
     let mut big = b"\x89PNG\r\n\x1a\n".to_vec();
@@ -186,5 +187,6 @@ fn a_picture_past_the_cap_is_counted() {
     let b = Brought::of("big-picture", &[contact]);
     assert_eq!(b.done.contacts, 1);
     assert!(b.pim().cards[0].card.photo.is_none());
-    assert_eq!(b.done.files_left_out.get(&FileLeftOut::TooBig), Some(&1), "{:?}", b.done);
+    assert_eq!(b.done.files_left_out.get(&FileLeftOut::TooBig), None, "{:?}", b.done);
+    assert_eq!(file_lines(&b.pim().cards[0].card.extra), ["X-QUATRELLE-ATTACH;X-FILENAME=\"ContactPicture.png\""]);
 }

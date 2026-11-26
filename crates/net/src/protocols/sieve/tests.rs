@@ -260,6 +260,26 @@ fn the_elsif_chain_is_capped_like_the_ifs() {
     assert_eq!(parse_rules("a1", "x", &s, true, &[]).len(), 1_000, "the if and its elsif/else are capped together (MAX_PARSE_RULES)");
 }
 
+/// A `header` test without an option is `:is`, an exact match (RFC 5228): it isn't "contains",
+/// so the rule isn't run here as one. Any option but `:contains` makes it not runnable too.
+#[test]
+fn a_header_test_without_contains_is_not_a_contains_rule() {
+    for test in [
+        r#"header "subject" "a""#,
+        r#"header :is "subject" "a""#,
+        r#"header :matches "subject" "a*""#,
+        r#"header :regex "subject" "a.*""#,
+        r#"header :comparator "i;octet" :contains "subject" "x""#,
+        r#"header :contains :comparator "i;octet" "subject" "x""#,
+    ] {
+        let s = format!("if {test} {{ discard; }}");
+        let rules = parse_rules("a1", "x", &s, true, &[]);
+        assert!(!rules[0].runnable && rules[0].rule.is_none(), "{test}: {:?}", rules[0]);
+    }
+    let rules = parse_rules("a1", "x", r#"if header :contains "subject" "a" { discard; }"#, true, &[]);
+    assert!(rules[0].runnable, "{:?}", rules[0]);
+}
+
 /// A rule that nests `anyof` inside `allof` (or the other way) can't be run here: running is one
 /// list of conditions, all or any, and flattening only works inside the same combinator.
 #[test]
