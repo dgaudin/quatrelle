@@ -19,8 +19,6 @@
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 
-use rand_core::RngCore as _;
-
 use quatrelle_mime as mime;
 use quatrelle_model::{FieldChange, Flag, Flags, FolderRole, MessageKey, Op, Summary, sort_newest_first, utf7};
 use quatrelle_store::{FolderState, Store};
@@ -189,9 +187,6 @@ pub struct Client {
     /// The Common Views folder's id, once found by its name or the shortcuts it holds; `None`
     /// inside when this mailbox has none this session (see `ews_pim/links.rs`).
     common_views: RefCell<Option<Option<String>>>,
-    /// The save stamp this session writes on a calendar group header ([MS-OXOCFG] 2.2.9.4): what
-    /// makes a header one Quatrelle may change, the others being Outlook's or another client's.
-    group_stamp: RefCell<Option<u32>>,
     /// The folders whose changes the server won't give this session (`SyncFolderItems` refused
     /// from nothing: public folders, on some servers), by the element naming them: read whole, as
     /// before, without asking again.
@@ -451,7 +446,6 @@ impl Client {
             user_agent: None,
             no_calendar: RefCell::new(Vec::new()),
             common_views: RefCell::new(None),
-            group_stamp: RefCell::new(None),
             changes_refused: RefCell::new(Vec::new()),
             fields_refused: Cell::new(false),
             clock: Cell::new(None),
@@ -492,7 +486,6 @@ impl Client {
             user_agent: self.user_agent.clone(),
             no_calendar: self.no_calendar.clone(),
             common_views: self.common_views.clone(),
-            group_stamp: self.group_stamp.clone(),
             changes_refused: self.changes_refused.clone(),
             fields_refused: self.fields_refused.clone(),
             clock: self.clock.clone(),
@@ -526,20 +519,6 @@ impl Client {
     /// Keep the Common Views folder's id (or that there is none) for this session.
     pub(crate) fn keep_common_views(&self, id: &Option<String>) {
         *self.common_views.borrow_mut() = Some(id.clone());
-    }
-
-    /// The save stamp this session writes on a calendar group header, made once
-    /// ([MS-OXOCFG] 2.2.9.4: the writer's session).
-    pub(crate) fn group_stamp(&self) -> u32 {
-        let mut slot = self.group_stamp.borrow_mut();
-        if let Some(v) = *slot {
-            return v;
-        }
-        let mut bytes = [0u8; 4];
-        rand_core::OsRng.fill_bytes(&mut bytes);
-        let v = stamp_from(bytes);
-        *slot = Some(v);
-        v
     }
 
     /// Whether the server refused an appointment's fields asked by name this session.
@@ -684,10 +663,22 @@ fn voting_choices(it: &El) -> Vec<String> {
         .unwrap_or_default()
 }
 
-/// A save stamp made of four random bytes: `PidTagWlinkSaveStamp` is a signed 32-bit integer
-/// ([MS-OXOCFG] 2.2.9.4), so the top bit is cleared and zero is never used.
-fn stamp_from(bytes: [u8; 4]) -> u32 {
-    (u32::from_le_bytes(bytes) & 0x7fff_ffff).max(1)
+/// The save stamp Quatrelle writes on a calendar group header it makes ([MS-OXOCFG] 2.2.9.4),
+/// made from the header's own id: a header is ours when its stamp is the one its id gives, which
+/// holds on any connection and at any launch, with nothing kept. Outlook writes its own stamp
+/// (and rewrites ours when it changes the header), so its headers match only by a 1 in 2^31
+/// chance. `PidTagWlinkSaveStamp` is a signed 32-bit integer: the top bit is clear, and zero is
+/// never used.
+pub(crate) fn group_stamp(header_id: &[u8]) -> u32 {
+    use sha2::{Digest, Sha256};
+    let mut hash = Sha256::new();
+    hash.update(b"quatrelle calendar group header");
+    hash.update(header_id);
+    let mut four = [0u8; 4];
+    for (slot, byte) in four.iter_mut().zip(hash.finalize().iter()) {
+        *slot = *byte;
+    }
+    (u32::from_le_bytes(four) & 0x7fff_ffff).max(1)
 }
 
 /// Whether a property tag as the server writes it is `tag`: Exchange answers in its own

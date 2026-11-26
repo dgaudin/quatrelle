@@ -599,9 +599,9 @@ fn deleting_a_group_says_what_was_already_deleted() {
     d.directory = vec![(dn("ana"), "ana@contoso.example".into()), (dn("tom"), "tom@contoso.example".into())];
     let server = serve(d);
     let c = crate::ews::Client::connect(&server.url, &format!("{DOMAIN}\\{USER}"), PASSWORD, "riley@contoso.example").unwrap();
-    let stamp = c.group_stamp();
     let link = "IPM.Microsoft.WunderBar.Link";
     let team = guid(0x10);
+    let stamp = crate::ews::group_stamp(&[0x10; 16]);
     let ordinal = |b: u8| crate::imap::base64(&[b]);
     let header = wlink_of(
         link,
@@ -646,7 +646,6 @@ fn two_headers_with_the_same_name_can_be_renamed() {
     d.folder("Calendar", None, Some("calendar"), "IPF.Appointment");
     let server = serve(d);
     let c = crate::ews::Client::connect(&server.url, &format!("{DOMAIN}\\{USER}"), PASSWORD, "riley@contoso.example").unwrap();
-    let stamp = c.group_stamp();
     let link = "IPM.Microsoft.WunderBar.Link";
     let ordinal = |b: u8| crate::imap::base64(&[b]);
     let header = |id: u8, ord: u8| {
@@ -655,7 +654,11 @@ fn two_headers_with_the_same_name_can_be_renamed() {
             3,
             4,
             "Équipe",
-            &[("0x6842", "Binary", guid(id)), ("0x6847", "Integer", stamp.to_string()), ("0x684B", "Binary", ordinal(ord))],
+            &[
+                ("0x6842", "Binary", guid(id)),
+                ("0x6847", "Integer", crate::ews::group_stamp(&[id; 16]).to_string()),
+                ("0x684B", "Binary", ordinal(ord)),
+            ],
         )
     };
     server.data.lock().unwrap().wlinks = vec![header(0x10, 0x10), header(0x20, 0x20)];
@@ -673,9 +676,9 @@ fn a_group_holding_a_member_the_read_cannot_parse_is_not_deleted() {
     d.folder("Calendar", None, Some("calendar"), "IPF.Appointment");
     let server = serve(d);
     let c = crate::ews::Client::connect(&server.url, &format!("{DOMAIN}\\{USER}"), PASSWORD, "riley@contoso.example").unwrap();
-    let stamp = c.group_stamp();
     let link = "IPM.Microsoft.WunderBar.Link";
     let team = guid(0x10);
+    let stamp = crate::ews::group_stamp(&[0x10; 16]);
     let header = wlink_of(link, 3, 4, "Salles", &[("0x6842", "Binary", team.clone()), ("0x6847", "Integer", stamp.to_string())]);
     let half = wlink_of(
         link,
