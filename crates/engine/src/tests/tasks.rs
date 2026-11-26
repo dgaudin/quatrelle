@@ -745,3 +745,43 @@ fn junk_and_trash_are_not_in_the_todo_list() {
     assert!(list.iter().all(|r| r.mail().is_none_or(|m| m.key.folder != "Junk Email" && m.key.folder != "Trash")), "no Junk or Trash row: {list:?}");
     done(s);
 }
+
+/// A folder let go of by the cache in memory (it was past the limit) stays in the To-Do List:
+/// it was counted as read, so it is read again from the disk.
+#[test]
+fn a_folder_the_memory_cache_lets_go_of_stays_in_the_todo_list() {
+    let mut s = sample_session("todo-evicted");
+    let folder = quatrelle_model::Folder { account: "sample".into(), path: "Projects".into(), selectable: true, ..Default::default() };
+    s.accounts[0].folders.push(folder);
+    s.store.as_ref().unwrap().save_folders("sample", &s.accounts[0].folders).unwrap();
+    let mut st: quatrelle_store::FolderState<std::sync::Arc<Summary>> = quatrelle_store::FolderState { validity: 1, ..Default::default() };
+    st.messages.push(std::sync::Arc::new(Summary {
+        key: MessageKey { account: "sample".into(), folder: "Projects".into(), validity: 1, uid: 9 },
+        message_id: "evicted@x".into(),
+        subject: "Evicted but followed".into(),
+        flags: quatrelle_model::Flags { flagged: true, ..Default::default() },
+        ..Default::default()
+    }));
+    let mut disk = quatrelle_store::FolderState { validity: 1, ..Default::default() };
+    disk.messages.extend(st.messages.iter().map(|m| (**m).clone()));
+    s.store.as_ref().unwrap().save_folder("sample", "Projects", &disk).unwrap();
+    let k = ("sample".to_string(), "Projects".to_string());
+    s.cache.insert(k.clone(), st);
+    s.cache_order.push(k.clone());
+    s.wait_disk_scan();
+    assert!(s.todo("", false).iter().any(|r| r.subject() == "Evicted but followed"), "listed from memory");
+
+    s.set_cache_limit(0);
+    assert!(!s.cache.contains_key(&k), "the folder was let go of");
+    let mut found = false;
+    for _ in 0..100 {
+        s.wait_disk_scan();
+        if s.todo("", false).iter().any(|r| r.subject() == "Evicted but followed") {
+            found = true;
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+    assert!(found, "read again from the disk: {:?}", s.todo("", false).iter().map(|r| r.subject().to_string()).collect::<Vec<_>>());
+    done(s);
+}
