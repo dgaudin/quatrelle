@@ -2508,3 +2508,7 @@ presence	Offline	غير متصل
 	No category	بلا فئة
 	Flagged messages	الرسائل المعلّمة
 	In folder	في المجلد
+	Managed on the server	مُدارة على الخادم
+	These rules are managed on the server; change them where they were made.	تُدار هذه القواعد على الخادم؛ غيّرها حيث تم إنشاؤها.
+	a Sieve script	سكربت Sieve
+	Run this rule on this computer's Inbox	تشغيل هذه القاعدة على صندوق الوارد في هذا الكمبيوتر

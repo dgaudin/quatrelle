@@ -2509,3 +2509,7 @@ presence	Offline	オフライン
 	No category	カテゴリなし
 	Flagged messages	フラグ付きメッセージ
 	In folder	フォルダー内
+	Managed on the server	サーバーで管理されています
+	These rules are managed on the server; change them where they were made.	これらのルールはサーバーで管理されています。作成された場所で変更してください。
+	a Sieve script	Sieve スクリプト
+	Run this rule on this computer's Inbox	このルールをこのコンピューターの受信トレイに適用する

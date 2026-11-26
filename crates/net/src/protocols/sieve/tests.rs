@@ -248,6 +248,75 @@ fn a_hostile_script_is_capped() {
     assert_eq!(parse_rules("a1", "x", &many, true, &[]).len(), 1_000, "the rules are capped (MAX_PARSE_RULES)");
 }
 
+/// The `if` and its `elsif`/`else` blocks count together against the same cap: a hostile chain
+/// of them can't make the parser work without bound either.
+#[test]
+fn the_elsif_chain_is_capped_like_the_ifs() {
+    let mut s = String::from(r#"if header :contains "subject" "x" { discard; }"#);
+    for _ in 0..5_000 {
+        s.push_str(r#" elsif header :contains "from" "y" { discard; }"#);
+    }
+    s.push_str(r#" else { discard; }"#);
+    assert_eq!(parse_rules("a1", "x", &s, true, &[]).len(), 1_000, "the if and its elsif/else are capped together (MAX_PARSE_RULES)");
+}
+
+/// A rule that nests `anyof` inside `allof` (or the other way) can't be run here: running is one
+/// list of conditions, all or any, and flattening only works inside the same combinator.
+#[test]
+fn a_mixed_allof_anyof_rule_is_not_runnable() {
+    let mixed =
+        r#"if allof(header :contains "subject" "a", anyof(header :contains "from" "x", header :contains "subject" "z")) { addflag "\\Flagged"; }"#;
+    let rules = parse_rules("a1", "x", mixed, true, &[]);
+    assert_eq!(rules.len(), 1, "{rules:?}");
+    assert!(!rules[0].runnable, "{rules:?}");
+    assert!(rules[0].rule.is_none(), "{rules:?}");
+    assert!(!rules[0].summary.is_empty(), "it still says what it was: {rules:?}");
+    // The same combinator inside the same combinator flattens, and runs.
+    let same =
+        r#"if allof(allof(header :contains "subject" "a", header :contains "from" "x"), header :contains "subject" "b") { addflag "\\Flagged"; }"#;
+    let rules = parse_rules("a1", "x", same, true, &[]);
+    assert!(rules[0].runnable, "{rules:?}");
+    let rule = rules[0].rule.as_ref().expect("runnable");
+    assert!(rule.match_all);
+    assert_eq!(rule.conditions.len(), 3, "{rule:?}");
+}
+
+/// IMAP flags are case-insensitive: `\seen` marks as read the same as `\Seen`, `\FLAGGED` flags.
+#[test]
+fn flag_keywords_are_case_insensitive() {
+    for (kw, action) in [(r#"\\seen"#, RuleAction::MarkRead), (r#"\\FLAGGED"#, RuleAction::Flag), (r#"\\sEeN"#, RuleAction::MarkRead)] {
+        let s = format!(r#"if header :contains "subject" "x" {{ addflag "{kw}"; }}"#);
+        let rules = parse_rules("a1", "x", &s, true, &[]);
+        assert_eq!(rules[0].rule.as_ref().map(|r| r.actions.clone()), Some(vec![action.clone()]), "{kw}: {rules:?}");
+    }
+}
+
+/// What a script puts in a value is made safe to keep and show: control characters and bidi
+/// overrides are out (they would only serve to spoof what's shown), the value is capped, and
+/// the summary too.
+#[test]
+fn script_values_are_cleaned_and_the_summary_is_capped() {
+    let bad = ['\u{202E}', '\u{0007}', '\u{2066}', '\u{202A}'];
+    let is_spoof = |c: char| c.is_control() || matches!(c, '\u{202A}'..='\u{202E}' | '\u{2066}'..='\u{2069}');
+    let value = format!("ab\u{202E}cd\u{0007}ef{}", "x".repeat(600));
+    let s = format!(r#"if header :contains "subject" "{value}" {{ addflag "\\Flagged"; }}"#);
+    let rules = parse_rules("a1", "x", &s, true, &[]);
+    let r = &rules[0];
+    assert!(r.runnable, "{r:?}");
+    let rule = r.rule.as_ref().expect("runnable");
+    let Condition::Subject(got) = &rule.conditions[0] else { panic!("{:?}", rule.conditions) };
+    assert!(!got.chars().any(is_spoof), "{got:?}");
+    assert_eq!(got.chars().count(), 200, "the value is capped: {got:?}");
+    assert!(!bad.iter().any(|c| got.contains(*c)));
+    assert!(r.summary.chars().count() <= 500, "the summary is capped: {}", r.summary.len());
+    assert!(!r.summary.chars().any(is_spoof), "the summary is clean: {:?}", r.summary);
+    // The script's own name is cleaned where it's shown, but the id keeps it as the server has it.
+    let s = "if header :contains \"subject\" \"x\" { addflag \"\\\\Flagged\"; }";
+    let rules = parse_rules("a1", "evil\u{202E}script", s, true, &[]);
+    assert_eq!(rules[0].id, "sieve:evil\u{202E}script#0", "the id goes back to the server as it is");
+    assert!(!rules[0].name.chars().any(is_spoof), "the name shown is clean: {}", rules[0].name);
+}
+
 /// A ManageSieve server for tests: scripts in memory, one connection at a time.
 pub(crate) struct Fake {
     pub scripts: Vec<(String, String)>,

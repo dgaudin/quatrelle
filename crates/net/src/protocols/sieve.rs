@@ -586,6 +586,34 @@ fn read_previous(s: &str) -> Option<String> {
     s.lines().take(3).find_map(|l| l.strip_prefix("# quatrelle-previous ").map(|p| p.trim().to_string())).filter(|p| !p.is_empty())
 }
 
+/// The scripts our script runs through itself when it is the active one: the one it replaced
+/// (`# quatrelle-previous`) and the ones it `include :personal`s (RFC 6609). The server runs
+/// those too, so they are on when ours is.
+pub fn included_scripts(script: &str) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    if let Some(p) = read_previous(script) {
+        out.push(p);
+    }
+    for line in script.lines() {
+        let t = line.trim();
+        if !t.get(..7).is_some_and(|h| h.eq_ignore_ascii_case("include")) {
+            continue;
+        }
+        // `include :personal "filters";`
+        let Some(q) = t.find('"') else { continue };
+        if !t[..q].contains(":personal") {
+            continue;
+        }
+        if let Some(end) = t[q + 1..].find('"') {
+            let name = &t[q + 1..q + 1 + end];
+            if !name.is_empty() && !out.iter().any(|n| n == name) {
+                out.push(name.to_string());
+            }
+        }
+    }
+    out
+}
+
 mod parse;
 
 pub use parse::parse_rules;

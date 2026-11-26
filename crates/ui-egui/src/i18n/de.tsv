@@ -2513,3 +2513,7 @@ presence	Offline	Offline
 	No category	Keine Kategorie
 	Flagged messages	Markierte Nachrichten
 	In folder	In Ordner
+	Managed on the server	Auf dem Server verwaltet
+	These rules are managed on the server; change them where they were made.	Diese Regeln werden auf dem Server verwaltet; ändern Sie sie dort, wo sie erstellt wurden.
+	a Sieve script	ein Sieve-Skript
+	Run this rule on this computer's Inbox	Diese Regel für den Posteingang dieses Computers ausführen

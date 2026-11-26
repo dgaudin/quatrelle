@@ -2509,3 +2509,7 @@ presence	Offline	Offline
 	No category	Geen categorie
 	Flagged messages	Gemarkeerde berichten
 	In folder	In map
+	Managed on the server	Beheerd op de server
+	These rules are managed on the server; change them where they were made.	Deze regels worden op de server beheerd; wijzig ze waar ze zijn aangemaakt.
+	a Sieve script	een Sieve-script
+	Run this rule on this computer's Inbox	Deze regel uitvoeren op het Postvak IN van deze computer

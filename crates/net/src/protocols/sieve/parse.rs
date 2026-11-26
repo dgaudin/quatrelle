@@ -30,6 +30,9 @@ pub fn parse_rules(account: &str, script: &str, text: &str, active: bool, catego
         p.next();
         let mut n = out.len();
         loop {
+            if out.len() >= MAX_PARSE_RULES {
+                break;
+            }
             let t = match p.peek().cloned() {
                 Some(Word::Atom(a)) if a.eq_ignore_ascii_case("elsif") => {
                     p.next();
@@ -37,7 +40,7 @@ pub fn parse_rules(account: &str, script: &str, text: &str, active: bool, catego
                 }
                 Some(Word::Atom(a)) if a.eq_ignore_ascii_case("else") => {
                     p.next();
-                    Test { conds: Vec::new(), all: true, text: "otherwise".into(), ok: false }
+                    Test { conds: Vec::new(), all: true, text: "otherwise".into(), ok: false, combined: None }
                 }
                 _ => parse_test(&mut p, 0),
             };
@@ -49,6 +52,24 @@ pub fn parse_rules(account: &str, script: &str, text: &str, active: bool, catego
             if !matches!(p.peek(), Some(Word::Atom(a)) if a.eq_ignore_ascii_case("elsif") || a.eq_ignore_ascii_case("else")) {
                 break;
             }
+        }
+    }
+    out
+}
+
+/// A string from the script, made safe to keep and show: control characters and bidi overrides
+/// out (they would only serve to spoof the text shown), capped in length.
+fn clean(s: &str) -> String {
+    const MAX_TEXT: usize = 200;
+    let mut out = String::new();
+    for c in s.chars() {
+        if out.len() >= MAX_TEXT {
+            break;
+        }
+        match c {
+            c if c.is_control() => {}
+            '\u{202A}' | '\u{202B}' | '\u{202C}' | '\u{202D}' | '\u{202E}' | '\u{2066}' | '\u{2067}' | '\u{2068}' | '\u{2069}' => {}
+            c => out.push(c),
         }
     }
     out
@@ -67,14 +88,28 @@ fn foreign_rule(
     then: &[String],
 ) -> ForeignRule {
     let id = format!("sieve:{script}#{n}");
-    let name = format!("{script} #{n}");
+    // The id goes back to the server as it named the script; the name is shown, so it's cleaned.
+    let name = format!("{} #{n}", clean(script));
     let when = if t.text.is_empty() { "every message".to_string() } else { t.text.clone() };
     let then = if then.is_empty() { "nothing".to_string() } else { then.join(", ") };
     let mut summary = format!("{when} → {then}");
     if stop {
         summary.push_str(", then stops");
     }
-    let runnable = ok && !t.conds.is_empty() && !actions.is_empty();
+    // The summary is shown in the interface's hover: bounded, and safe characters only.
+    let summary = clean(&summary);
+    let summary = {
+        let mut s = summary;
+        const MAX_SUMMARY: usize = 500;
+        if s.len() > MAX_SUMMARY {
+            let end = s.floor_char_boundary(MAX_SUMMARY);
+            s.truncate(end);
+        }
+        s
+    };
+    // A condition Quatrelle couldn't say entirely (`t.ok`) is not runnable, even when the
+    // flattening left some conditions in it (a mixed `allof`/`anyof`, say).
+    let runnable = ok && t.ok && !t.conds.is_empty() && !actions.is_empty();
     let rule = runnable.then(|| Rule {
         name: name.clone(),
         enabled: active,
@@ -98,6 +133,9 @@ struct Test {
     all: bool,
     text: String,
     ok: bool,
+    /// `Some(all)` when the test is an `allof`/`anyof` of several (`None`: a plain test), so a
+    /// combinator nested in a different one is not flattened into a false rule (I-3).
+    combined: Option<bool>,
 }
 
 /// How deep `allof`/`anyof`/`not` may nest before the rest is skipped (a hostile script's).
@@ -106,11 +144,11 @@ const MAX_TEST_DEPTH: usize = 32;
 fn parse_test(p: &mut P, depth: usize) -> Test {
     if depth > MAX_TEST_DEPTH {
         skip_rest(p);
-        return Test { conds: Vec::new(), all: true, text: String::new(), ok: false };
+        return Test { conds: Vec::new(), all: true, text: String::new(), ok: false, combined: None };
     }
     let Some(Word::Atom(head)) = p.peek().cloned() else {
         skip_rest(p);
-        return Test { conds: Vec::new(), all: true, text: String::new(), ok: false };
+        return Test { conds: Vec::new(), all: true, text: String::new(), ok: false, combined: None };
     };
     if head.eq_ignore_ascii_case("allof") || head.eq_ignore_ascii_case("anyof") {
         let all = head.eq_ignore_ascii_case("allof");
@@ -127,14 +165,16 @@ fn parse_test(p: &mut P, depth: usize) -> Test {
             }
         }
         p.eat(&Word::Close(')'));
-        let ok = !subs.is_empty() && subs.iter().all(|s| s.ok);
+        // Only same-operator nesting flattens: `allof` in `allof`, `anyof` in `anyof`. A
+        // different one inside would change what matches, so the rule is not runnable.
+        let ok = !subs.is_empty() && subs.iter().all(|s| s.ok) && subs.iter().all(|s| s.combined.is_none_or(|c| c == all));
         let text = subs.iter().map(|s| s.text.clone()).collect::<Vec<_>>().join(if all { " + " } else { " or " });
         let text = if subs.len() > 1 { format!("({text})") } else { text };
-        Test { conds: subs.into_iter().flat_map(|s| s.conds).collect(), all, text, ok }
+        Test { conds: subs.into_iter().flat_map(|s| s.conds).collect(), all, text, ok, combined: Some(all) }
     } else if head.eq_ignore_ascii_case("not") {
         p.next();
         let inner = parse_test(p, depth + 1);
-        Test { conds: Vec::new(), all: true, text: format!("not {}", inner.text), ok: false }
+        Test { conds: Vec::new(), all: true, text: format!("not {}", inner.text), ok: false, combined: None }
     } else if head.eq_ignore_ascii_case("header") {
         p.next();
         // Only `:contains` is what Quatrelle's rules look with.
@@ -150,13 +190,13 @@ fn parse_test(p: &mut P, depth: usize) -> Test {
             (Some((f, _)), Some((v, was_list))) => header_test(&f, &v, was_list, contains),
             _ => {
                 skip_rest(p);
-                Test { conds: Vec::new(), all: true, text: "header".into(), ok: false }
+                Test { conds: Vec::new(), all: true, text: "header".into(), ok: false, combined: None }
             }
         }
     } else {
         p.next();
         skip_rest(p);
-        Test { conds: Vec::new(), all: true, text: head, ok: false }
+        Test { conds: Vec::new(), all: true, text: head, ok: false, combined: None }
     }
 }
 
@@ -201,8 +241,14 @@ fn header_test(fields: &[String], values: &[String], values_was_list: bool, cont
         "header"
     };
     match cond {
-        Some(c) => Test { conds: vec![c], all: true, text: format!("{word} {}", list(values, values_was_list)), ok: true },
-        None => Test { conds: Vec::new(), all: true, text: format!("header {} {}", list(fields, true), list(values, values_was_list)), ok: false },
+        Some(c) => Test { conds: vec![c], all: true, text: format!("{word} {}", list(values, values_was_list)), ok: true, combined: None },
+        None => Test {
+            conds: Vec::new(),
+            all: true,
+            text: format!("header {} {}", list(fields, true), list(values, values_was_list)),
+            ok: false,
+            combined: None,
+        },
     }
 }
 
@@ -232,13 +278,14 @@ fn parse_block(p: &mut P, categories: &[(String, String)]) -> (Vec<RuleAction>, 
                 match p.next() {
                     Some(Word::Str(name)) if !tagged => {
                         // The script names mailboxes as the server does (UTF-8); Quatrelle
-                        // keeps folder paths in modified UTF-7.
+                        // keeps folder paths in modified UTF-7. The path keeps the name as
+                        // the server has it; only the words shown are cleaned.
                         actions.push(RuleAction::MoveTo(utf7::encode(&name)));
-                        then.push(format!("file into \"{name}\""));
+                        then.push(format!("file into \"{}\"", clean(&name)));
                     }
                     Some(Word::Str(name)) => {
                         ok = false;
-                        then.push(format!("file into \"{name}\" with a tag Quatrelle can't do"));
+                        then.push(format!("file into \"{}\" with a tag Quatrelle can't do", clean(&name)));
                     }
                     _ => {
                         ok = false;
@@ -248,11 +295,13 @@ fn parse_block(p: &mut P, categories: &[(String, String)]) -> (Vec<RuleAction>, 
             }
             "addflag" => match p.next() {
                 Some(Word::Str(kw)) => {
-                    let action = if kw == "\\Seen" {
+                    // IMAP flags are case-insensitive; a category's keyword is the account's
+                    // own and stays compared as it is.
+                    let action = if kw.eq_ignore_ascii_case("\\Seen") {
                         Some((RuleAction::MarkRead, "mark as read".to_string()))
-                    } else if kw == "\\Flagged" {
+                    } else if kw.eq_ignore_ascii_case("\\Flagged") {
                         Some((RuleAction::Flag, "flag".to_string()))
-                    } else if kw == PINNED {
+                    } else if kw.eq_ignore_ascii_case(PINNED) {
                         Some((RuleAction::Pin, "pin".to_string()))
                     } else {
                         categories.iter().find(|(_, k)| k == &kw).map(|(n, _)| (RuleAction::Categorize(n.clone()), format!("categorise \"{n}\"")))
@@ -298,14 +347,14 @@ fn str_list(p: &mut P) -> Option<(Vec<String>, bool)> {
     match p.peek().cloned() {
         Some(Word::Str(s)) => {
             p.next();
-            Some((vec![s], false))
+            Some((vec![clean(&s)], false))
         }
         Some(Word::Open('[')) => {
             p.next();
             let mut out = Vec::new();
             loop {
                 match p.next() {
-                    Some(Word::Str(s)) => out.push(s),
+                    Some(Word::Str(s)) => out.push(clean(&s)),
                     Some(Word::Comma) => continue,
                     Some(Word::Close(']')) => break,
                     _ => return None,

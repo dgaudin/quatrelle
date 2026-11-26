@@ -2513,3 +2513,7 @@ presence	Offline	Desconectado
 	No category	Sin categoría
 	Flagged messages	Mensajes marcados
 	In folder	En la carpeta
+	Managed on the server	Gestionada en el servidor
+	These rules are managed on the server; change them where they were made.	Estas reglas las gestiona el servidor; cámbielas donde se crearon.
+	a Sieve script	un script de Sieve
+	Run this rule on this computer's Inbox	Ejecutar esta regla en la bandeja de entrada de este equipo

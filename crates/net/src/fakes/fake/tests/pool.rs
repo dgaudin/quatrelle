@@ -621,3 +621,97 @@ fn a_foreign_sieve_script_is_listed_as_its_rules() {
     assert!(r1.summary.contains("body"), "{}", r1.summary);
     let _ = std::fs::remove_dir_all(store.root());
 }
+
+/// A script our active script runs through itself — the one it replaced
+/// (`# quatrelle-previous`) or an `include :personal` — is on when ours is the active one:
+/// the server runs it too, so its rules are listed as on.
+#[test]
+fn an_included_script_is_on_when_ours_is_active() {
+    let st = State::new();
+    let imap_port = serve_tcp(&st);
+    let (sieve_port, _sieve) = crate::sieve::tests::serve(crate::sieve::tests::Fake {
+        scripts: vec![
+            (
+                crate::sieve::SCRIPT.into(),
+                "require [\"include\"];\r\n# quatrelle-previous old\r\ninclude :personal \"filters\";\r\nif header :contains \"subject\" \"ours\" { keep; }\r\n".into(),
+            ),
+            ("filters".into(), "if header :contains \"subject\" \"invoice\" { addflag \"\\Flagged\"; }\r\n".into()),
+            ("old".into(), "if header :contains \"subject\" \"legacy\" { addflag \"\\Flagged\"; }\r\n".into()),
+            ("off".into(), "if header :contains \"subject\" \"off\" { addflag \"\\Flagged\"; }\r\n".into()),
+        ],
+        active: Some(crate::sieve::SCRIPT.into()),
+        sieve: "fileinto imap4flags include",
+        log: Vec::new(),
+    });
+    let store = store("sieve-included");
+    let mut pool = crate::worker::Pool::new(store.clone(), std::sync::Arc::new(crate::worker::MemoryCredentials::default()));
+    pool.sieve_port = sieve_port;
+    let account = AccountConfig {
+        id: "a1".into(),
+        email: "me@studio.example".into(),
+        username: "me@studio.example".into(),
+        imap: ServerConfig { host: "127.0.0.1".into(), port: imap_port, security: Security::None },
+        smtp: ServerConfig { host: "127.0.0.1".into(), port: 1, security: Security::None },
+        ..Default::default()
+    };
+    pool.submit(Job::Start { account, password: Some(Secret("pw".into())) });
+    until(&pool, "online", |e| matches!(e, Event::Status { status: SyncStatus::Online { .. }, .. }));
+    pool.submit(Job::GetServerRules { account: "a1".into(), ours: Vec::new() });
+    let seen = until(&pool, "rules read", |e| matches!(e, Event::ServerRules { others, error: None, .. } if others.len() >= 3));
+    let (_, others, _) = seen
+        .into_iter()
+        .find_map(|e| match e {
+            Event::ServerRules { ids, others, cleared, error: None, .. } if others.len() >= 3 => Some((ids, others, cleared)),
+            _ => None,
+        })
+        .unwrap_or_default();
+    let by_id = |id: &str| others.iter().find(|r| r.id == id).unwrap_or_else(|| panic!("{id} in {others:?}"));
+    assert!(by_id("sieve:filters#0").enabled, "included by ours: {others:?}");
+    assert!(by_id("sieve:old#0").enabled, "the one ours replaced: {others:?}");
+    assert!(!by_id("sieve:off#0").enabled, "not included, not active: {others:?}");
+    let _ = std::fs::remove_dir_all(store.root());
+}
+
+/// A server that lists a great many scripts can't make Quatrelle read them all at once: past
+/// the cap, the rest stay one entry each, named as they are.
+#[test]
+fn the_foreign_scripts_read_are_capped() {
+    let st = State::new();
+    let imap_port = serve_tcp(&st);
+    let scripts: Vec<(String, String)> = (0..100).map(|i| (format!("s{i:02}"), "require \"fileinto\";\r\n".to_string())).collect();
+    let (sieve_port, sieve) = crate::sieve::tests::serve(crate::sieve::tests::Fake { scripts, active: None, sieve: "fileinto", log: Vec::new() });
+    let store = store("sieve-capped");
+    let mut pool = crate::worker::Pool::new(store.clone(), std::sync::Arc::new(crate::worker::MemoryCredentials::default()));
+    pool.sieve_port = sieve_port;
+    let account = AccountConfig {
+        id: "a1".into(),
+        email: "me@studio.example".into(),
+        username: "me@studio.example".into(),
+        imap: ServerConfig { host: "127.0.0.1".into(), port: imap_port, security: Security::None },
+        smtp: ServerConfig { host: "127.0.0.1".into(), port: 1, security: Security::None },
+        ..Default::default()
+    };
+    pool.submit(Job::Start { account, password: Some(Secret("pw".into())) });
+    until(&pool, "online", |e| matches!(e, Event::Status { status: SyncStatus::Online { .. }, .. }));
+    pool.submit(Job::GetServerRules { account: "a1".into(), ours: Vec::new() });
+    let seen = until(&pool, "rules read", |e| matches!(e, Event::ServerRules { others, error: None, .. } if others.len() == 100));
+    let (_, others, _) = seen
+        .into_iter()
+        .find_map(|e| match e {
+            Event::ServerRules { ids, others, cleared, error: None, .. } if others.len() == 100 => Some((ids, others, cleared)),
+            _ => None,
+        })
+        .unwrap_or_default();
+    assert_eq!(others.len(), 100, "every script stays listed: {others:?}");
+    let gets = sieve
+        .lock()
+        .unwrap()
+        .log
+        .iter()
+        .filter(|l| l.to_ascii_uppercase().starts_with("GETSCRIPT") && !l.contains(&format!("\"{}\"", crate::sieve::SCRIPT)))
+        .count();
+    assert!(gets <= 64, "the foreign scripts read are capped: GETSCRIPT x{gets}");
+    // The ones past the cap are one named entry each, with no summary of their own.
+    assert!(others.iter().all(|r| r.summary.is_empty()), "{others:?}");
+    let _ = std::fs::remove_dir_all(store.root());
+}

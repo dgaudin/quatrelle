@@ -35,16 +35,22 @@ impl Worker {
                 }
                 let written = s.set_rules(wanted, categories.clone());
                 let listed = s.list();
+                let own_body = s.get(crate::sieve::SCRIPT).ok();
                 let bodies = foreign_scripts(&mut s, &listed);
                 s.logout();
                 written?;
                 let (names, active) = listed?;
+                // Our script runs the user's own through itself when it is the active one, so
+                // they are on then too, not only the one the server marks ACTIVE.
+                let included = own_body.as_deref().map(crate::sieve::included_scripts).unwrap_or_default();
+                let is_on =
+                    |n: &str| active.as_deref() == Some(n) || (active.as_deref() == Some(crate::sieve::SCRIPT) && included.iter().any(|i| i == n));
                 let others = names
                     .iter()
                     .filter(|n| n.as_str() != crate::sieve::SCRIPT)
                     .flat_map(|n| {
                         let body = bodies.iter().find(|(b, _)| b == n).map(|(_, b)| b.as_str());
-                        foreign_script(&self.acc.id, n, body, active.as_deref() == Some(n.as_str()), &categories)
+                        foreign_script(&self.acc.id, n, body, is_on(n), &categories)
                     })
                     .collect();
                 return Ok((ids, others));
@@ -132,6 +138,7 @@ impl Worker {
                 s.login(&user, &secret)?;
             }
             let listed = s.list();
+            let own_body = s.get(crate::sieve::SCRIPT).ok();
             let bodies = foreign_scripts(&mut s, &listed);
             s.logout();
             let (names, active) = listed?;
@@ -140,12 +147,16 @@ impl Worker {
             let ids =
                 if own { ours.iter().map(|id| (id.strip_prefix("sieve:").unwrap_or(id).to_string(), id.clone())).collect() } else { Vec::new() };
             let cleared = if own { Vec::new() } else { ours };
+            // A script ours includes runs when ours is the active one (see `set_server_rules`).
+            let included = own_body.as_deref().map(crate::sieve::included_scripts).unwrap_or_default();
+            let is_on =
+                |n: &str| active.as_deref() == Some(n) || (active.as_deref() == Some(crate::sieve::SCRIPT) && included.iter().any(|i| i == n));
             let others = names
                 .iter()
                 .filter(|n| n.as_str() != crate::sieve::SCRIPT)
                 .flat_map(|n| {
                     let body = bodies.iter().find(|(b, _)| b == n).map(|(_, b)| b.as_str());
-                    foreign_script(&self.acc.id, n, body, active.as_deref() == Some(n.as_str()), &[])
+                    foreign_script(&self.acc.id, n, body, is_on(n), &[])
                 })
                 .collect();
             return Ok((ids, others, cleared));
@@ -338,18 +349,39 @@ impl Worker {
     }
 }
 
-/// The bodies of the scripts Quatrelle didn't write (a `GETSCRIPT` each, before the logout); a
-/// script that vanished between the listing and the read is just left out.
+/// The scripts Quatrelle didn't write that are read whole (a `GETSCRIPT` each): past this many
+/// of them, the rest stay one entry each, named as they are.
+const MAX_FOREIGN_SCRIPTS: usize = 64;
+/// The total bytes of those scripts read at once (each answer is capped on its own already).
+const MAX_FOREIGN_BYTES: usize = 4 << 20;
+
+/// The bodies of the scripts Quatrelle didn't write (a `GETSCRIPT` each, before the logout),
+/// within the caps: a script past them, or one that vanished between the listing and the read,
+/// is just left out (it stays one entry, named as it is).
 fn foreign_scripts<S: std::io::Read + std::io::Write>(
     s: &mut crate::sieve::Client<S>,
     listed: &crate::Result<(Vec<String>, Option<String>)>,
 ) -> Vec<(String, String)> {
     let Ok((names, _)) = listed else { return Vec::new() };
-    names.iter().filter(|n| n.as_str() != crate::sieve::SCRIPT).filter_map(|n| s.get(n).ok().map(|body| (n.clone(), body))).collect()
+    let foreign: Vec<&String> = names.iter().filter(|n| n.as_str() != crate::sieve::SCRIPT).collect();
+    let mut out = Vec::new();
+    let mut bytes = 0usize;
+    for n in &foreign {
+        if out.len() >= MAX_FOREIGN_SCRIPTS || bytes >= MAX_FOREIGN_BYTES {
+            log::warn!("ManageSieve: {} of {} scripts are past the read cap and stay named only", foreign.len() - out.len(), foreign.len());
+            break;
+        }
+        if let Ok(body) = s.get(n) {
+            bytes += body.len();
+            out.push(((*n).clone(), body));
+        }
+    }
+    out
 }
 
 /// The entries a script Quatrelle didn't write becomes: its rules read as Sieve statements when
-/// it has `if` blocks in it, else the script itself as one entry, named as it is.
+/// it has `if` blocks in it, else the script itself as one entry, named as it is (its summary is
+/// left empty: the interface says what it is, in its own language).
 fn foreign_script(
     account: &str,
     name: &str,
@@ -364,7 +396,7 @@ fn foreign_script(
         enabled: active,
         runnable: false,
         rule: None,
-        summary: "a Sieve script".into(),
+        summary: String::new(),
     };
     match body {
         Some(b) => {
