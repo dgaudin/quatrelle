@@ -279,6 +279,14 @@ impl MailApp {
                 self.ui.tasks.selected = Some(uid.clone());
                 self.ui.focus_main = true;
             }
+            Action::OpenPerson { uid, cards } => {
+                self.session.module = Module::People;
+                self.ui.people_query.clear();
+                self.ui.people_book = None;
+                self.ui.person = Some(uid.clone());
+                self.ui.people_view = if cards { crate::panes::people::PeopleView::Cards } else { crate::panes::people::PeopleView::People };
+                self.ui.focus_main = true;
+            }
             Action::Search(q) => {
                 self.ui.search_text = q.clone();
                 self.ui.tab = RibbonTab::Search;

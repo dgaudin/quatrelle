@@ -61,52 +61,95 @@ pub(super) fn person_link(ui: &mut Ui, t: &Tokens, text: RichText) -> egui::Resp
     r.on_hover_cursor(egui::CursorIcon::PointingHand)
 }
 
-/// What a name above a message opens: a contact card on a click (or double-click), as
-/// Outlook's, and the same things on a right-click.
+/// What a name above a message opens: a contact card on a click or a right-click, as Outlook's,
+/// and the things that can be done with the person on a right-click too.
 pub(super) fn person_menus(s: &Session, t: &Tokens, r: &egui::Response, a: &EmailAddress, acts: &mut Vec<Action>) {
     if a.email.trim().is_empty() {
         return;
     }
     let known = known_contact(&r.ctx, s, &a.email);
-    egui::Popup::menu(r).id(r.id.with("card")).show(|ui| contact_card(s, ui, t, a, known.as_ref(), acts));
-    r.context_menu(|ui| {
-        if ui.button(tl!("Send email")).clicked() {
-            acts.push(Action::Run("mail.new", json!({"to": a.to_string()})));
-            ui.close();
-        }
-        match &known {
-            Some(card) => {
-                if ui.button(tl!("Edit contact…")).clicked() {
-                    acts.push(Action::Dialog(crate::Dialog::edit_contact(card)));
-                    ui.close();
-                }
+    let actions_key = actions_key(&a.email);
+    if r.secondary_clicked() {
+        r.ctx.data_mut(|d| d.insert_temp(actions_key, true));
+    } else if r.clicked() {
+        r.ctx.data_mut(|d| d.insert_temp(actions_key, false));
+    }
+    let with_actions = r.ctx.data(|d| d.get_temp::<bool>(actions_key).unwrap_or(false));
+    egui::Popup::from_response(r)
+        .id(r.id.with("card"))
+        .open_memory((r.clicked() || r.secondary_clicked()).then_some(egui::SetOpenCommand::Bool(true)))
+        .kind(egui::PopupKind::Popup)
+        .close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside)
+        .show(|ui| contact_card(s, ui, t, a, known.as_ref(), with_actions, actions_key, acts));
+}
+
+/// What can be done with a person, from the card's menu and from a right-click: write to them,
+/// change or make their contact, open them in People or as a business card, and copy the address.
+fn person_actions(ui: &mut Ui, a: &EmailAddress, known: Option<&quatrelle_engine::model::vcard::Card>, acts: &mut Vec<Action>) {
+    if ui.button((widgets::menu_icon(Some(Icon::NewMail)), tl!("Send email"))).clicked() {
+        acts.push(Action::Run("mail.new", json!({"to": a.to_string()})));
+        ui.close();
+    }
+    match known {
+        Some(card) => {
+            if ui.button((widgets::menu_icon(Some(Icon::Person)), tl!("Edit contact…"))).clicked() {
+                acts.push(Action::Dialog(crate::Dialog::edit_contact(card)));
+                ui.close();
             }
-            None => {
-                if ui.button(tl!("Add to contacts…")).clicked() {
-                    acts.push(Action::Dialog(crate::Dialog::contact_from(a)));
-                    ui.close();
-                }
+        }
+        None => {
+            if ui.button((widgets::menu_icon(Some(Icon::Person)), tl!("Add to contacts…"))).clicked() {
+                acts.push(Action::Dialog(crate::Dialog::contact_from(a)));
+                ui.close();
             }
         }
+    }
+    if let Some(card) = known {
         ui.separator();
-        if ui.button(tl!("Copy address")).clicked() {
-            ui.ctx().copy_text(a.email.clone());
+        if ui.button((widgets::menu_icon(Some(Icon::People)), tl!("Open in People"))).clicked() {
+            acts.push(Action::OpenPerson { uid: card.uid.clone(), cards: false });
             ui.close();
         }
-    });
+        if ui.button((widgets::menu_icon(Some(Icon::Layout)), tl!("Open business card"))).clicked() {
+            acts.push(Action::OpenPerson { uid: card.uid.clone(), cards: true });
+            ui.close();
+        }
+    }
+    ui.separator();
+    if ui.button((widgets::menu_icon(Some(Icon::Copy)), tl!("Copy address"))).clicked() {
+        ui.ctx().copy_text(a.email.clone());
+        ui.close();
+    }
+}
+
+/// The key the card's unfolded state is kept under, by address (an address book's card is the
+/// same person whichever message names them).
+fn folded_key(email: &str) -> egui::Id {
+    egui::Id::unique(("contact-card-folded", email.trim().to_ascii_lowercase()))
+}
+
+/// The key saying whether the card was opened by a right-click: its actions show under it.
+fn actions_key(email: &str) -> egui::Id {
+    egui::Id::unique(("contact-card-actions", email.trim().to_ascii_lowercase()))
 }
 
 /// A small card for someone (Outlook's contact card): who they are, their address (a click
-/// writes to them), and what can be done.
+/// writes to them), what can be done, and, unfolded, their numbers, organisation and address
+/// books.
 pub(super) fn contact_card(
     s: &Session,
     ui: &mut Ui,
     t: &Tokens,
     a: &EmailAddress,
     known: Option<&quatrelle_engine::model::vcard::Card>,
+    with_actions: bool,
+    actions: egui::Id,
     acts: &mut Vec<Action>,
 ) {
-    ui.set_min_width(260.0);
+    let key = folded_key(&a.email);
+    let unfolded = ui.data(|d| d.get_temp::<bool>(key).unwrap_or(false));
+    ui.set_min_width(300.0);
+    ui.set_max_width(360.0);
     ui.horizontal(|ui| {
         let (ar, _) = ui.allocate_exact_size(vec2(40.0, 40.0), Sense::hover());
         let photo = known.and_then(|c| c.photo.clone()).or_else(|| s.person_photo(a.email.trim()).cloned());
@@ -159,5 +202,134 @@ pub(super) fn contact_card(
             ui.ctx().copy_text(a.email.clone());
             ui.close();
         }
+        let more = widgets::more_pill(ui, "More actions", t);
+        if more.clicked() {
+            ui.data_mut(|d| d.insert_temp(actions, !with_actions));
+        }
     });
+    if with_actions {
+        ui.add_space(6.0);
+        ui.separator();
+        person_actions(ui, a, known, acts);
+    }
+    if unfolded {
+        ui.add_space(6.0);
+        ui.separator();
+        card_details(s, ui, t, a, known);
+    }
+    ui.add_space(4.0);
+    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+        let (label, icon) = if unfolded { ("Show less", Icon::ChevronUp) } else { ("Show more", Icon::ChevronDown) };
+        let r = ui.add(egui::Button::new((widgets::menu_icon(Some(icon)), tl!(label))).frame(false));
+        if r.on_hover_text(tl!(label)).clicked() {
+            ui.data_mut(|d| d.insert_temp(key, !unfolded));
+        }
+    });
+}
+
+/// The card's unfolded part: the ways to reach them, their work details, the address books that
+/// keep them, and their note.
+fn card_details(s: &Session, ui: &mut Ui, t: &Tokens, a: &EmailAddress, known: Option<&quatrelle_engine::model::vcard::Card>) {
+    detail_heading(ui, t, "Contact");
+    let mut any = false;
+    if let Some(c) = known {
+        for e in &c.emails {
+            detail_row(ui, t, Icon::NewMail, &e.value);
+            any = true;
+        }
+        for ph in &c.phones {
+            detail_row(ui, t, Icon::Phone, &ph.value);
+            any = true;
+        }
+        for ad in c.addresses.iter().filter(|x| !x.is_empty()) {
+            detail_row(ui, t, Icon::Location, &ad.one_line());
+            any = true;
+        }
+    }
+    if !any {
+        detail_row(ui, t, Icon::NewMail, a.email.trim());
+    }
+    if let Some(c) = known {
+        let work = [
+            (tl!("Job title"), c.title.as_str()),
+            (tl!("Company"), c.org.as_str()),
+            (tl!("Department"), c.department.as_str()),
+            (tl!("Office"), c.office.as_str()),
+            (tl!("Manager"), c.manager.as_str()),
+            (tl!("Assistant"), c.assistant.as_str()),
+        ];
+        if work.iter().any(|(_, v)| !v.is_empty()) {
+            detail_heading(ui, t, "Organisation");
+            for (what, value) in work {
+                if !value.is_empty() {
+                    detail_row(ui, t, Icon::Person, &format!("{}: {}", what, value));
+                }
+            }
+        }
+    }
+    let books = address_books(s, &a.email);
+    if !books.is_empty() {
+        detail_heading(ui, t, "Address books");
+        for book in books.iter().take(6) {
+            detail_row(ui, t, Icon::AddressBook, book);
+        }
+        if books.len() > 6 {
+            detail_row(ui, t, Icon::AddressBook, &tf!("and {n} more", n = books.len() - 6));
+        }
+    }
+    if let Some(c) = known
+        && !c.note.trim().is_empty()
+    {
+        detail_heading(ui, t, "Notes");
+        ui.label(RichText::new(c.note.trim()).color(t.text));
+    }
+}
+
+fn detail_heading(ui: &mut Ui, t: &Tokens, label: &str) {
+    ui.add_space(4.0);
+    ui.label(RichText::new(tl!(label)).font(theme::bold(12.5)).color(t.dim));
+}
+
+fn detail_row(ui: &mut Ui, t: &Tokens, icon: Icon, value: &str) {
+    if value.trim().is_empty() {
+        return;
+    }
+    ui.horizontal(|ui| {
+        let (r, _) = ui.allocate_exact_size(vec2(16.0, 16.0), Sense::hover());
+        icons::paint(ui.painter(), r, icon, t.dim);
+        ui.add(egui::Label::new(RichText::new(value.trim()).color(t.text)).wrap());
+    });
+}
+
+/// The address books that keep this address, by their name (Outlook's membership of a person:
+/// the books they are in).
+fn address_books(s: &Session, email: &str) -> Vec<String> {
+    let email = email.trim();
+    if email.is_empty() {
+        return Vec::new();
+    }
+    let mut out = Vec::new();
+    for pim in s.pim.values() {
+        for card in &pim.cards {
+            if !card.card.emails.iter().any(|e| e.value.trim().eq_ignore_ascii_case(email)) {
+                continue;
+            }
+            let name = pim
+                .books
+                .iter()
+                .find(|b| b.id == card.book)
+                .map(|b| {
+                    if b.id == quatrelle_engine::model::pim::LOCAL || b.name.is_empty() || b.name == "Contacts" {
+                        tl!("Contacts").to_string()
+                    } else {
+                        b.name.clone()
+                    }
+                })
+                .unwrap_or_else(|| tl!("Contacts").to_string());
+            if !out.contains(&name) {
+                out.push(name);
+            }
+        }
+    }
+    out
 }

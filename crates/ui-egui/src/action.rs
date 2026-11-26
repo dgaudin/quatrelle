@@ -61,6 +61,11 @@ pub enum Action {
     NewNote,
     /// Show a task in Tasks (from its reminder).
     OpenTask(String),
+    /// Show someone in People: their full card (`cards`: false) or their business card (`true`).
+    OpenPerson {
+        uid: String,
+        cards: bool,
+    },
     /// Search every folder for this (shown in the box, with the Search tab).
     Search(String),
     SetDark(Option<bool>),
