@@ -122,6 +122,9 @@ fn task_lists_are_per_account_with_the_archive_read_only() {
     let archive = lists.iter().find(|l| l.archive).expect("the online archive");
     assert!(archive.read_only && archive.id == "sample|archive" && archive.account.as_deref() == Some("sample"));
     assert!(lists.iter().any(|l| l.mailbox.as_deref() == Some("team@contoso.example")), "{lists:?}");
+    assert!(!lists.iter().any(|l| l.mailbox.as_deref() == Some("archive")), "the online archive isn't a shared mailbox: {lists:?}");
+    let email = s.accounts[0].config.email.clone();
+    assert_eq!(lists.iter().find(|l| l.id == "sample").map(|l| l.name.as_str()), Some(email.as_str()), "named by its address, as the folder pane");
     // A task typed in a shared mailbox's list is refused there, not made in the account's own.
     let before = s.tasks("", true).len();
     let err = s.run("task.create", &json!({"subject": "Shared", "list": "sample|mailbox:team@contoso.example"})).unwrap_err();

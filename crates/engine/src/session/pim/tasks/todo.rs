@@ -48,7 +48,9 @@ impl Session {
     fn build_task_lists(&self) -> Vec<TaskList> {
         let mut out = vec![TaskList { id: "todo".into(), name: "To-Do List".into(), account: None, read_only: false, archive: false, mailbox: None }];
         for a in &self.accounts {
-            let name = if a.config.name.trim().is_empty() { a.config.email.clone() } else { a.config.name.clone() };
+            // By its address, as the folder pane heads the account: several accounts carry the
+            // same person's name.
+            let name = if a.config.email.trim().is_empty() { a.config.name.clone() } else { a.config.email.clone() };
             out.push(TaskList { id: a.config.id.clone(), name, account: Some(a.config.id.clone()), read_only: false, archive: false, mailbox: None });
             // The online archive's list only when the account has one (an archive folder among
             // its folders), not for every Exchange account.
@@ -62,7 +64,8 @@ impl Session {
                     mailbox: None,
                 });
             }
-            let mut shared: Vec<&str> = a.folders.iter().filter_map(|f| f.mailbox.as_deref()).collect();
+            // The online archive's folders name a mailbox too: it has its own list above.
+            let mut shared: Vec<&str> = a.folders.iter().filter(|f| !f.archive).filter_map(|f| f.mailbox.as_deref()).collect();
             shared.sort_unstable();
             shared.dedup();
             for mailbox in shared {
