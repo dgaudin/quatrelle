@@ -455,6 +455,8 @@ fn main() -> eframe::Result {
             use winit::platform::x11::EventLoopBuilderExtX11;
             b.with_x11();
         }));
+        // Its windows named as the desktop entry says, so the dock shows Quatrelle's icon.
+        desktop::wm_class::name_windows(quatrelle_ui_egui::APP_ID);
     }
     // A window that can't open says why, rather than the app leaving without a word (or
     // staying in the background); a panic on the way is caught for that too.

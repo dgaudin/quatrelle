@@ -32,6 +32,8 @@ pub(crate) mod state_writer;
 pub(crate) mod tray;
 pub(crate) mod window_frame;
 pub(crate) mod windows_programs;
+#[cfg(all(unix, not(target_os = "macos")))]
+pub(crate) mod wm_class;
 
 #[derive(Default)]
 pub(crate) struct Desktop {
