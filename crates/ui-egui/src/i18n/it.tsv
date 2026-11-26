@@ -2524,3 +2524,21 @@ presence	Offline	Offline
 	Microsoft 365 can't move a calendar between groups	Microsoft 365 non può spostare un calendario tra gruppi
 	Group name	Nome del gruppo
 	This calendar isn't in Outlook's calendar groups yet	Questo calendario non è ancora in un gruppo di calendari di Outlook
+	Outlook's own calendar group can't be changed here	Un gruppo di calendari di Outlook non può essere modificato qui
+	A calendar group that still holds calendars can't be deleted here	Un gruppo di calendari che contiene ancora calendari non può essere eliminato qui
+	a calendar group that still holds calendars can't be deleted here	Un gruppo di calendari che contiene ancora calendari non può essere eliminato qui
+	this account's server doesn't keep calendar groups	Il server di questo account non conserva gruppi di calendari
+	it's the first calendar group already	È già il primo gruppo di calendari
+	it's the last calendar group already	È già l'ultimo gruppo di calendari
+	this calendar was opened by its owner's address; it has no shortcut in Outlook's groups	Questo calendario è stato aperto dall'indirizzo del suo proprietario; non ha un collegamento nei gruppi di Outlook
+	the server doesn't name the group My Calendars is in	Il server non nomina il gruppo in cui si trovano I miei calendari
+	the account's main calendar stays in My Calendars	Il calendario principale dell'account resta in I miei calendari
+	it's the first already	È già il primo
+	it's the last already	È già l'ultimo
+	it's removed from the list: bring it back first	È stato rimosso dall'elenco: riportalo prima
+	the account's main calendar stays as it is	Il calendario principale dell'account resta com'è
+	only the account's own calendars can be changed	Solo i calendari propri dell'account possono essere modificati
+	the server hasn't listed the calendars yet	Il server non ha ancora elencato i calendari
+	this account's server doesn't allow it	Il server di questo account non lo consente
+	the account's main calendar stays in the list	Il calendario principale dell'account resta nell'elenco
+	one opened by its owner's address or subscribed to by its link goes by its own Remove	Quello aperto dall'indirizzo del proprietario o sottoscritto tramite il suo collegamento si rimuove con il suo Rimuovi

@@ -36,7 +36,7 @@ fn a_contact_saved_from_the_form_keeps_its_extra_addresses_and_kinds() {
     let made = a.session.run(
         "contact.create",
         &json!({
-            "name": "Ana Lima",
+            "name": "Ana Exemple",
             "phones": [{"value": "+1 555 0100", "kind": "pager"}, {"value": "+1 555 0101", "kind": "home"}],
             "addresses": [address("home", "Gent"), address("home", "Brugge"), address("postal", "Antwerpen")],
         }),
@@ -67,7 +67,7 @@ fn a_number_typed_in_the_other_box_takes_that_boxs_kind() {
     let made = a.session.run(
         "contact.create",
         &json!({
-            "name": "Ana Lima",
+            "name": "Ana Exemple",
             "phones": [{"value": "+1 555 0100", "kind": "pager"}],
             "addresses": [{"kind": "postal", "street": "1 Quay", "city": "Antwerpen", "postcode": "2000"}],
         }),

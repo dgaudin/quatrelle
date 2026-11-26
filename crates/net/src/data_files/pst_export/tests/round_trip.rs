@@ -68,7 +68,7 @@ fn through(mails: &[Mail], ansi: bool) -> Vec<(String, String, Flags)> {
     let mut summaries = Vec::new();
     for (uid, m) in (1..).zip(mails) {
         let d = mime::Draft {
-            to: vec![EmailAddress::new("Ana Lima", "ana@example.com")],
+            to: vec![EmailAddress::new("Ana Exemple", "ana@example.com")],
             subject: m.subject.clone(),
             body: m.body.clone(),
             ..Default::default()

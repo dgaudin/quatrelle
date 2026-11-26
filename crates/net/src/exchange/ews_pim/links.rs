@@ -26,11 +26,19 @@ pub(crate) struct CalendarLink {
     pub group: String,
 }
 
+/// A group of the Calendar pane: its name, and whether Quatrelle wrote its header (so it may be
+/// renamed, moved or deleted here; the save stamp is the writer's session, [MS-OXOCFG] 2.2.9.4).
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub(crate) struct CalendarGroup {
+    pub name: String,
+    pub ours: bool,
+}
+
 /// What the Common Views folder says of the Calendar pane: its groups in Outlook's order, and the
 /// calendars kept in them (the account's own ones have no address).
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub(crate) struct Shortcuts {
-    pub groups: Vec<String>,
+    pub groups: Vec<CalendarGroup>,
     pub links: Vec<CalendarLink>,
 }
 
@@ -52,38 +60,6 @@ const MAX_PAGES: usize = 10;
 const MAX_LINKS: usize = 300;
 /// Most groups kept (a hostile or huge mailbox can't fill the pane).
 const MAX_GROUPS: usize = 300;
-
-/// A navigation shortcut that names a calendar in a group: its X.500 directory name, the name
-/// Outlook shows, and the group. `None` for another shortcut, or one that isn't a calendar
-/// another user owns. Read as hostile XML. For the fuzz target too.
-fn shortcut_of(it: &El) -> Option<(String, String, String)> {
-    let text = |tag: &str| ext_text(it, tag);
-    let int = |tag: &str| text(tag).and_then(|v| v.trim().parse::<i64>().ok());
-    // A calendar (section 3) another user owns (kind 2), in a group.
-    if text("0x001A") != Some(WLINK_CLASS) || int("0x6852") != Some(CALENDAR_SECTION) || int("0x6849") != Some(WLINK_SHARED) {
-        return None;
-    }
-    let dn = text("0x6854").and_then(|v| crate::ews::unb64(v.trim())).and_then(|b| address_book_dn(&b))?;
-    let name = clean(text("0x0E1D").unwrap_or_default());
-    let group = clean(text("0x6851").unwrap_or_default());
-    Some((dn, name, group))
-}
-
-/// The calendars named by navigation shortcuts in a `FindItem` answer's items, each address book
-/// entry once, at most [`MAX_LINKS`], before the directory resolves them. For the fuzz target.
-#[doc(hidden)]
-pub fn shortcuts_listed(doc: &El) -> Vec<(String, String, String)> {
-    let items: Vec<El> = doc.find("Items").map(|i| i.kids.clone()).unwrap_or_default();
-    let mut out: Vec<(String, String, String)> = Vec::new();
-    for it in items.iter().take(MAX_LINKS) {
-        let Some((dn, name, group)) = shortcut_of(it) else { continue };
-        if out.iter().any(|(d, _, _)| *d == dn) {
-            continue;
-        }
-        out.push((dn, name, group));
-    }
-    out
-}
 /// Most folders of the mailbox root probed for the Common Views folder.
 const MAX_PROBED: usize = 24;
 /// Most addresses looked up in the directory (a group has few people; a hostile server can't
@@ -97,15 +73,16 @@ const MAX_NAME: usize = 255;
 /// The properties a shortcut carries that this reads: class, name, header id, type, ordinal,
 /// entry and store ids, folder type, group id, group name, section and address book entry id
 /// ([MS-OXOCFG] 2.2.9.1–2.2.9.16).
-const PROPS: [(&str, &str); 12] = [
+const PROPS: [(&str, &str); 13] = [
     ("0x001A", "String"),
     ("0x0E1D", "String"),
     ("0x6842", "Binary"),
+    ("0x6847", "Integer"),
     ("0x6849", "Integer"),
     ("0x684B", "Binary"),
     ("0x684C", "Binary"),
     ("0x684E", "Binary"),
-    ("0x684F", "Binary"),
+    ("0x684F", "CLSID"),
     ("0x6850", "Binary"),
     ("0x6851", "String"),
     ("0x6852", "Integer"),
@@ -135,10 +112,9 @@ pub(super) fn common_views(c: &Client) -> Result<Option<String>> {
     let found = match find_common_views(c) {
         Ok(found) => found,
         Err(e) => {
-            // A probe that failed isn't made again this session: the folder isn't found by it,
-            // and twenty-four probes at each sync would only say so again.
+            // A probe that failed isn't remembered as "there is none": a transient refusal
+            // would erase the groups for the rest of the session. The next sync asks again.
             log::info!("navigation shortcuts: the Common Views folder couldn't be read ({e})");
-            c.keep_common_views(&None);
             return Err(e);
         }
     };
@@ -217,7 +193,39 @@ struct Wlink {
     group_id: Option<String>,
     header_id: Option<String>,
     ordinal: Vec<u8>,
+    save_stamp: Option<i64>,
     address_book_eid: Option<Vec<u8>>,
+}
+
+/// One navigation shortcut, when its message class is the shortcut's; read as hostile XML.
+fn wlink(it: &El) -> Option<Wlink> {
+    let is_link = ext_text(it, "0x001A").is_some_and(|class| class.trim().eq_ignore_ascii_case(WLINK_CLASS));
+    if !is_link {
+        return None;
+    }
+    Some(Wlink {
+        section: int_prop(it, "0x6852"),
+        kind: int_prop(it, "0x6849"),
+        name: clean(ext_text(it, "0x0E1D").unwrap_or_default()),
+        group_name: clean(ext_text(it, "0x6851").unwrap_or_default()),
+        group_id: guid_prop(it, "0x6850"),
+        header_id: guid_prop(it, "0x6842"),
+        ordinal: bin_prop(it, "0x684B").unwrap_or_default(),
+        save_stamp: int_prop(it, "0x6847"),
+        address_book_eid: bin_prop(it, "0x6854"),
+    })
+}
+
+/// The parser the fuzz target drives: the production read's shortcut parser and the write's own
+/// shortcut parser, on the same answer. Returns how many items were read.
+#[doc(hidden)]
+pub fn shortcuts_checked(doc: &El) -> usize {
+    let items: Vec<El> = doc.find("Items").map(|i| i.kids.clone()).unwrap_or_default();
+    for it in &items {
+        let _ = wlink(it);
+        let _ = write::shortcut_checked(it);
+    }
+    items.len()
 }
 
 /// The shortcuts, page after page, as the server gives them: the calendar ones kept, in the
@@ -262,20 +270,9 @@ fn shape(c: &Client, items: &[El], pages: usize) -> Shortcuts {
         if let (Some(s), Some(k)) = (section, kind) {
             *by_section.entry((s, k)).or_default() += 1;
         }
-        let is_link = ext_text(it, "0x001A").is_some_and(|class| class.trim().eq_ignore_ascii_case(WLINK_CLASS));
-        if !is_link {
-            continue;
+        if let Some(w) = wlink(it) {
+            wlinks.push(w);
         }
-        wlinks.push(Wlink {
-            section,
-            kind,
-            name: clean(ext_text(it, "0x0E1D").unwrap_or_default()),
-            group_name: clean(ext_text(it, "0x6851").unwrap_or_default()),
-            group_id: guid_prop(it, "0x6850"),
-            header_id: guid_prop(it, "0x6842"),
-            ordinal: bin_prop(it, "0x684B").unwrap_or_default(),
-            address_book_eid: bin_prop(it, "0x6854"),
-        });
     }
     // The group headers name their groups, whatever the members carry ([MS-OXOCFG] 2.2.9.3:
     // the members point at the header by its id, `PidTagWlinkGroupClsid`).
@@ -293,16 +290,17 @@ fn shape(c: &Client, items: &[El], pages: usize) -> Shortcuts {
     // The groups, in Outlook's order: the headers by their ordinals, then a group a member
     // names without a header (it may hold only an entry that doesn't resolve).
     let group_of = |w: &Wlink| w.group_id.as_ref().and_then(|id| headers.get(id)).cloned().unwrap_or_else(|| w.group_name.clone());
-    let mut group_headers: Vec<(String, Vec<u8>)> = wlinks
-        .iter()
-        .filter(|w| w.section == Some(CALENDAR_SECTION) && w.kind == Some(WLINK_HEADER) && !w.name.is_empty())
-        .map(|w| (w.name.clone(), w.ordinal.clone()))
-        .collect();
-    group_headers.sort_by(|a, b| a.1.cmp(&b.1));
-    let mut groups: Vec<String> = Vec::new();
-    for (name, _) in group_headers {
-        if !groups.iter().any(|g| g.eq_ignore_ascii_case(&name)) {
-            groups.push(name);
+    let mut group_headers: Vec<&Wlink> =
+        wlinks.iter().filter(|w| w.section == Some(CALENDAR_SECTION) && w.kind == Some(WLINK_HEADER) && !w.name.is_empty()).collect();
+    group_headers.sort_by(|a, b| a.ordinal.cmp(&b.ordinal));
+    let stamp = i64::from(c.group_stamp());
+    let mut groups: Vec<CalendarGroup> = Vec::new();
+    for w in group_headers {
+        let ours = w.save_stamp == Some(stamp);
+        if let Some(g) = groups.iter_mut().find(|g| g.name.eq_ignore_ascii_case(&w.name)) {
+            g.ours |= ours;
+        } else {
+            groups.push(CalendarGroup { name: w.name.clone(), ours });
         }
     }
     for w in &wlinks {
@@ -310,16 +308,16 @@ fn shape(c: &Client, items: &[El], pages: usize) -> Shortcuts {
             continue;
         }
         let group = group_of(w);
-        if !group.is_empty() && !groups.iter().any(|g| g.eq_ignore_ascii_case(&group)) {
-            groups.push(group);
+        if !group.is_empty() && !groups.iter().any(|g| g.name.eq_ignore_ascii_case(&group)) {
+            groups.push(CalendarGroup { name: group, ours: false });
         }
     }
     if groups.len() > MAX_GROUPS {
         groups.truncate(MAX_GROUPS);
     }
     let mut out: Vec<CalendarLink> = Vec::new();
-    let mut resolved: HashMap<String, Option<String>> = HashMap::new();
     let (mut found, mut unresolved, mut not_looked) = (0usize, 0usize, 0usize);
+    let mut looked = 0usize;
     for w in &wlinks {
         if w.section != Some(CALENDAR_SECTION) {
             continue;
@@ -333,32 +331,39 @@ fn shape(c: &Client, items: &[El], pages: usize) -> Shortcuts {
             String::new()
         } else {
             let Some(dn) = w.address_book_eid.as_deref().and_then(address_book_dn) else { continue };
-            let email = match resolved.get(&dn) {
-                Some(e) => e.clone(),
-                None => {
-                    let e = if resolved.len() < MAX_LOOKUPS {
-                        match resolve(c, &dn) {
-                            Some(e) => {
-                                found += 1;
-                                Some(e)
-                            }
-                            None => {
-                                unresolved += 1;
-                                None
-                            }
-                        }
+            let email = match c.resolved_name(&dn) {
+                Some(known) => {
+                    if known.is_some() {
+                        found += 1
                     } else {
-                        not_looked += 1;
-                        None
-                    };
-                    resolved.insert(dn, e.clone());
-                    e
+                        unresolved += 1
+                    }
+                    known
+                }
+                None if looked >= MAX_LOOKUPS => {
+                    not_looked += 1;
+                    None
+                }
+                None => {
+                    looked += 1;
+                    let email = resolve(c, &dn);
+                    if email.is_some() {
+                        found += 1
+                    } else {
+                        unresolved += 1
+                    }
+                    email
                 }
             };
             let Some(email) = email.filter(|e| !e.eq_ignore_ascii_case(c.email())) else { continue };
             email
         };
         let group = group_of(w);
+        // A group beyond the cap isn't listed: its calendars aren't either, or the pane would
+        // make the group again from them.
+        if !group.is_empty() && !groups.iter().any(|g| g.name.eq_ignore_ascii_case(&group)) {
+            continue;
+        }
         let name = if w.name.is_empty() { email.clone() } else { w.name.clone() };
         let duplicate = if own {
             out.iter().any(|l| l.email.is_empty() && l.name.eq_ignore_ascii_case(&name) && l.group == group)
@@ -460,12 +465,46 @@ pub(crate) fn address_book_dn(b: &[u8]) -> Option<String> {
 
 /// The address behind an X.500 name, as Exchange's directory has it.
 fn resolve(c: &Client, dn: &str) -> Option<String> {
-    let m = c
+    if let Some(known) = c.resolved_name(dn) {
+        return known;
+    }
+    let email = c
         .call_one(&format!(
             "<m:ResolveNames ReturnFullContactData=\"false\" SearchScope=\"ActiveDirectory\"><m:UnresolvedEntry>{}</m:UnresolvedEntry></m:ResolveNames>",
             esc(dn)
         ))
-        .ok()?;
-    let email = m.find("Mailbox").and_then(|b| b.text_of("EmailAddress"))?.trim().to_ascii_lowercase();
-    email.contains('@').then_some(email)
+        .ok()
+        .and_then(|m| m.find("Mailbox").and_then(|b| b.text_of("EmailAddress")).map(str::trim).map(str::to_ascii_lowercase))
+        .filter(|e| e.contains('@'));
+    c.keep_resolved_name(dn, email.clone());
+    email
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::ews::parse;
+
+    /// A shortcut's shown name and group are bounded, whatever the server says; the production
+    /// parser is the one the fuzz target drives.
+    #[test]
+    fn a_shortcuts_name_and_group_are_bounded() {
+        let entry = "AAAAANynQMjAQhAatLkIACsv4YIAAAAAAAAAAC9vPVN0dWRpby9jbj1BbmEA";
+        let long = "n".repeat(5000);
+        let xml = format!(
+            "<m:FindItemResponseMessage><m:Items><t:Message>\
+             <t:ExtendedProperty><t:ExtendedFieldURI PropertyTag=\"0x001A\" PropertyType=\"String\"/><t:Value>IPM.Microsoft.WunderBar.Link</t:Value></t:ExtendedProperty>\
+             <t:ExtendedProperty><t:ExtendedFieldURI PropertyTag=\"0x6852\" PropertyType=\"Integer\"/><t:Value>3</t:Value></t:ExtendedProperty>\
+             <t:ExtendedProperty><t:ExtendedFieldURI PropertyTag=\"0x6849\" PropertyType=\"Integer\"/><t:Value>2</t:Value></t:ExtendedProperty>\
+             <t:ExtendedProperty><t:ExtendedFieldURI PropertyTag=\"0x6851\" PropertyType=\"String\"/><t:Value>{long}</t:Value></t:ExtendedProperty>\
+             <t:ExtendedProperty><t:ExtendedFieldURI PropertyTag=\"0x0E1D\" PropertyType=\"String\"/><t:Value>{long}</t:Value></t:ExtendedProperty>\
+             <t:ExtendedProperty><t:ExtendedFieldURI PropertyTag=\"0x6854\" PropertyType=\"Binary\"/><t:Value>{entry}</t:Value></t:ExtendedProperty>\
+             </t:Message></m:Items></m:FindItemResponseMessage>"
+        );
+        let doc = parse(&xml);
+        assert_eq!(shortcuts_checked(&doc), 1);
+        let w = wlink(doc.find("Items").and_then(|i| i.kids.first()).expect("the shortcut")).expect("a shortcut");
+        assert!(w.name.chars().count() <= 255, "{} characters in a name", w.name.chars().count());
+        assert!(w.group_name.chars().count() <= 255, "{} characters in a group", w.group_name.chars().count());
+    }
 }

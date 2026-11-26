@@ -576,8 +576,8 @@ a second. A conversation you're no longer in, or one Graph won't serve, isn't ma
 ### Announcements
 
 With **Announce new messages** on, each new message from someone else is a desktop notification.
-Its title says who sent it, as the conversation's members name them: "Ana Lima", "Ana Lima in
-Agenda" for a group or a meeting's chat, "Ana Lima mentioned you in Agenda" when it names you;
+Its title says who sent it, as the conversation's members name them: "Ana Exemple", "Ana Exemple in
+Agenda" for a group or a meeting's chat, "Ana Exemple mentioned you in Agenda" when it names you;
 "(External)" follows a sender outside your organization (or not shown to be of it: anyone who isn't
 among the conversation's members), "(App)" an
 application. Its text is the message's first line ("New message" when it has none), as plain

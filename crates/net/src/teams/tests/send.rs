@@ -119,7 +119,7 @@ fn message(server: &Server, id: &str) -> crate::fake_graph::FakeMessage {
 }
 
 fn ana(id: u32) -> Mention {
-    Mention { id, text: "Ana Lima".into(), user_id: Some("u-ana".into()) }
+    Mention { id, text: "Ana Exemple".into(), user_id: Some("u-ana".into()) }
 }
 
 fn all_hits(server: &Server) -> u32 {
@@ -130,11 +130,11 @@ fn all_hits(server: &Server) -> u32 {
 fn a_message_with_mentions_goes_with_its_array() {
     let server = serve_teams(teams_with(vec![chat(CHAT, T0, 2)]));
     let c = client(&server);
-    let v = c.send_html(CHAT, "<p>hi <at id=\"0\">Ana Lima</at></p>", &[ana(0)]).unwrap();
+    let v = c.send_html(CHAT, "<p>hi <at id=\"0\">Ana Exemple</at></p>", &[ana(0)]).unwrap();
     let sent = posts(&server);
     assert_eq!(
         sent[0].1["mentions"],
-        json!([{"id":0,"mentionText":"Ana Lima","mentioned":{"user":{"id":"u-ana","displayName":"Ana Lima","userIdentityType":"aadUser"}}}])
+        json!([{"id":0,"mentionText":"Ana Exemple","mentioned":{"user":{"id":"u-ana","displayName":"Ana Exemple","userIdentityType":"aadUser"}}}])
     );
     assert_eq!(message_of(CHAT, &v).mentions[0].user_id.as_deref(), Some("u-ana"));
     c.send_html(CHAT, "<p>plain</p>", &[]).unwrap();
@@ -145,16 +145,16 @@ fn a_message_with_mentions_goes_with_its_array() {
 fn at_and_mentions_must_agree() {
     let server = serve_teams(teams_with(vec![chat(CHAT, T0, 2)]));
     let c = client(&server);
-    let a = c.send_html(CHAT, "<p><at id=\"1\">Ana Lima</at></p>", &[ana(0)]);
+    let a = c.send_html(CHAT, "<p><at id=\"1\">Ana Exemple</at></p>", &[ana(0)]);
     assert!(matches!(&a, Err(NetError::Protocol(m)) if m.starts_with("HTTP 400")), "{a:?}");
-    let b = c.send_html(CHAT, "<p>Ana Lima</p>", &[ana(0)]);
+    let b = c.send_html(CHAT, "<p>Ana Exemple</p>", &[ana(0)]);
     assert!(matches!(&b, Err(NetError::Protocol(m)) if m.starts_with("HTTP 400")), "{b:?}");
-    let d = c.send_html(CHAT, "<p><at id=\"0\">Ana Lima</at></p>", &[]);
+    let d = c.send_html(CHAT, "<p><at id=\"0\">Ana Exemple</at></p>", &[]);
     assert!(matches!(&d, Err(NetError::Protocol(m)) if m.starts_with("HTTP 400")), "{d:?}");
-    let e = c.edit_html(CHAT, OWN_MSG, "<p><at id=\"0\">Ana Lima</at></p>", &[]);
+    let e = c.edit_html(CHAT, OWN_MSG, "<p><at id=\"0\">Ana Exemple</at></p>", &[]);
     assert!(matches!(&e, Err(NetError::Protocol(m)) if m.starts_with("HTTP 400")), "{e:?}");
     assert_eq!(held(&server).len(), 2, "nothing was made");
-    c.edit_html(CHAT, OWN_MSG, "<p><at id=\"0\">Ana Lima</at></p>", &[ana(0)]).unwrap();
+    c.edit_html(CHAT, OWN_MSG, "<p><at id=\"0\">Ana Exemple</at></p>", &[ana(0)]).unwrap();
     assert_eq!(message(&server, OWN_MSG).mentions, ["u-ana"]);
 }
 

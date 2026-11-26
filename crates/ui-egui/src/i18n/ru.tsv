@@ -2526,3 +2526,21 @@ presence	Offline	Не в сети
 	Microsoft 365 can't move a calendar between groups	Microsoft 365 не может переместить календарь между группами
 	Group name	Название группы
 	This calendar isn't in Outlook's calendar groups yet	Этот календарь ещё не входит в группу календарей Outlook
+	Outlook's own calendar group can't be changed here	Группу календарей Outlook нельзя изменить здесь
+	A calendar group that still holds calendars can't be deleted here	Группу календарей, в которой ещё есть календари, нельзя удалить здесь
+	a calendar group that still holds calendars can't be deleted here	Группу календарей, в которой ещё есть календари, нельзя удалить здесь
+	this account's server doesn't keep calendar groups	Сервер этой учётной записи не хранит группы календарей
+	it's the first calendar group already	Это уже первая группа календарей
+	it's the last calendar group already	Это уже последняя группа календарей
+	this calendar was opened by its owner's address; it has no shortcut in Outlook's groups	Этот календарь открыт по адресу его владельца; у него нет ярлыка в группах Outlook
+	the server doesn't name the group My Calendars is in	Сервер не называет группу, в которой находятся Мои календари
+	the account's main calendar stays in My Calendars	Основной календарь учётной записи остаётся в Моих календарях
+	it's the first already	Это уже первый
+	it's the last already	Это уже последний
+	it's removed from the list: bring it back first	Он убран из списка: сначала верните его
+	the account's main calendar stays as it is	Основной календарь учётной записи остаётся как есть
+	only the account's own calendars can be changed	Менять можно только собственные календари учётной записи
+	the server hasn't listed the calendars yet	Сервер ещё не перечислил календари
+	this account's server doesn't allow it	Сервер этой учётной записи не разрешает это
+	the account's main calendar stays in the list	Основной календарь учётной записи остаётся в списке
+	one opened by its owner's address or subscribed to by its link goes by its own Remove	Открытый по адресу владельца или подписанный по ссылке убирается своим Удалить

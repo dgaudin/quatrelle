@@ -23,11 +23,11 @@ fn with_address(id: &str, name: &str, address: &str) -> Member {
 }
 
 fn ana_and_me() -> Vec<Member> {
-    vec![with_address(ME, "Riley Moreno", "riley@contoso.example"), with_address("u-ana", "Ana Lima", "ana@contoso.example")]
+    vec![with_address(ME, "Riley Moreno", "riley@contoso.example"), with_address("u-ana", "Ana Exemple", "ana@contoso.example")]
 }
 
 fn with_ana(row: ChatRow) -> ChatRow {
-    ChatRow { name: "Ana Lima".into(), kind: ChatKind::OneOnOne, members: 2, person: Some("u-ana".into()), ..row }
+    ChatRow { name: "Ana Exemple".into(), kind: ChatKind::OneOnOne, members: 2, person: Some("u-ana".into()), ..row }
 }
 
 /// The app in a chat `row` whose members are `members`, the pane settled.
@@ -44,7 +44,7 @@ fn call_offers_audio_and_video_and_asks_the_engine() {
     let row = with_ana(super::chat::group_row());
     let (mut a, dir, ctx) = called("teams-call-offered", row, ana_and_me());
     let (_, texts) = pane(&ctx, &mut a, vec![], SIZE);
-    let name = rect_of(&texts, |t| t == "Ana Lima").expect("the name");
+    let name = rect_of(&texts, |t| t == "Ana Exemple").expect("the name");
     let call = rect_of(&texts, |t| t == "Call").expect("Call drawn");
     assert!((call.center().y - name.center().y).abs() < 14.0, "beside the name: {call:?} {name:?}");
     assert!(has_text(&texts, "Open in Teams") && has_text(&texts, "Members: 2"), "{texts:?}");
@@ -68,7 +68,7 @@ fn call_offers_audio_and_video_and_asks_the_engine() {
 #[test]
 fn no_call_in_a_meeting_chat_a_chat_left_or_without_addresses() {
     let one = || with_ana(super::chat::group_row());
-    let no_address = vec![with_address(ME, "Riley Moreno", "riley@contoso.example"), with_address("u-ana", "Ana Lima", "")];
+    let no_address = vec![with_address(ME, "Riley Moreno", "riley@contoso.example"), with_address("u-ana", "Ana Exemple", "")];
     let cases = [
         ("meeting", ChatRow { kind: ChatKind::Meeting, ..one() }, ana_and_me()),
         ("left", ChatRow { left: true, ..one() }, ana_and_me()),
@@ -156,7 +156,7 @@ fn the_header_with_call_in_light_and_dark() {
         a.ui.dark = Some(dark);
         for size in [SIZE, TALL] {
             let texts = settled_at(&ctx, &mut a, size);
-            assert!(has_text(&texts, "Call") && has_text(&texts, "Ana Lima"), "{dark} {size:?}: {texts:?}");
+            assert!(has_text(&texts, "Call") && has_text(&texts, "Ana Exemple"), "{dark} {size:?}: {texts:?}");
         }
     }
     let _ = std::fs::remove_dir_all(dir);

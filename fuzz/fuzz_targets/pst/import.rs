@@ -65,7 +65,7 @@ fn good_file() -> Vec<u8> {
         event: ical::CalEvent { uid: "e1".into(), summary: "Screening".into(), start: 1_792_000_000, end: 1_792_003_600, ..Default::default() },
         ..Default::default()
     });
-    pim.cards.push(StoredCard { card: vcard::Card { uid: "c1".into(), name: "Ana Lima".into(), ..Default::default() }, ..Default::default() });
+    pim.cards.push(StoredCard { card: vcard::Card { uid: "c1".into(), name: "Ana Exemple".into(), ..Default::default() }, ..Default::default() });
     let _ = store.save_account_doc("a1", PIM_DOC, &pim);
     let path = scratch("good.pst");
     let _ = pst_export::export(&store, "a1", "Riley's mail", &path, &Default::default(), &mut |_| {});

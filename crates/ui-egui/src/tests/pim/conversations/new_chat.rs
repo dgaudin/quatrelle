@@ -35,7 +35,7 @@ fn person(id: &str, name: &str, address: &str, guest: bool) -> Person {
 }
 
 fn ana() -> Person {
-    person(ANA, "Ana Lima", "ana@contoso.example", false)
+    person(ANA, "Ana Exemple", "ana@contoso.example", false)
 }
 
 fn bruno() -> Person {
@@ -303,19 +303,19 @@ fn a_person_found_is_picked_as_a_chip() {
     let (mut a, dir, mut w, _) = Win::app("teams-new-pick", vec![], true);
     w.look_up(&mut a, "ana", vec![ana()]);
     let texts = w.texts(&mut a);
-    assert!(has_text(&texts, "Ana Lima") && has_text(&texts, "ana@contoso.example"), "{texts:?}");
+    assert!(has_text(&texts, "Ana Exemple") && has_text(&texts, "ana@contoso.example"), "{texts:?}");
     let acts = w.typed(&mut a, vec![enter()]);
-    assert_eq!(picked(&a), ["Ana Lima"]);
+    assert_eq!(picked(&a), ["Ana Exemple"]);
     assert_eq!(pane_of(&a).to, "");
     assert_eq!(asked(&acts, "teams.people"), [json!({"query": ""})]);
     for act in acts {
         a.act(act);
     }
     let texts = w.texts(&mut a);
-    assert!(has_text(&texts, "Ana Lima") && !has_text(&texts, "ana@contoso.example"), "the chip alone: {texts:?}");
+    assert!(has_text(&texts, "Ana Exemple") && !has_text(&texts, "ana@contoso.example"), "the chip alone: {texts:?}");
     w.look_up(&mut a, "ana", vec![ana()]);
     let texts = w.texts(&mut a);
-    assert_eq!(texts.iter().filter(|(t, _)| t == "Ana Lima").count(), 1, "the chip, not a second offer: {texts:?}");
+    assert_eq!(texts.iter().filter(|(t, _)| t == "Ana Exemple").count(), 1, "the chip, not a second offer: {texts:?}");
     assert!(has_text(&texts, "No one found"), "{texts:?}");
     let _ = std::fs::remove_dir_all(dir);
 }
@@ -345,16 +345,16 @@ fn backspace_takes_the_last_chip() {
     let (mut a, dir, mut w, _) = Win::app("teams-new-backspace", vec![], true);
     w.pick(&mut a, ana());
     w.pick(&mut a, bruno());
-    assert_eq!(picked(&a), ["Ana Lima", "Bruno Reis"]);
+    assert_eq!(picked(&a), ["Ana Exemple", "Bruno Reis"]);
     let back = || key(Key::Backspace, Modifiers::NONE);
     w.typed(&mut a, vec![Event::Text("x".into()), back()]);
     assert_eq!((pane_of(&a).to.as_str(), picked(&a).len()), ("", 2), "the text's first");
     w.typed(&mut a, vec![back()]);
-    assert_eq!(picked(&a), ["Ana Lima"]);
+    assert_eq!(picked(&a), ["Ana Exemple"]);
     w.typed(&mut a, vec![back(), back()]);
     assert!(picked(&a).is_empty());
     let texts = w.texts(&mut a);
-    assert!(!has_text(&texts, "Ana Lima") && has_text(&texts, "A name or an address"), "{texts:?}");
+    assert!(!has_text(&texts, "Ana Exemple") && has_text(&texts, "A name or an address"), "{texts:?}");
     let _ = std::fs::remove_dir_all(dir);
 }
 
@@ -403,11 +403,11 @@ fn pane_control(w: &mut Win, a: &mut MailApp, label: &str) -> Option<egui::Pos2>
 #[test]
 fn a_name_with_markup_or_bidi_is_drawn_plain() {
     let (mut a, dir, mut w, _) = Win::app("teams-new-markup", vec![], true);
-    let hostile = person(ANA, "Ana\n<b>Lima</b>\u{202E}", "ana@contoso.example\u{202E}", false);
+    let hostile = person(ANA, "Ana\n<b>Exemple</b>\u{202E}", "ana@contoso.example\u{202E}", false);
     a.ui.conversations.new_chat.as_mut().expect("open").to = "ana".into();
     a.session.teams.people = Some(TeamsPeople { query: "ana".into(), people: vec![hostile], failed: false, waiting: false });
     let check = |texts: &[(String, egui::Rect)], with_address: bool| {
-        let name = rect_of(texts, |t| t == "Ana <b>Lima</b>").unwrap_or_else(|| panic!("the name as its text: {texts:?}"));
+        let name = rect_of(texts, |t| t == "Ana <b>Exemple</b>").unwrap_or_else(|| panic!("the name as its text: {texts:?}"));
         assert!(name.height() < 24.0, "on one line: {name:?}");
         assert!(!texts.iter().any(|(t, _)| t.contains('\u{202E}') || t.contains('\n')), "{texts:?}");
         assert_eq!(has_text(texts, "ana@contoso.example"), with_address, "{texts:?}");
@@ -502,14 +502,14 @@ fn while_creating_everything_waits() {
     assert!(has_text(&texts, "Creating the conversation…") && has_text(&texts, "hello"), "{texts:?}");
     let acts = w.typed(&mut a, vec![Event::Text("x".into()), key(Key::Backspace, Modifiers::NONE), enter()]);
     assert!(creates(&acts).is_empty());
-    assert_eq!((in_new_box(&a), picked(&a)), ("hello".to_string(), vec!["Ana Lima".to_string()]));
-    w.click_text(&mut a, "Ana Lima");
+    assert_eq!((in_new_box(&a), picked(&a)), ("hello".to_string(), vec!["Ana Exemple".to_string()]));
+    w.click_text(&mut a, "Ana Exemple");
     w.typed(&mut a, vec![Event::Text("bru".into())]);
     w.pane(&mut a, 0.5, vec![]);
     assert_eq!(pane_of(&a).to, "", "To: waits too");
     w.click_text(&mut a, "Cancel");
     assert!(a.ui.conversations.new_chat.is_some(), "Cancel waits while it's created");
-    assert_eq!((in_new_box(&a), picked(&a)), ("hello".to_string(), vec!["Ana Lima".to_string()]));
+    assert_eq!((in_new_box(&a), picked(&a)), ("hello".to_string(), vec!["Ana Exemple".to_string()]));
     let _ = std::fs::remove_dir_all(dir);
 }
 
@@ -530,7 +530,7 @@ fn a_failure_keeps_the_people_and_the_text() {
     w.settled(&mut a);
     let (_, shapes) = w.pane(&mut a, 0.02, vec![]);
     let texts = texts_of(&shapes);
-    for t in ["Teams didn't create the conversation", "Teams can't be reached: try again", "Ana Lima", "hello", "a.pdf"] {
+    for t in ["Teams didn't create the conversation", "Teams can't be reached: try again", "Ana Exemple", "hello", "a.pdf"] {
         assert!(has_text(&texts, t), "{t}: {texts:?}");
     }
     assert_eq!(colour_of(&shapes, "Teams didn't create the conversation"), Some(a.ui.tokens.danger));
@@ -542,7 +542,7 @@ fn a_failure_keeps_the_people_and_the_text() {
     let said = a.ui.conversations.drafts.get(NEW).and_then(|d| d.said());
     assert_eq!(said, Some("Teams can't be reached: try again"));
     let texts = w.texts(&mut a);
-    for t in ["Ana Lima", "hello", "a.pdf"] {
+    for t in ["Ana Exemple", "hello", "a.pdf"] {
         assert!(has_text(&texts, t), "nothing lost: {t}: {texts:?}");
     }
     let _ = std::fs::remove_dir_all(dir);
@@ -576,7 +576,7 @@ fn the_engines_refusals_of_a_creation_are_said() {
     assert_eq!(w.send(&mut a).len(), 1);
     assert_eq!(said(&a), Some("Teams didn't create the conversation"));
     assert!(a.session.teams.creating.is_none());
-    assert_eq!((in_new_box(&a), picked(&a)), ("hello".to_string(), vec!["Ana Lima".to_string()]));
+    assert_eq!((in_new_box(&a), picked(&a)), ("hello".to_string(), vec!["Ana Exemple".to_string()]));
     answered(&mut a, "bru", vec![bruno()]);
     a.run("teams.create", json!({"people": [BRUNO], "text": "first"}));
     assert!(matches!(a.session.teams.creating, Some(TeamsCreating::Waiting { .. })));
@@ -599,14 +599,14 @@ fn a_first_message_refused_keeps_what_was_typed() {
     w.send(&mut a);
     let Some(TeamsCreating::Waiting { local }) = a.session.teams.creating.clone() else { panic!("waiting") };
     a.session.teams_apply(teams::Event::Unsent { count: OUTBOX_MAX as u32 });
-    a.session.teams_apply(teams::Event::Chats { rows: vec![group_row(), one_to_one(WITH_ANA, "Ana Lima", ANA, NOW)] });
+    a.session.teams_apply(teams::Event::Chats { rows: vec![group_row(), one_to_one(WITH_ANA, "Ana Exemple", ANA, NOW)] });
     a.session.teams_apply(teams::Event::Created { local, chat: WITH_ANA.into() });
     for _ in 0..3 {
         frame(&w.ctx, &mut a, vec![]);
     }
     assert!(a.ui.conversations.new_chat.is_some(), "the pane stays");
     let texts = w.texts(&mut a);
-    for t in ["Teams didn't create the conversation", "Teams refused it", "Ana Lima", "hello", "a.pdf"] {
+    for t in ["Teams didn't create the conversation", "Teams refused it", "Ana Exemple", "hello", "a.pdf"] {
         assert!(has_text(&texts, t), "{t}: {texts:?}");
     }
     let _ = std::fs::remove_dir_all(dir);
@@ -620,13 +620,13 @@ fn created_closes_the_pane_and_shows_the_chat() {
     w.write(&mut a, "hello");
     w.send(&mut a);
     let Some(TeamsCreating::Waiting { local }) = a.session.teams.creating.clone() else { panic!("waiting") };
-    a.session.teams_apply(teams::Event::Chats { rows: vec![group_row(), one_to_one(WITH_ANA, "Ana Lima", ANA, NOW)] });
+    a.session.teams_apply(teams::Event::Chats { rows: vec![group_row(), one_to_one(WITH_ANA, "Ana Exemple", ANA, NOW)] });
     a.session.teams_apply(teams::Event::Created { local, chat: WITH_ANA.into() });
     let texts = settled_at(&w.ctx, &mut a, SIZE);
     assert!(a.ui.conversations.new_chat.is_none(), "closed");
     assert!(!a.ui.conversations.drafts.contains_key(NEW), "its draft gone");
     assert_eq!(a.session.teams.open.as_deref(), Some(WITH_ANA));
-    assert!(!has_text(&texts, "New conversation") && has_text(&texts, "Ana Lima"), "{texts:?}");
+    assert!(!has_text(&texts, "New conversation") && has_text(&texts, "Ana Exemple"), "{texts:?}");
     let _ = std::fs::remove_dir_all(dir);
 }
 
@@ -634,7 +634,7 @@ fn created_closes_the_pane_and_shows_the_chat() {
 /// conversation is asked of the worker.
 #[test]
 fn a_person_already_chatted_with_opens_that_chat() {
-    let (mut a, dir, mut w, jobs) = Win::app("teams-new-existing", vec![one_to_one(WITH_ANA, "Ana Lima", ANA, NOW)], true);
+    let (mut a, dir, mut w, jobs) = Win::app("teams-new-existing", vec![one_to_one(WITH_ANA, "Ana Exemple", ANA, NOW)], true);
     w.pick(&mut a, ana());
     w.write(&mut a, "hello");
     w.send(&mut a);
@@ -666,10 +666,10 @@ fn esc_sets_it_aside_and_keeps_the_lists_search() {
     let texts = settled_at(&w.ctx, &mut a, SIZE);
     assert_eq!(
         (picked(&a), pane_of(&a).topic.as_str(), in_new_box(&a)),
-        (vec!["Ana Lima".to_string(), "Bruno Reis".to_string()], "Launch", "hello".to_string())
+        (vec!["Ana Exemple".to_string(), "Bruno Reis".to_string()], "Launch", "hello".to_string())
     );
     let name = pasted.file_name().and_then(|n| n.to_str()).unwrap_or_default().to_string();
-    for t in ["Ana Lima", "Bruno Reis", "Launch", "hello", name.as_str()] {
+    for t in ["Ana Exemple", "Bruno Reis", "Launch", "hello", name.as_str()] {
         assert!(has_text(&texts, t), "back as it was: {t}: {texts:?}");
     }
     w.click_text(&mut a, "Cancel");
@@ -730,12 +730,12 @@ fn the_new_conversation_in_light_and_dark() {
     };
     painted(&mut a, &w.ctx, "empty", &["New conversation", "To:", "A name or an address", "Write a message"]);
     w.look_up(&mut a, "a", vec![ana(), sam()]);
-    painted(&mut a, &w.ctx, "found", &["Ana Lima", "ana@contoso.example", "External", "Sam Okafor"]);
+    painted(&mut a, &w.ctx, "found", &["Ana Exemple", "ana@contoso.example", "External", "Sam Okafor"]);
     w.typed(&mut a, vec![enter()]);
     w.pick(&mut a, sam());
     let n = a.ui.conversations.new_chat.as_mut().expect("open");
     n.topic = "Launch".into();
-    painted(&mut a, &w.ctx, "group", &["Ana Lima", "Sam Okafor", "External", "Launch"]);
+    painted(&mut a, &w.ctx, "group", &["Ana Exemple", "Sam Okafor", "External", "Launch"]);
     w.write(&mut a, "hello");
     assert_eq!(w.send(&mut a).len(), 1);
     painted(&mut a, &w.ctx, "creating", &["Creating the conversation…", "hello", "Launch"]);
@@ -761,7 +761,7 @@ fn esc_closes_the_emoji_picker_not_the_pane() {
     frame(&w.ctx, &mut a, vec![]);
     assert!(!egui::Popup::is_any_open(&w.ctx), "the picker closed");
     assert!(a.ui.conversations.new_chat.is_some(), "the pane stays");
-    assert_eq!((picked(&a), in_new_box(&a)), (vec!["Ana Lima".to_string()], "hello".to_string()), "nothing lost");
+    assert_eq!((picked(&a), in_new_box(&a)), (vec!["Ana Exemple".to_string()], "hello".to_string()), "nothing lost");
     frame(&w.ctx, &mut a, vec![key(Key::Escape, Modifiers::NONE)]);
     assert!(a.ui.conversations.new_chat.is_none(), "then Esc sets it aside");
     let _ = std::fs::remove_dir_all(dir);
@@ -822,7 +822,7 @@ fn the_chat_under_the_pane_is_away_and_a_row_takes_its_place() {
     let news = News {
         chat: group_row().id,
         message: "m1".into(),
-        sender: "Ana Lima".into(),
+        sender: "Ana Exemple".into(),
         external: false,
         app: false,
         mentions_me: false,
@@ -836,7 +836,7 @@ fn the_chat_under_the_pane_is_away_and_a_row_takes_its_place() {
     for _ in 0..2 {
         frame(&w.ctx, &mut a, vec![]);
     }
-    assert_eq!(shown.lock().unwrap().as_slice(), [("Ana Lima in Support team".to_string(), "Lunch?".to_string())], "announced");
+    assert_eq!(shown.lock().unwrap().as_slice(), [("Ana Exemple in Support team".to_string(), "Lunch?".to_string())], "announced");
     assert_eq!(marks_read(&jobs), 0, "not marked read under the pane");
     let row = settled_text_at(&w.ctx, &mut a, "Support team", size).expect("its row in the list");
     assert!(row.x < 400.0, "the list's row: {row:?}");
@@ -847,9 +847,9 @@ fn the_chat_under_the_pane_is_away_and_a_row_takes_its_place() {
     assert!(marks_read(&jobs) >= 1, "marked read once shown");
     frame(&w.ctx, &mut a, vec![key(Key::N, Modifiers::COMMAND)]);
     let texts = settled_at(&w.ctx, &mut a, SIZE);
-    assert_eq!((picked(&a), pane_of(&a).topic.as_str()), (vec!["Ana Lima".to_string(), "Bruno Reis".to_string()], "Launch"));
+    assert_eq!((picked(&a), pane_of(&a).topic.as_str()), (vec!["Ana Exemple".to_string(), "Bruno Reis".to_string()], "Launch"));
     assert_eq!(in_new_box(&a), "hello");
-    for t in ["Ana Lima", "Bruno Reis", "Launch", "hello", "a.pdf"] {
+    for t in ["Ana Exemple", "Bruno Reis", "Launch", "hello", "a.pdf"] {
         assert!(has_text(&texts, t), "back as it was: {t}: {texts:?}");
     }
     let _ = std::fs::remove_dir_all(dir);

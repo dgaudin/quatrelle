@@ -153,14 +153,14 @@ fn a_mistyped_named_time_hides_the_fallback() {
 fn contacts_and_appointments_map() {
     let x = Extra {
         given: "Ana".into(),
-        family: "Lima".into(),
+        family: "Exemple".into(),
         company: "Contoso".into(),
         emails: vec!["ana@contoso.example".into()],
         phones: vec![("+1 555 0100".into(), "cell")],
         ..Default::default()
     };
     let c = card_of(&x, "Met at the fair.\r\n", "u1".into());
-    assert_eq!((c.name.as_str(), c.org.as_str(), c.note.as_str()), ("Ana Lima", "Contoso", "Met at the fair."));
+    assert_eq!((c.name.as_str(), c.org.as_str(), c.note.as_str()), ("Ana Exemple", "Contoso", "Met at the fair."));
     assert_eq!(c.phones[0], Typed { value: "+1 555 0100".into(), kind: "cell".into() });
     let day = days_from_civil(2026, 10, 20) * 86_400;
     // An all-day item stored at local midnight in UTC+6 (18:00Z the day before).

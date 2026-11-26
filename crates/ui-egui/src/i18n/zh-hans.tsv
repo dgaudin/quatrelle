@@ -2525,3 +2525,21 @@ presence	Offline	离线
 	Microsoft 365 can't move a calendar between groups	Microsoft 365 无法在组之间移动日历
 	Group name	组名
 	This calendar isn't in Outlook's calendar groups yet	此日历还不在 Outlook 的某个日历组中
+	Outlook's own calendar group can't be changed here	Outlook 的日历组无法在此更改
+	A calendar group that still holds calendars can't be deleted here	仍包含日历的日历组无法在此删除
+	a calendar group that still holds calendars can't be deleted here	仍包含日历的日历组无法在此删除
+	this account's server doesn't keep calendar groups	此帐户的服务器不保留日历组
+	it's the first calendar group already	已经是第一个日历组
+	it's the last calendar group already	已经是最后一个日历组
+	this calendar was opened by its owner's address; it has no shortcut in Outlook's groups	此日历是通过其所有者的地址打开的；它在 Outlook 的组中没有快捷方式
+	the server doesn't name the group My Calendars is in	服务器未命名“我的日历”所在的组
+	the account's main calendar stays in My Calendars	帐户的主日历保留在“我的日历”中
+	it's the first already	已经是第一个
+	it's the last already	已经是最后一个
+	it's removed from the list: bring it back first	它已从列表中移除：请先将其恢复
+	the account's main calendar stays as it is	帐户的主日历保持不变
+	only the account's own calendars can be changed	只能更改帐户自己的日历
+	the server hasn't listed the calendars yet	服务器尚未列出日历
+	this account's server doesn't allow it	此帐户的服务器不允许
+	the account's main calendar stays in the list	帐户的主日历保留在列表中
+	one opened by its owner's address or subscribed to by its link goes by its own Remove	通过所有者地址打开或通过其链接订阅的日历，用其自己的“删除”移除

@@ -62,7 +62,7 @@ fn the_log_tells_the_chats_links_and_never_an_id() {
     let these = |l: &String| l.contains("links of the conversations listed") || l.starts_with("teams: a conversation opened");
     for line in tap.lines().iter().filter(|l| these(l)) {
         let lower = line.to_lowercase();
-        for private in ["ocelot", "@thread.v2", "19:", TENANT, "ana lima", "u-ana"] {
+        for private in ["ocelot", "@thread.v2", "19:", TENANT, "ana exemple", "u-ana"] {
             assert!(!lower.contains(private), "{private:?} in the log: {line}");
         }
     }

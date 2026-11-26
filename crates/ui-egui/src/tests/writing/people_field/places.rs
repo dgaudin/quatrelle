@@ -174,7 +174,7 @@ fn a_dialog_ok_waits_for_its_names() {
     assert!(a.ui.people.holding(DIALOG_WINDOWS));
     assert!(a.session.directory_searching(&gal, "Ana"), "asked of the directory");
     assert!(a.ui.people.send_when_resolved(&mut a.session, 2.0).is_empty(), "still waiting");
-    directory_answers(&mut a, &gal, "Ana", &[("Ana Lima", "ana@contoso.example")]);
+    directory_answers(&mut a, &gal, "Ana", &[("Ana Exemple", "ana@contoso.example")]);
     // The dialog's frame makes its field ready.
     a.ui.people.prepare(&mut a.session, f, Some(&gal), accepts_of("mailbox"), &text);
     assert_eq!(a.ui.people.send_when_resolved(&mut a.session, 3.0), vec![(DIALOG_WINDOWS, Ok(Value::Null))]);
@@ -403,7 +403,7 @@ fn add_calendar_waits_for_a_name_then_opens_it() {
     let gal = with_exchange(&mut a);
     let ctx = egui::Context::default();
     open_dialog(&ctx, &mut a, Dialog::open_calendars());
-    // A name the sample's people don't know (its Ana Lima would settle "Ana" at once).
+    // A name the sample's people don't know (its Ana Exemple would settle "Ana" at once).
     type_in(&ctx, &mut a, dialog_field(0, "calendar"), "Dupont");
     press(&ctx, &mut a, "Open");
     assert!(a.ui.people.holding(DIALOG_WINDOWS), "held for the name");

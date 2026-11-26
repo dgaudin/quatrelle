@@ -6,6 +6,10 @@
 use super::compose::insert_signature;
 use super::*;
 
+/// Most calendar group headers remembered as folded on this computer: a run of commands can't
+/// fill the setting. The oldest name gives way when the list is full.
+const MAX_FOLDED_CALENDAR_GROUPS: usize = 128;
+
 pub(super) fn commands() -> Vec<CommandSpec> {
     vec![
         // View
@@ -305,6 +309,12 @@ pub(super) fn commands() -> Vec<CommandSpec> {
             let group: String = p::req_str(v, "group")?.chars().take(quatrelle_model::pim::MAX_CALENDAR_NAME + 64).collect();
             let folded = p::bool(v, "folded").unwrap_or(!s.prefs.folded_calendar_groups.contains(&group));
             if folded {
+                if !s.prefs.folded_calendar_groups.contains(&group)
+                    && s.prefs.folded_calendar_groups.len() >= MAX_FOLDED_CALENDAR_GROUPS
+                    && let Some(oldest) = s.prefs.folded_calendar_groups.iter().next().cloned()
+                {
+                    s.prefs.folded_calendar_groups.remove(&oldest);
+                }
                 s.prefs.folded_calendar_groups.insert(group.clone());
             } else {
                 s.prefs.folded_calendar_groups.remove(&group);

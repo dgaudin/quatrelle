@@ -120,6 +120,8 @@ pub struct Data {
     pub hidden_wlinks: Vec<String>,
     /// The next requests are answered "busy" (`ErrorServerBusy`, back off 10 ms), this many times.
     pub busy: usize,
+    /// The next `FindFolder` requests are refused (`ErrorAccessDenied`), this many times.
+    pub find_folder_fails: usize,
     /// The search for what messages are (`FindItem` on `item:ItemClass`): refused
     /// (`ErrorInvalidRestriction`), or met with the connection closed, unanswered, while set.
     pub kinds_refused: bool,
@@ -401,6 +403,7 @@ impl Default for Data {
             outlook_rules: false,
             sync_page: None,
             busy: 0,
+            find_folder_fails: 0,
             kinds_refused: false,
             kinds_cut: false,
             sends_cut: 0,

@@ -72,7 +72,7 @@ fn an_appointments_and_a_contacts_files_are_saved_where_asked() {
     // A contact's.
     let card = Card {
         uid: "kept-card".into(),
-        name: "Ana Lima".into(),
+        name: "Ana Exemple".into(),
         extra: vec![format!("X-QUATRELLE-ATTACH;X-FILENAME=\"cv.pdf\":data:application/pdf;base64,{}", base64_encode(b"%PDF-cv"))],
         ..Default::default()
     };

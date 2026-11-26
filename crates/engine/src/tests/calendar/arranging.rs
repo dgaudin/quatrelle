@@ -396,7 +396,7 @@ fn an_unsent_appointment_in_someone_elses_calendar_isnt_made_the_accounts() {
     let mut s = ews_session("arranging-orphans-theirs");
     let ana = "shared:ana@contoso.example";
     let team = CalendarInfo { group: "Team".into(), ..cal("shared:zoe@contoso.example", "Zoe Park", 3) };
-    ews_synced(&mut s, vec![ews_main(), cal(ana, "Ana Lima", 2), team], Vec::new(), false);
+    ews_synced(&mut s, vec![ews_main(), cal(ana, "Ana Exemple", 2), team], Vec::new(), false);
     for (uid, calendar) in [("lunch", ana), ("review", "shared:zoe@contoso.example")] {
         let event = CalEvent { uid: uid.into(), summary: uid.into(), start: NOW + 3600, end: NOW + 7200, ..Default::default() };
         s.pim_mut("sample").events.push(StoredEvent { calendar: calendar.into(), event, dirty: true, ..Default::default() });
@@ -436,4 +436,34 @@ fn without_a_main_calendar_an_unsent_appointment_stays_where_it_was() {
     let kept = s.pim.get("sample").and_then(|p| p.events.iter().find(|e| e.event.uid == "dentist")).map(|e| e.calendar.clone());
     assert_eq!(kept.as_deref(), Some(home), "not moved into another calendar");
     assert_eq!(s.notices.len(), said, "{:?}", s.notices);
+}
+
+/// A Microsoft 365 group that still holds a calendar isn't deleted: what the server makes of its
+/// calendars isn't known. An empty one goes.
+#[test]
+fn a_microsoft_365_group_that_still_holds_calendars_is_not_deleted() {
+    let mut s = graph_session("arranging-group-delete", true);
+    s.pim_mut("sample").calendar_groups = vec!["Team".into(), "Vide".into()];
+    s.take_jobs();
+    let e = s.run("calendar.group.delete", &json!({"account": "sample", "group": "Team"})).unwrap_err();
+    assert!(e.to_string().contains("still holds calendars"), "{e}");
+    assert!(s.pim.get("sample").unwrap().calendar_groups.iter().any(|g| g == "Team"), "the group stays");
+    assert!(s.take_jobs().is_empty(), "and nothing is sent");
+    s.run("calendar.group.delete", &json!({"account": "sample", "group": "Vide"})).unwrap();
+    assert!(applied(&mut s).iter().any(|op| matches!(op, Op::DeleteCalendarGroup { group } if group == "Vide")), "the empty group is sent");
+}
+
+/// Folded calendar groups are remembered by name: a run of commands can't fill the setting.
+#[test]
+fn folded_calendar_groups_are_bounded() {
+    let mut s = sample_session("arranging-folded-cap");
+    for i in 0..200 {
+        s.run("calendar.groupFold", &json!({"group": format!("Groupe {i}")})).unwrap();
+    }
+    assert!(s.prefs.folded_calendar_groups.len() <= 128, "{} kept", s.prefs.folded_calendar_groups.len());
+    // A name already kept still unfolds, even at the cap.
+    let kept = s.prefs.folded_calendar_groups.iter().next().cloned().expect("one folded");
+    s.run("calendar.groupFold", &json!({"group": kept.clone(), "folded": false})).unwrap();
+    assert!(!s.prefs.folded_calendar_groups.contains(&kept), "one kept can still be unfolded");
+    done(s);
 }

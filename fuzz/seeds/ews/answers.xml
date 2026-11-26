@@ -14,7 +14,7 @@
 <t:Message><t:ItemId Id="AAMkMsg1"/><t:Subject>Mix review</t:Subject><t:IsRead>true</t:IsRead><t:Size>2048</t:Size></t:Message>
 </m:Items></m:RootFolder></m:FindItemResponseMessage>
 <m:ResolveNamesResponseMessage ResponseClass="Warning"><m:ResponseCode>ErrorNameResolutionMultipleResults</m:ResponseCode>
-<m:ResolutionSet IncludesLastItemInRange="true"><t:Resolution><t:Mailbox><t:Name>Ana Lima</t:Name><t:EmailAddress>ana@studio.example</t:EmailAddress><t:RoutingType>SMTP</t:RoutingType><t:MailboxType>Mailbox</t:MailboxType></t:Mailbox></t:Resolution></m:ResolutionSet></m:ResolveNamesResponseMessage>
+<m:ResolutionSet IncludesLastItemInRange="true"><t:Resolution><t:Mailbox><t:Name>Ana Exemple</t:Name><t:EmailAddress>ana@studio.example</t:EmailAddress><t:RoutingType>SMTP</t:RoutingType><t:MailboxType>Mailbox</t:MailboxType></t:Mailbox></t:Resolution></m:ResolutionSet></m:ResolveNamesResponseMessage>
 <m:ExpandDLResponseMessage ResponseClass="Success"><m:ResponseCode>NoError</m:ResponseCode><m:DLExpansion TotalItemsInView="1" IncludesLastItemInRange="true"><t:Mailbox><t:Name>Ana</t:Name><t:EmailAddress>ana@studio.example</t:EmailAddress><t:MailboxType>Mailbox</t:MailboxType></t:Mailbox></m:DLExpansion></m:ExpandDLResponseMessage>
 <m:GetInboxRulesResponseMessage ResponseClass="Success"><m:ResponseCode>NoError</m:ResponseCode><m:InboxRules>
 <t:Rule><t:RuleId Id="r1"/><t:DisplayName>From Ana</t:DisplayName><t:IsEnabled>true</t:IsEnabled><t:Conditions><t:ContainsSenderStrings><t:String>ana@studio.example</t:String></t:ContainsSenderStrings></t:Conditions><t:Actions><t:MarkAsRead>true</t:MarkAsRead></t:Actions></t:Rule></m:InboxRules></m:GetInboxRulesResponseMessage>

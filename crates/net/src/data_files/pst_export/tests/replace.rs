@@ -41,7 +41,7 @@ fn account() -> Pim {
     };
     Pim {
         events: vec![event("e1@example.com", "Standup", 1_792_000_800), event("e2@example.com", "Review", 1_792_100_800)],
-        cards: vec![card("c1", "Ana Lima"), card("c2", "Ben Ruiz")],
+        cards: vec![card("c1", "Ana Exemple"), card("c2", "Ben Ruiz")],
         notes: vec![note("n1", "Shopping"), note("n2", "Ideas")],
         tasks: vec![task("t1", "Book the stage"), task("t2", "Return the lenses")],
         ..Default::default()
@@ -96,7 +96,7 @@ fn exported_again_in_place(label: &str, ansi: bool) {
     assert_eq!(subjects(&before, "Calendar"), ["Review", "Standup"]);
 
     pim.events[0].event.summary = "Standup, moved".into();
-    pim.cards[0].card.name = "Ana Lima-Costa".into();
+    pim.cards[0].card.name = "Ana Exemple-Costa".into();
     pim.notes[0].note.text = "Shopping list".into();
     pim.tasks[0].task.subject = "Book the big stage".into();
     store.save_account_doc("a1", quatrelle_model::pim::PIM_DOC, &pim).unwrap();
@@ -107,7 +107,7 @@ fn exported_again_in_place(label: &str, ansi: bool) {
     // One copy of each, the changed ones as they are now; the unchanged ones untouched.
     let after = items(&file);
     assert_eq!(subjects(&after, "Calendar"), ["Review", "Standup, moved"]);
-    assert_eq!(subjects(&after, "Contacts"), ["Ana Lima-Costa", "Ben Ruiz"]);
+    assert_eq!(subjects(&after, "Contacts"), ["Ana Exemple-Costa", "Ben Ruiz"]);
     assert_eq!(subjects(&after, "Notes"), ["Ideas", "Shopping list"]);
     assert_eq!(subjects(&after, "Tasks"), ["Book the big stage", "Return the lenses"]);
     for (folder, kept) in [("Calendar", "Review"), ("Contacts", "Ben Ruiz"), ("Notes", "Ideas"), ("Tasks", "Return the lenses")] {
@@ -124,7 +124,7 @@ fn exported_again_in_place(label: &str, ansi: bool) {
         v
     };
     assert_eq!(sorted(got.events.iter().map(|e| e.event.summary.clone()).collect()), ["Review", "Standup, moved"]);
-    assert_eq!(sorted(got.cards.iter().map(|c| c.card.name.clone()).collect()), ["Ana Lima-Costa", "Ben Ruiz"]);
+    assert_eq!(sorted(got.cards.iter().map(|c| c.card.name.clone()).collect()), ["Ana Exemple-Costa", "Ben Ruiz"]);
     assert_eq!(sorted(got.notes.iter().map(|n| n.note.text.clone()).collect()), ["Ideas", "Shopping list"]);
     assert_eq!(sorted(got.tasks.iter().map(|t| t.task.subject.clone()).collect()), ["Book the big stage", "Return the lenses"]);
 

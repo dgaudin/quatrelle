@@ -24,7 +24,7 @@ fn invitation() -> CalEvent {
         summary: "Mix review".into(),
         start: NOW + 86_400,
         end: NOW + 86_400 + 3600,
-        organizer: Some(Attendee { email: "ana@contoso.example".into(), name: "Ana Lima".into(), ..Default::default() }),
+        organizer: Some(Attendee { email: "ana@contoso.example".into(), name: "Ana Exemple".into(), ..Default::default() }),
         attendees: vec![Attendee {
             email: "zoe@contoso.example".into(),
             name: "Zoe Park".into(),

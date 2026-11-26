@@ -82,7 +82,7 @@ fn me() -> FakeUser {
 
 /// A chat with `n` messages a minute apart from `start`, alternately from Ana and from me.
 fn chat(id: &str, start: i64, n: i64) -> FakeChat {
-    let ana = FakeUser::new("u-ana", "Ana Lima");
+    let ana = FakeUser::new("u-ana", "Ana Exemple");
     let mut c = FakeChat::new(id, "oneOnOne", None, vec![me(), ana]);
     for i in 0..n {
         let at = start + i * MINUTE;

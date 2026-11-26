@@ -24,15 +24,15 @@ struct Shortcut {
     header_id: Vec<u8>,
     ordinal: Vec<u8>,
     flags: i64,
+    save_stamp: Option<i64>,
     entry_id: Vec<u8>,
     store_id: Vec<u8>,
     folder_type: Vec<u8>,
     address_book: Vec<u8>,
 }
 
-/// The Calendar section's shortcuts, read page by page for a write. Only the shortcuts this
-/// understands are returned; the others are left alone.
-fn read_raw(c: &Client) -> Result<Vec<Shortcut>> {
+/// The Calendar section's shortcuts' items, page by page, read whole.
+fn read_pages(c: &Client) -> Result<Vec<El>> {
     let Some(views) = super::common_views(c)? else {
         return Err(NetError::No("the server doesn't show its Common Views folder".into()));
     };
@@ -52,11 +52,7 @@ fn read_raw(c: &Client) -> Result<Vec<Shortcut>> {
         ))?;
         let batch: Vec<El> = m.find("Items").map(|i| i.kids.clone()).unwrap_or_default();
         let last = m.find("RootFolder").and_then(|r| r.attr("IncludesLastItemInRange")).is_some_and(|v| v.eq_ignore_ascii_case("true"));
-        for it in &batch {
-            if let Some(s) = shortcut_of(it) {
-                out.push(s);
-            }
-        }
+        out.extend(batch);
         if last {
             complete = true;
             break;
@@ -66,6 +62,17 @@ fn read_raw(c: &Client) -> Result<Vec<Shortcut>> {
         return Err(NetError::No("the server's navigation shortcuts weren't read whole".into()));
     }
     Ok(out)
+}
+
+/// The Calendar section's shortcuts, read page by page for a write. Only the shortcuts this
+/// understands are returned; the others are left alone.
+fn read_raw(c: &Client) -> Result<Vec<Shortcut>> {
+    Ok(read_pages(c)?.iter().filter_map(shortcut_of).collect())
+}
+
+/// Whether the production write parser reads this item as a shortcut; for the fuzz target.
+pub(super) fn shortcut_checked(it: &El) -> bool {
+    shortcut_of(it).is_some()
 }
 
 /// One shortcut, when its message class is the navigation shortcut's.
@@ -111,6 +118,7 @@ fn shortcut_of(it: &El) -> Option<Shortcut> {
         header_id,
         ordinal,
         flags: int_prop(it, "0x684A").unwrap_or(0),
+        save_stamp: int_prop(it, "0x6847"),
         entry_id: bin_prop(it, "0x684C").unwrap_or_default(),
         store_id: bin_prop(it, "0x684E").unwrap_or_default(),
         folder_type: bin_prop(it, "0x684F").unwrap_or_default(),
@@ -152,6 +160,27 @@ fn members_of<'a>(all: &'a [Shortcut], group: &Shortcut) -> Vec<&'a Shortcut> {
         .collect()
 }
 
+/// An item the read can't parse but that still points at `header`: deleting the header would
+/// leave it behind, pointing at a group that no longer exists.
+fn unreadable_member(pages: &[El], header: &Shortcut) -> Option<String> {
+    pages.iter().find_map(|it| {
+        if shortcut_of(it).is_some() || int_prop(it, "0x6852") != Some(CALENDAR_SECTION) {
+            return None;
+        }
+        if !matches!(int_prop(it, "0x6849"), Some(WLINK_OWN | WLINK_SHARED)) {
+            return None;
+        }
+        let id = bin_prop(it, "0x6850").unwrap_or_default();
+        let group = ext_text(it, "0x6851").map(clean).unwrap_or_default();
+        let mine = if id.is_empty() { !group.is_empty() && group == header.name } else { id == header.header_id };
+        if !mine {
+            return None;
+        }
+        let shown = ext_text(it, "0x0E1D").map(clean).unwrap_or_default();
+        Some(if shown.is_empty() { "a calendar this can't read".to_string() } else { shown })
+    })
+}
+
 /// A new group's ordinal, after the last group's ([MS-OXOCFG] 2.2.9.7: a final byte other than
 /// 0 or 255 keeps room to insert before and after).
 fn after_last_ordinal(all: &[Shortcut]) -> Vec<u8> {
@@ -189,14 +218,6 @@ fn after_group(all: &[Shortcut], group: &Shortcut, except: Option<&str>) -> Vec<
 /// folder class a calendar shortcut points at.
 const CALENDAR_FOLDER: [u8; 16] = [0x02, 0x78, 0x06, 0x00, 0x00, 0x00, 0x00, 0x00, 0xC0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x46];
 
-/// A save stamp for a shortcut this session writes ([MS-OXOCFG] 2.2.9.4): an integer that says
-/// the writing client's session.
-fn save_stamp() -> u32 {
-    let mut out = [0u8; 4];
-    rand_core::OsRng.fill_bytes(&mut out);
-    u32::from_le_bytes(out)
-}
-
 /// A new GUID for a group header ([MS-OXOCFG] 2.2.9.3).
 fn new_guid() -> [u8; 16] {
     let mut out = [0u8; 16];
@@ -211,7 +232,7 @@ fn ext(tag: &str, kind: &str, value: &str) -> String {
 
 /// A shortcut created in the Common Views folder: an associated item ([MS-OXOCFG] 2.2.9: a
 /// group header, type 4, section 3).
-fn create_group_xml(views: &str, name: &str, id: &[u8], ordinal: &[u8]) -> String {
+fn create_group_xml(views: &str, name: &str, id: &[u8], ordinal: &[u8], stamp: u32) -> String {
     let guid = crate::imap::base64(id);
     let folder_type = crate::imap::base64(&CALENDAR_FOLDER);
     let ordinal = crate::imap::base64(ordinal);
@@ -222,7 +243,7 @@ fn create_group_xml(views: &str, name: &str, id: &[u8], ordinal: &[u8]) -> Strin
         esc(views),
         esc(name),
         ext("0x6842", "Binary", &guid),
-        ext("0x6847", "Integer", &save_stamp().to_string()),
+        ext("0x6847", "Integer", &stamp.to_string()),
         ext("0x6849", "Integer", "4"),
         ext("0x684A", "Integer", "0"),
         ext("0x684B", "Binary", &ordinal),
@@ -274,7 +295,13 @@ fn groups_are(c: &Client, expected: &[String]) -> Result<()> {
             seen.push(h.name.clone());
         }
     }
-    let same = seen.len() == expected.len() && seen.iter().zip(expected).all(|(a, b)| a.eq_ignore_ascii_case(b));
+    let mut wanted: Vec<&String> = Vec::new();
+    for name in expected {
+        if !wanted.iter().any(|n| n.eq_ignore_ascii_case(name)) {
+            wanted.push(name);
+        }
+    }
+    let same = seen.len() == wanted.len() && seen.iter().zip(wanted).all(|(a, b)| a.eq_ignore_ascii_case(b));
     if same { Ok(()) } else { Err(NetError::No("the server's calendar groups aren't the ones written".into())) }
 }
 
@@ -293,7 +320,7 @@ pub(crate) fn create_calendar_group(c: &Client, name: &str) -> Result<()> {
     };
     let id = new_guid();
     let ordinal = after_last_ordinal(&before);
-    let made = c.call_one(&create_group_xml(&views, &name, &id, &ordinal))?;
+    let made = c.call_one(&create_group_xml(&views, &name, &id, &ordinal, c.group_stamp()))?;
     let created = made.find("ItemId").and_then(|i| i.attr("Id")).filter(|i| !i.is_empty()).map(str::to_string);
     let mut expected: Vec<String> = headers(&before).into_iter().map(|h| h.name.clone()).collect();
     expected.push(name);
@@ -309,6 +336,11 @@ pub(crate) fn create_calendar_group(c: &Client, name: &str) -> Result<()> {
     Ok(())
 }
 
+/// Whether the header was written by this session (its save stamp is ours).
+fn ours(c: &Client, header: &Shortcut) -> bool {
+    header.save_stamp == Some(i64::from(c.group_stamp()))
+}
+
 /// Rename the group `group` to `name`, its entries with it.
 pub(crate) fn rename_calendar_group(c: &Client, group: &str, name: &str) -> Result<()> {
     let name = clean(name);
@@ -317,6 +349,9 @@ pub(crate) fn rename_calendar_group(c: &Client, group: &str, name: &str) -> Resu
     }
     let before = read_raw(c)?;
     let header = group_named(&before, group).cloned().ok_or_else(|| NetError::No("no calendar group with that name".into()))?;
+    if !ours(c, &header) {
+        return Err(NetError::No("Outlook's own calendar group can't be renamed here".into()));
+    }
     if header.name.eq_ignore_ascii_case(&name) {
         return Ok(());
     }
@@ -328,7 +363,7 @@ pub(crate) fn rename_calendar_group(c: &Client, group: &str, name: &str) -> Resu
     update(
         c,
         &header,
-        &[set_subject(&name), set_ext("0x6847", "Integer", &save_stamp().to_string()), set_ext("0x684A", "Integer", &flags.to_string())],
+        &[set_subject(&name), set_ext("0x6847", "Integer", &c.group_stamp().to_string()), set_ext("0x684A", "Integer", &flags.to_string())],
     )?;
     let mut done: Vec<Shortcut> = Vec::new();
     for m in &members {
@@ -342,12 +377,10 @@ pub(crate) fn rename_calendar_group(c: &Client, group: &str, name: &str) -> Resu
         }
         done.push(m.clone());
     }
-    let mut expected: Vec<String> = headers(&before).into_iter().map(|h| h.name.clone()).collect();
-    for n in &mut expected {
-        if n.eq_ignore_ascii_case(&header.name) {
-            *n = name.clone();
-        }
-    }
+    // A header with the same name isn't the one renamed unless it is the same header; names
+    // aren't unique in Outlook's pane.
+    let expected: Vec<String> =
+        headers(&before).into_iter().map(|h| if h.header_id == header.header_id { name.clone() } else { h.name.clone() }).collect();
     groups_are(c, &expected)?;
     // The entries read back under the new name (the header's name is what the read uses).
     let after = read_raw(c)?;
@@ -369,11 +402,23 @@ pub(crate) fn rename_calendar_group(c: &Client, group: &str, name: &str) -> Resu
 /// Delete the group `group`: its entries go with it (the account's own calendars stay, and come
 /// back under My Calendars; other people's leave the list).
 pub(crate) fn delete_calendar_group(c: &Client, group: &str) -> Result<()> {
-    let before = read_raw(c)?;
+    let pages = read_pages(c)?;
+    let before: Vec<Shortcut> = pages.iter().filter_map(shortcut_of).collect();
     let header = group_named(&before, group).cloned().ok_or_else(|| NetError::No("no calendar group with that name".into()))?;
     let members: Vec<Shortcut> = members_of(&before, &header).into_iter().cloned().collect();
+    if !ours(c, &header) && !members.is_empty() {
+        return Err(NetError::No("a calendar group Outlook made can't be deleted while it holds calendars".into()));
+    }
+    if let Some(name) = unreadable_member(&pages, &header) {
+        return Err(NetError::No(format!("the calendar group still holds {name}, which this can't read")));
+    }
+    let mut deleted: Vec<String> = Vec::new();
     for m in &members {
-        delete(c, m)?;
+        match delete(c, m) {
+            Ok(()) => deleted.push(m.owner_said().to_string()),
+            Err(e) if deleted.is_empty() => return Err(e),
+            Err(e) => return Err(NetError::No(format!("{} was already deleted; {e}", deleted.join(", ")))),
+        }
     }
     delete(c, &header)?;
     if group_named(&read_raw(c)?, group).is_some() {
@@ -387,6 +432,9 @@ pub(crate) fn move_calendar_group(c: &Client, group: &str, up: bool) -> Result<(
     let before = read_raw(c)?;
     let list = headers(&before);
     let at = list.iter().position(|h| h.name.eq_ignore_ascii_case(group)).ok_or_else(|| NetError::No("no calendar group with that name".into()))?;
+    if !ours(c, list[at]) {
+        return Err(NetError::No("Outlook's own calendar group can't be moved here".into()));
+    }
     let there = if up {
         at.checked_sub(1).ok_or_else(|| NetError::No("it's the first calendar group already".into()))?
     } else {
@@ -432,29 +480,25 @@ impl Shortcut {
 }
 
 /// The shortcut of the calendar `calendar` (its id), by the name the account gives it. Someone
-/// else's is found by their address (the entry id's X.500 name, resolved once each, at most
-/// [`MAX_LOOKUPS`]), a shared name only when it is the only one; an own calendar's EWS folder id
+/// else's is found by their address (the entry id's X.500 name, resolved once a session), a
+/// shared name only when it is the only one; an own calendar's EWS folder id
 /// is not the shortcut's MAPI entry id, so it is found by its name, and only when only one
 /// shortcut has it.
 fn find_member<'a>(c: &Client, all: &'a [Shortcut], calendar: &str, name: &str) -> Option<&'a Shortcut> {
     if let Some(owner) = calendar.strip_prefix("shared:") {
-        let mut resolved: std::collections::HashMap<String, Option<String>> = std::collections::HashMap::new();
         let mut named: Vec<&Shortcut> = Vec::new();
         for s in all.iter().filter(|s| s.section == Some(CALENDAR_SECTION) && s.kind == Some(WLINK_SHARED)) {
+            let mut known_other = false;
             if let Some(dn) = address_book_dn(&s.address_book) {
-                let email = match resolved.get(&dn) {
-                    Some(e) => e.clone(),
-                    None => {
-                        let e = if resolved.len() < MAX_LOOKUPS { resolve(c, &dn) } else { None };
-                        resolved.insert(dn.clone(), e.clone());
-                        e
-                    }
-                };
-                if email.is_some_and(|e| e.eq_ignore_ascii_case(owner)) {
+                let email = resolve(c, &dn);
+                if email.as_ref().is_some_and(|e| e.eq_ignore_ascii_case(owner)) {
                     return Some(s);
                 }
+                // An address that resolved to someone else is never a name fallback: that
+                // would move the other person's calendar.
+                known_other = email.is_some();
             }
-            if s.name.eq_ignore_ascii_case(name) {
+            if !known_other && s.name.eq_ignore_ascii_case(name) {
                 named.push(s);
             }
         }
@@ -496,4 +540,19 @@ pub(crate) fn move_calendar_to_group(c: &Client, calendar: &str, name: &str, gro
         return Err(NetError::No(format!("the server kept {} in another group", member.owner_said())));
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The folder type is read and written as the same CLSID: a header written with a type the
+    /// read doesn't ask for is a property Outlook may ignore or "repair".
+    #[test]
+    fn the_folder_type_is_read_and_written_as_the_same_clsid() {
+        let read = PROPS.iter().find(|(tag, _)| *tag == "0x684F").map(|(_, kind)| *kind);
+        let written = create_group_xml("F", "G", &[0u8; 16], &[0x80], 1);
+        assert_eq!(read, Some("CLSID"), "the read asks the type the write uses");
+        assert!(written.contains("PropertyTag=\"0x684F\" PropertyType=\"CLSID\""), "{written}");
+    }
 }

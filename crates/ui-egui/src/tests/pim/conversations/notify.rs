@@ -26,13 +26,13 @@ fn notified_app(name: &str) -> (MailApp, std::path::PathBuf, Shown, Shared<MailE
     (a, dir, shown, events)
 }
 
-/// A new message from Ana Lima of the organisation in `chat` ("Agenda" for a group, none for a
+/// A new message from Ana Exemple of the organisation in `chat` ("Agenda" for a group, none for a
 /// one-to-one chat).
 fn news(chat: &str, message: &str, chat_name: Option<&str>, text: &str) -> News {
     News {
         chat: chat.into(),
         message: message.into(),
-        sender: "Ana Lima".into(),
+        sender: "Ana Exemple".into(),
         external: false,
         app: false,
         mentions_me: false,
@@ -64,7 +64,7 @@ fn a_teams_message_is_announced_through_the_system() {
     let (mut a, dir, shown, events) = notified_app("teams-notify");
     let ctx = egui::Context::default();
     let got = notified(&ctx, &mut a, &shown, &events, vec![news_event(vec![news(AGENDA, "m1", Some("Agenda"), "Lunch?")])]);
-    assert_eq!(got, [("Ana Lima in Agenda".to_string(), "Lunch?".to_string())]);
+    assert_eq!(got, [("Ana Exemple in Agenda".to_string(), "Lunch?".to_string())]);
     let _ = std::fs::remove_dir_all(dir);
 }
 
@@ -92,15 +92,15 @@ fn a_mention_says_so() {
     let ctx = egui::Context::default();
     let mention = |chat: &str, message: &str| News { mentions_me: true, ..news(chat, message, Some("Agenda"), "@Riley can you look?") };
     let got = notified(&ctx, &mut a, &shown, &events, vec![news_event(vec![mention(AGENDA, "m1")])]);
-    assert_eq!(got, [("Ana Lima mentioned you in Agenda".to_string(), "@Riley can you look?".to_string())]);
+    assert_eq!(got, [("Ana Exemple mentioned you in Agenda".to_string(), "@Riley can you look?".to_string())]);
     let direct = News { mentions_me: true, ..news("19:one@unq.gbl.spaces", "m2", None, "Hi") };
     let got = notified(&ctx, &mut a, &shown, &events, vec![news_event(vec![direct])]);
-    assert_eq!(got, [("Ana Lima mentioned you".to_string(), "Hi".to_string())]);
+    assert_eq!(got, [("Ana Exemple mentioned you".to_string(), "Hi".to_string())]);
     // In French, through the catalogue.
     a.ui.language = "fr".into();
     let got = notified(&ctx, &mut a, &shown, &events, vec![news_event(vec![mention("19:other@thread.v2", "m3")])]);
     crate::i18n::set_current(crate::i18n::Lang::EN);
-    assert_eq!(got, [("Ana Lima vous a mentionné dans Agenda".to_string(), "@Riley can you look?".to_string())]);
+    assert_eq!(got, [("Ana Exemple vous a mentionné dans Agenda".to_string(), "@Riley can you look?".to_string())]);
     let _ = std::fs::remove_dir_all(dir);
 }
 
@@ -111,7 +111,7 @@ fn grouped_news_and_a_burst_say_how_many() {
     use crate::conversations::{body_of, title_of};
     let one = TeamsAnnouncement {
         chat: AGENDA.into(),
-        sender: "Ana Lima".into(),
+        sender: "Ana Exemple".into(),
         chat_name: Some("Agenda".into()),
         text: "Lunch?".into(),
         count: 1,
@@ -120,7 +120,7 @@ fn grouped_news_and_a_burst_say_how_many() {
     };
     assert_eq!(body_of(&TeamsAnnouncement { text: String::new(), ..one.clone() }), "New message");
     let grouped = TeamsAnnouncement { count: 3, ..one.clone() };
-    assert_eq!((title_of(&grouped), body_of(&grouped)), ("Ana Lima in Agenda".to_string(), "3 new messages".to_string()));
+    assert_eq!((title_of(&grouped), body_of(&grouped)), ("Ana Exemple in Agenda".to_string(), "3 new messages".to_string()));
     let burst = TeamsAnnouncement { count: 12, chats: 5, mentioned: true, ..TeamsAnnouncement::default() };
     assert_eq!((title_of(&burst), body_of(&burst)), ("Teams".to_string(), "12 new messages in 5 conversations".to_string()));
     // No name at all (a chat Graph won't serve may give none): never a title starting with a
@@ -166,7 +166,7 @@ fn news_are_never_dropped_by_a_burst() {
     a.ui.teams_queue.take(&mut events);
     while a.ui.teams_queue.apply(&mut a.session, crate::conversations::TEAMS_EVENTS_A_FRAME) {}
     frame(&ctx, &mut a, vec![]);
-    assert_eq!(shown.lock().unwrap().as_slice(), [("Ana Lima in Agenda".to_string(), "Lunch?".to_string())]);
+    assert_eq!(shown.lock().unwrap().as_slice(), [("Ana Exemple in Agenda".to_string(), "Lunch?".to_string())]);
     let _ = std::fs::remove_dir_all(dir);
 }
 
@@ -341,7 +341,7 @@ fn the_open_chat_under_the_file_page_or_minimized_is_announced_not_marked_read()
         for _ in 0..2 {
             frame_as(&ctx, &mut a, true, minimized);
         }
-        assert_eq!(shown.lock().unwrap().as_slice(), [("Ana Lima in Agenda".to_string(), "Lunch?".to_string())], "{under}: announced");
+        assert_eq!(shown.lock().unwrap().as_slice(), [("Ana Exemple in Agenda".to_string(), "Lunch?".to_string())], "{under}: announced");
         assert_eq!(marks_read(&jobs), 0, "{under}: not marked read");
         a.ui.backstage = None;
         for _ in 0..3 {

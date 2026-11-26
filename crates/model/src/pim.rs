@@ -382,6 +382,11 @@ pub struct Pim {
     /// them): the pane lists them between My Calendars and Shared Calendars.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub calendar_groups: Vec<String>,
+    /// The groups Quatrelle wrote (their header carries this session's save stamp,
+    /// [MS-OXOCFG] 2.2.9.4): only these may be renamed, moved, or deleted when not empty; a
+    /// group Outlook or another client made is protected.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub own_calendar_groups: Vec<String>,
     /// The server's own name for My Calendars, the group the account's main calendar is in
     /// (empty: the server doesn't say); moving a calendar back there names it.
     #[serde(default, skip_serializing_if = "String::is_empty")]
@@ -506,6 +511,9 @@ pub struct DavSync {
     /// stay. Empty: the server has none.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub calendar_groups: Option<Vec<String>>,
+    /// The groups whose Exchange header carries this session's save stamp; `None`: not read.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub own_calendar_groups: Option<Vec<String>>,
     /// The server's own name for My Calendars, read with the shortcuts; `None`: not read.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub my_calendar_group: Option<String>,

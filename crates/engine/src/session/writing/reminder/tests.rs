@@ -187,7 +187,7 @@ fn a_quoted_original_in_each_language_is_not_the_users_words() {
         ("מאת:", "נשלח:", "נושא:", "בקובץ המצורף.", "הקובץ מצורף, תודה"),
     ] {
         let words = mime::QuoteWords { from: from.into(), sent: sent.into(), subject: subject.into(), ..Default::default() };
-        let quote = format!("{from} Ana Lima <ana@soundlab.example>\n{sent} Monday, 24 November 2026 10:00\n{subject} Plans\n\n{original}\n");
+        let quote = format!("{from} Ana Exemple <ana@soundlab.example>\n{sent} Monday, 24 November 2026 10:00\n{subject} Plans\n\n{original}\n");
         // Only the original says it: nothing to ask.
         let c = Compose { subject: "RE: Plans".into(), body: format!("Ok.\n\n{quote}"), ..Default::default() };
         let (own_text, subject) = own_words(&c, &words);

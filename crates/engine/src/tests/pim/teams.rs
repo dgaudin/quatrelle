@@ -262,14 +262,14 @@ fn sign_in_needs_both_ids() {
     assert!(teams_jobs(&mut s).is_empty());
     // Who signed in goes into the settings.
     s.apply(teams_event(teams::Event::Account {
-        name: "Ana\u{202E} Lima".into(),
+        name: "Ana\u{202E} Exemple".into(),
         address: "ana@contoso.example".into(),
         object_id: "u-1".into(),
         tenant_id: "t-1".into(),
         drive_host: Some("contoso-my.sharepoint.com".into()),
     }));
     assert!(s.prefs.teams.signed_in);
-    assert_eq!((s.prefs.teams.name.as_str(), s.prefs.teams.object_id.as_str()), ("Ana Lima", "u-1"));
+    assert_eq!((s.prefs.teams.name.as_str(), s.prefs.teams.object_id.as_str()), ("Ana Exemple", "u-1"));
     assert_eq!(s.teams.drive_host.as_deref(), Some("contoso-my.sharepoint.com"));
 }
 

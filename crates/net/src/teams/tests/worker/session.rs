@@ -414,7 +414,7 @@ fn logs_carry_no_id() {
         "numbat",
         "zebra",
         "quagga",
-        "lima",
+        "exemple",
         "okapi",
         "wombat",
         "armadillo",

@@ -510,7 +510,7 @@ fn not_sent_for_a_file_says_which_reason() {
 /// for its file, light and dark.
 #[test]
 fn the_chips_and_an_upload_in_light_and_dark() {
-    let messages = vec![said("m1", user("u-ana", "Ana Lima"), NOW - 600, para(vec![words("Can you send the figures?")]))];
+    let messages = vec![said("m1", user("u-ana", "Ana Exemple"), NOW - 600, para(vec![words("Can you send the figures?")]))];
     let (mut a, dir, files, _) = attach_app("teams-attach-frames", messages);
     shown_going(
         &mut a,

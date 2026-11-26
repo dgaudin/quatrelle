@@ -212,13 +212,13 @@ fn a_first_sync_lists_other_peoples_calendars_without_reading_them() {
     d.pim.push(("S1".into(), "mailbox:ana@contoso.example".into(), ev.kids[0].clone()));
     let dn = |who: &str| format!("/o=Contoso/ou=Exchange Administrative Group (FYDIBOHF23SPDLT)/cn=Recipients/cn={who}");
     d.directory = vec![(dn("ana"), "ana@contoso.example".into())];
-    d.wlinks = vec![wlink("IPM.Microsoft.WunderBar.Link", 3, 2, "Équipe : Studio", "Ana Lima", &dn("ana"))];
+    d.wlinks = vec![wlink("IPM.Microsoft.WunderBar.Link", 3, 2, "Équipe : Studio", "Ana Exemple", &dn("ana"))];
     // One contact of this account's own.
     d.pim.push((
         "C1".into(),
         contacts,
         parse(
-            "<t:Contact><t:FileAs>Ana Lima</t:FileAs><t:DisplayName>Ana Lima</t:DisplayName><t:GivenName>Ana</t:GivenName>\
+            "<t:Contact><t:FileAs>Ana Exemple</t:FileAs><t:DisplayName>Ana Exemple</t:DisplayName><t:GivenName>Ana</t:GivenName>\
              <t:EmailAddresses><t:Entry>SmtpAddress</t:Entry><t:EmailAddress>ana@contoso.example</t:EmailAddress></t:EmailAddresses></t:Contact>",
         )
         .kids[0]
@@ -235,7 +235,7 @@ fn a_first_sync_lists_other_peoples_calendars_without_reading_them() {
     assert!(!sync.events.iter().any(|e| e.calendar == ana), "not read");
     assert!(!sync.synced_calendars.contains(&ana));
     // And the contacts came anyway.
-    assert!(sync.cards.iter().any(|k| k.card.name == "Ana Lima"), "contacts: {}", sync.cards.len());
+    assert!(sync.cards.iter().any(|k| k.card.name == "Ana Exemple"), "contacts: {}", sync.cards.len());
 }
 
 /// Away from the calendar only this account's own is read; in it, other people's calendars
@@ -284,7 +284,8 @@ fn a_calendar_ticked_is_read_alone_and_one_unticked_costs_nothing() {
     d.folder("Inbox", None, Some("inbox"), "IPF.Note");
     d.folder("Calendar", None, Some("calendar"), "IPF.Appointment");
     let contacts = d.folder("Contacts", None, Some("contacts"), "IPF.Contact");
-    let card = parse("<t:Contact><t:FileAs>Ana Lima</t:FileAs><t:DisplayName>Ana Lima</t:DisplayName><t:GivenName>Ana</t:GivenName></t:Contact>");
+    let card =
+        parse("<t:Contact><t:FileAs>Ana Exemple</t:FileAs><t:DisplayName>Ana Exemple</t:DisplayName><t:GivenName>Ana</t:GivenName></t:Contact>");
     d.pim.push(("C1".into(), contacts, card.kids[0].clone()));
     let ev = parse(
         "<t:CalendarItem><t:Subject>Budget review</t:Subject><t:Start>2026-10-06T13:00:00Z</t:Start><t:End>2026-10-06T14:00:00Z</t:End>\
@@ -422,7 +423,7 @@ fn outlook_calendar_groups_come_in_with_their_calendars() {
     ];
     let link = "IPM.Microsoft.WunderBar.Link";
     d.wlinks = vec![
-        wlink(link, 3, 2, "Équipe : Studio", "Ana Lima", &dn("ana")),
+        wlink(link, 3, 2, "Équipe : Studio", "Ana Exemple", &dn("ana")),
         wlink(link, 3, 2, "Salles", "Salle Lyon", &dn("lyon")),
         // Twice, in another group: one calendar.
         wlink(link, 3, 2, "Calendriers partagés", "Ana", &dn("ana")),
@@ -437,7 +438,7 @@ fn outlook_calendar_groups_come_in_with_their_calendars() {
     let links = crate::ews_pim::calendar_links(&c).unwrap().links;
     assert_eq!(
         links.iter().map(|l| (l.email.as_str(), l.name.as_str(), l.group.as_str())).collect::<Vec<_>>(),
-        [("ana@contoso.example", "Ana Lima", "Équipe : Studio"), ("room.lyon@contoso.example", "Salle Lyon", "Salles")]
+        [("ana@contoso.example", "Ana Exemple", "Équipe : Studio"), ("room.lyon@contoso.example", "Salle Lyon", "Salles")]
     );
     // Opened here by address as well: once, under its group. The list is known (a second
     // sync: the first only lists them, see `a_first_sync_lists_other_peoples_calendars_without_reading_them`).
@@ -557,7 +558,7 @@ fn an_occurrence_moves_on_its_own_and_the_server_tells_the_guests() {
         "<t:CalendarItem><t:Subject>Stand-up</t:Subject><t:Start>2026-10-05T09:00:00Z</t:Start><t:End>2026-10-05T09:15:00Z</t:End>\
          <t:IsAllDayEvent>false</t:IsAllDayEvent><t:UID>standup-1</t:UID><t:CalendarItemType>RecurringMaster</t:CalendarItemType>\
          <t:Organizer><t:Mailbox><t:Name>Riley</t:Name><t:EmailAddress>riley@contoso.example</t:EmailAddress></t:Mailbox></t:Organizer>\
-         <t:RequiredAttendees><t:Attendee><t:Mailbox><t:Name>Ana Lima</t:Name><t:EmailAddress>ana@contoso.example</t:EmailAddress></t:Mailbox></t:Attendee></t:RequiredAttendees>\
+         <t:RequiredAttendees><t:Attendee><t:Mailbox><t:Name>Ana Exemple</t:Name><t:EmailAddress>ana@contoso.example</t:EmailAddress></t:Mailbox></t:Attendee></t:RequiredAttendees>\
          <t:Recurrence><t:WeeklyRecurrence><t:Interval>1</t:Interval><t:DaysOfWeek>Monday</t:DaysOfWeek></t:WeeklyRecurrence>\
          <t:NoEndRecurrence><t:StartDate>2026-10-05Z</t:StartDate></t:NoEndRecurrence></t:Recurrence>\
          <t:DeletedOccurrences><t:DeletedOccurrence><t:Start>2026-10-19T09:00:00Z</t:Start></t:DeletedOccurrence></t:DeletedOccurrences></t:CalendarItem>",
@@ -636,7 +637,7 @@ fn an_occurrence_moves_on_its_own_and_the_server_tells_the_guests() {
             start: 1_792_000_000,
             end: 1_792_003_600,
             organizer: Some(who("Riley", "riley@contoso.example")),
-            attendees: vec![who("Riley", "riley@contoso.example"), who("Ana Lima", "ana@contoso.example")],
+            attendees: vec![who("Riley", "riley@contoso.example"), who("Ana Exemple", "ana@contoso.example")],
             ..Default::default()
         },
         dirty: true,
@@ -653,7 +654,7 @@ fn an_occurrence_moves_on_its_own_and_the_server_tells_the_guests() {
     assert_eq!(guests, ["ana@contoso.example"]);
     // Someone else's meeting changed here (its reminder, say) keeps their guest list.
     let mut theirs = budget.clone();
-    theirs.event.organizer = Some(who("Ana Lima", "ana@contoso.example"));
+    theirs.event.organizer = Some(who("Ana Exemple", "ana@contoso.example"));
     theirs.event.attendees = vec![who("Riley", "riley@contoso.example")];
     assert!(crate::ews_pim::events::event_fields(&theirs.event, "riley@contoso.example").iter().all(|(uri, _)| *uri != "calendar:RequiredAttendees"));
 }

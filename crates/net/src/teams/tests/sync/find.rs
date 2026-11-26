@@ -13,7 +13,7 @@ use super::*;
 /// `n` messages of Ana's put in `chat`'s copy after the fake's own two, a second apart from a
 /// day before [`NOW`], in Graph's pages of 50 as a read puts them; their ids, oldest first.
 fn copied(r: &Run, chat: &str, n: i64) -> Vec<String> {
-    let ana = Sender::User { id: "u-ana".into(), name: "Ana Lima".into(), identity_type: Some("aadUser".into()), tenant_id: Some(TENANT.into()) };
+    let ana = Sender::User { id: "u-ana".into(), name: "Ana Exemple".into(), identity_type: Some("aadUser".into()), tenant_id: Some(TENANT.into()) };
     let all: Vec<ChatMessage> = (0..n)
         .map(|i| {
             let at = NOW - DAY + i * 1000;

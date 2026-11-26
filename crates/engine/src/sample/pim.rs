@@ -50,7 +50,7 @@ pub fn sample_pim(now: i64, offset: i64) -> quatrelle_model::pim::Pim {
         CalEvent { location: "Café on the corner".into(), private: true, ..ev("lunch", "Lunch with Jun", at(today, 12, 30), at(today, 13, 30)) },
         CalEvent {
             location: "Sound Lab".into(),
-            organizer: Some(who("Ana Lima", "ana@soundlab.example", "ACCEPTED")),
+            organizer: Some(who("Ana Exemple", "ana@soundlab.example", "ACCEPTED")),
             attendees: vec![who("Riley Moreno", ME.1, "NEEDS-ACTION")],
             ..ev("mix", "Sound mix playback", at(today + 1, 11, 0), at(today + 1, 12, 0))
         },
@@ -73,7 +73,7 @@ pub fn sample_pim(now: i64, offset: i64) -> quatrelle_model::pim::Pim {
     let cards = vec![
         person("zoe", "Zoe Park", "zoe@studio.example", "Studio Lantern", "Director", "+1 555 0142"),
         person("sam", "Sam Okafor", "sam@studio.example", "Studio Lantern", "Editor", "+1 555 0177"),
-        person("ana", "Ana Lima", "ana@soundlab.example", "Sound Lab", "Sound designer", ""),
+        person("ana", "Ana Exemple", "ana@soundlab.example", "Sound Lab", "Sound designer", ""),
         person("jun", "Jun Watanabe", "jun@studio.example", "Studio Lantern", "Animator", "+1 555 0108"),
         person("print", "Print Shop", "orders@printshop.example", "Print Shop", "", "+1 555 0190"),
     ];

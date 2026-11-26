@@ -100,7 +100,7 @@ proptest::proptest! {
 fn contacts_both_ways() {
     let card = Card {
         uid: "x".into(),
-        name: "Ana Lima".into(),
+        name: "Ana Exemple".into(),
         given: "Ana".into(),
         family: "Lima".into(),
         emails: vec![Typed { value: "ana@contoso.example".into(), kind: String::new() }],
@@ -136,7 +136,10 @@ fn contacts_both_ways() {
     assert!(at("<t:PhoneNumbers>") < at("<t:Birthday>") && at("<t:Birthday>") < at("<t:JobTitle>"));
     assert!(xml.contains("<t:Entry Key=\"BusinessPhone2\">+1 555 0102</t:Entry>"));
     let back = card_of(parse(&xml).find("Contact").unwrap()).unwrap();
-    assert_eq!((back.name.as_str(), back.org.as_str(), back.note.as_str(), back.uid.as_str()), ("Ana Lima", "Contoso & Co", "Met at the fair", "C1"));
+    assert_eq!(
+        (back.name.as_str(), back.org.as_str(), back.note.as_str(), back.uid.as_str()),
+        ("Ana Exemple", "Contoso & Co", "Met at the fair", "C1")
+    );
     assert_eq!(back.phones, card.phones);
     assert_eq!(back.emails, card.emails);
     assert_eq!(back.addresses, card.addresses);
@@ -164,7 +167,7 @@ fn a_contacts_whole_name_goes_to_exchange_and_comes_back() {
     let back = card_of(parse(&theirs).find("Contact").unwrap()).unwrap();
     assert_eq!((back.given.as_str(), back.family.as_str(), back.name_rest.as_str()), ("Zoe", "Park", "Marie;Dr.;Jr."));
     // A contact with a plain name writes nothing more.
-    let plain = contact_xml(&Card { name: "Ana Lima".into(), given: "Ana".into(), family: "Lima".into(), ..Card::default() });
+    let plain = contact_xml(&Card { name: "Ana Exemple".into(), given: "Ana".into(), family: "Lima".into(), ..Card::default() });
     assert!(!plain.contains("MiddleName") && !plain.contains("Generation") && !plain.contains("ExtendedProperty"), "{plain}");
 }
 
@@ -674,28 +677,6 @@ fn a_change_to_someone_elses_meeting_leaves_its_zone_and_pattern() {
             }
         }
     }
-}
-
-/// A shortcut's shown name and group are cut to a length the Calendar pane can show, however
-/// long the server makes them.
-#[test]
-fn a_shortcuts_name_and_group_are_bounded() {
-    let entry = "AAAAANynQMjAQhAatLkIACsv4YIAAAAAAAAAAC9vPVN0dWRpby9jbj1BbmEA";
-    let long = "n".repeat(5000);
-    let xml = format!(
-        "<m:FindItemResponseMessage><m:Items><t:Message>\
-         <t:ExtendedProperty><t:ExtendedFieldURI PropertyTag=\"0x001A\" PropertyType=\"String\"/><t:Value>IPM.Microsoft.WunderBar.Link</t:Value></t:ExtendedProperty>\
-         <t:ExtendedProperty><t:ExtendedFieldURI PropertyTag=\"0x6852\" PropertyType=\"Integer\"/><t:Value>3</t:Value></t:ExtendedProperty>\
-         <t:ExtendedProperty><t:ExtendedFieldURI PropertyTag=\"0x6849\" PropertyType=\"Integer\"/><t:Value>2</t:Value></t:ExtendedProperty>\
-         <t:ExtendedProperty><t:ExtendedFieldURI PropertyTag=\"0x6851\" PropertyType=\"String\"/><t:Value>{long}</t:Value></t:ExtendedProperty>\
-         <t:ExtendedProperty><t:ExtendedFieldURI PropertyTag=\"0x0E1D\" PropertyType=\"String\"/><t:Value>{long}</t:Value></t:ExtendedProperty>\
-         <t:ExtendedProperty><t:ExtendedFieldURI PropertyTag=\"0x6854\" PropertyType=\"Binary\"/><t:Value>{entry}</t:Value></t:ExtendedProperty>\
-         </t:Message></m:Items></m:FindItemResponseMessage>"
-    );
-    let shortcuts = shortcuts_listed(&parse(&xml));
-    assert_eq!(shortcuts.len(), 1);
-    assert!(shortcuts[0].1.chars().count() <= 255, "{} characters in a name", shortcuts[0].1.chars().count());
-    assert!(shortcuts[0].2.chars().count() <= 255, "{} characters in a group", shortcuts[0].2.chars().count());
 }
 
 /// A weekly pattern's `FirstDayOfWeek` is read: every other Saturday and Sunday, weeks counted

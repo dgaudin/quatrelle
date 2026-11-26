@@ -389,7 +389,7 @@ fn delivery_two_jobs_and_events_round_trip_through_json() {
     let news = News {
         chat: "19:a@thread.v2".into(),
         message: "1730000000000".into(),
-        sender: "Ana Lima".into(),
+        sender: "Ana Exemple".into(),
         external: true,
         app: false,
         mentions_me: true,
@@ -443,9 +443,9 @@ fn first_line_stops_at_the_line_without_bidi_cut_at_max() {
 #[test]
 fn delivery_three_ops_and_outgoing_round_trip_through_json() {
     let body = ChatText {
-        blocks: vec![Block { kind: BlockKind::Paragraph, runs: vec![Run { text: "Ana Lima".into(), mention: Some(0), ..Run::default() }] }],
+        blocks: vec![Block { kind: BlockKind::Paragraph, runs: vec![Run { text: "Ana Exemple".into(), mention: Some(0), ..Run::default() }] }],
     };
-    let mentions = vec![Mention { id: 0, text: "Ana Lima".into(), user_id: Some("u-ana".into()) }];
+    let mentions = vec![Mention { id: 0, text: "Ana Exemple".into(), user_id: Some("u-ana".into()) }];
     for op in [
         Op::Send { chat: "19:a@thread.v2".into(), local: "1-1".into(), body: body.clone(), mentions: mentions.clone(), parts: Vec::new() },
         Op::Edit {
@@ -525,7 +525,7 @@ fn delivery_four_ops_jobs_and_events_round_trip_through_json() {
         assert_eq!(serde_json::from_str::<T>(&serde_json::to_string(&v).unwrap()).unwrap(), v);
     }
     let ana =
-        Person { id: "00000000-0000-0000-0000-0000000000a1".into(), name: "Ana Lima".into(), address: "ana@contoso.example".into(), guest: false };
+        Person { id: "00000000-0000-0000-0000-0000000000a1".into(), name: "Ana Exemple".into(), address: "ana@contoso.example".into(), guest: false };
     round(Op::Send {
         chat: "19:a@thread.v2".into(),
         local: "l1".into(),
@@ -582,7 +582,7 @@ fn what_delivery_three_wrote_reads_back_without_parts() {
 #[test]
 fn a_person_is_a_guid_a_line_and_an_address() {
     let ok =
-        Person { id: "00000000-0000-0000-0000-0000000000a1".into(), name: "Ana Lima".into(), address: "ana@contoso.example".into(), guest: false };
+        Person { id: "00000000-0000-0000-0000-0000000000a1".into(), name: "Ana Exemple".into(), address: "ana@contoso.example".into(), guest: false };
     assert!(person_ok(&ok));
     let with = |f: &dyn Fn(&mut Person)| {
         let mut p = ok.clone();
@@ -592,7 +592,7 @@ fn a_person_is_a_guid_a_line_and_an_address() {
     for id in ["u-ana", "a/b", "x')"] {
         assert!(!with(&|p| p.id = id.into()), "{id}");
     }
-    for name in ["", "Ana  Lima", "Ana\u{202E}"] {
+    for name in ["", "Ana  Exemple", "Ana\u{202E}"] {
         assert!(!with(&|p| p.name = name.into()), "{name:?}");
     }
     assert!(!with(&|p| p.address = "ana @contoso.example".into()));
@@ -616,7 +616,7 @@ fn an_object_id_and_an_address_are_checked_to_the_character() {
     ] {
         assert!(!is_object_id(bad), "{bad:?}");
     }
-    let with = |address: String| person_ok(&Person { id: id.into(), name: "Ana Lima".into(), address, guest: false });
+    let with = |address: String| person_ok(&Person { id: id.into(), name: "Ana Exemple".into(), address, guest: false });
     assert!(with("ana@contoso.example".into()));
     assert!(!with("an\u{7}a@contoso.example".into()) && !with("an\u{202E}a@contoso.example".into()) && !with("an\ta@contoso.example".into()));
     let of_len = |n: usize| format!("{}@contoso.example", "a".repeat(n - "@contoso.example".len()));

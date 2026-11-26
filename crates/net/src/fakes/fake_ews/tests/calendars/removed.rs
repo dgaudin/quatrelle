@@ -35,7 +35,7 @@ fn mailbox() -> (Data, String, String, String) {
     d.pim.push(("S1".into(), "mailbox:ana@contoso.example".into(), appointment("Budget review", 18, "budget")));
     let dn = "/o=Contoso/ou=Exchange Administrative Group (FYDIBOHF23SPDLT)/cn=Recipients/cn=ana";
     d.directory = vec![(dn.into(), "ana@contoso.example".into())];
-    d.wlinks = vec![wlink("IPM.Microsoft.WunderBar.Link", 3, 2, "Équipe : Studio", "Ana Lima", dn)];
+    d.wlinks = vec![wlink("IPM.Microsoft.WunderBar.Link", 3, 2, "Équipe : Studio", "Ana Exemple", dn)];
     (d, format!("ews:folder:{trips}"), format!("ews:folder:{birthdays}"), shared_calendar_id("ana@contoso.example"))
 }
 

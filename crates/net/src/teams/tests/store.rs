@@ -50,7 +50,7 @@ fn msg(chat: &str, i: i64) -> ChatMessage {
     ChatMessage {
         id: at.to_string(),
         chat: chat.into(),
-        sender: Sender::User { id: "u-ana".into(), name: "Ana Lima".into(), identity_type: Some("aadUser".into()), tenant_id: Some("t-1".into()) },
+        sender: Sender::User { id: "u-ana".into(), name: "Ana Exemple".into(), identity_type: Some("aadUser".into()), tenant_id: Some("t-1".into()) },
         created: at,
         modified: at,
         body: text(&format!("Message {i}")),
@@ -490,12 +490,12 @@ fn what_is_read_back_keeps_the_readers_rules() {
     let user = |id: &str, name: &str| Sender::User { id: id.into(), name: name.into(), identity_type: None, tenant_id: None };
     let mut r = ChatRecord::new(chat(A));
     r.chat.topic = Some(topic.clone());
-    r.chat.members = vec![member("", "Nobody"), member("u-ok", "Ana\u{202E}\nLima"), member(&long, "Long")];
+    r.chat.members = vec![member("", "Nobody"), member("u-ok", "Ana\u{202E}\nExemple"), member(&long, "Long")];
     r.chat.preview = Some(Preview { sender: user("u-ok", "Ana\u{7}"), text: "hi\n\tthere".into(), at: T0 });
     r.pages = vec![T0];
     r.page_keys = vec![0];
     let mut m = msg(A, 0);
-    m.sender = user("u-ok", "Ana\u{202E} Lima");
+    m.sender = user("u-ok", "Ana\u{202E} Exemple");
     m.mentions = vec![Mention { id: 0, text: "Paul\nx".into(), user_id: Some(long.clone()) }];
     m.reactions = vec![Reaction { emoji: "👍".into(), users: vec!["u-ok".into(), String::new(), long.clone()] }];
     m.attachments = vec![
@@ -509,7 +509,7 @@ fn what_is_read_back_keeps_the_readers_rules() {
     // Deleted ones too: only their id, times and sender stay, and the sender is held the same.
     let deleted = |i: i64, sender: Sender| ChatMessage { sender, deleted: Some(T0 + i * MINUTE), body: ChatText::default(), ..msg(A, i) };
     let page =
-        serde_json::json!({ "chat": A, "messages": [m, nobody, deleted(2, user("u-ok", "Ana\u{202E}\nLima")), deleted(3, user(&long, "Long"))] });
+        serde_json::json!({ "chat": A, "messages": [m, nobody, deleted(2, user("u-ok", "Ana\u{202E}\nExemple")), deleted(3, user(&long, "Long"))] });
     s.write_account_files(
         TEAMS_ACCOUNT,
         &[
@@ -520,15 +520,15 @@ fn what_is_read_back_keeps_the_readers_rules() {
     .unwrap();
     for back in [c.chat(A).unwrap(), c.chats().remove(0)] {
         assert_eq!(back.chat.topic, Some(one_line(&topic)));
-        assert_eq!(back.chat.members, [member("u-ok", "Ana Lima")]);
+        assert_eq!(back.chat.members, [member("u-ok", "Ana Exemple")]);
         let p = back.chat.preview.unwrap();
         assert_eq!((p.sender, p.text), (user("u-ok", "Ana"), "hi there".to_string()));
     }
     let read = c.last_pages(A, 2);
     let [m, nobody, deleted_named, deleted_long] = read.as_slice() else { panic!("{read:?}") };
-    assert_eq!(deleted_named.sender, user("u-ok", "Ana Lima"));
+    assert_eq!(deleted_named.sender, user("u-ok", "Ana Exemple"));
     assert_eq!(deleted_long.sender, Sender::Nobody);
-    assert_eq!(m.sender, user("u-ok", "Ana Lima"));
+    assert_eq!(m.sender, user("u-ok", "Ana Exemple"));
     assert_eq!(m.mentions, [Mention { id: 0, text: "Paul x".into(), user_id: None }]);
     assert_eq!(m.reactions[0].users, ["u-ok"]);
     assert_eq!(m.attachments, [Attachment::Hosted { id: "h1".into() }, Attachment::Card]);

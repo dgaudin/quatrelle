@@ -159,7 +159,7 @@ fn invitations_are_answered_and_sent() {
     assert_eq!(method, "REPLY");
     assert!(raw.contains("PARTSTAT=ACCEPTED") && raw.contains("mailto:riley@studio.example"), "{raw}");
     assert!(raw.to_ascii_lowercase().contains("text/calendar"), "sent as a calendar part");
-    assert!(raw.contains("To: \"Ana Lima\" <ana@soundlab.example>") || raw.contains("ana@soundlab.example"));
+    assert!(raw.contains("To: \"Ana Exemple\" <ana@soundlab.example>") || raw.contains("ana@soundlab.example"));
 
     // Declining takes it out of the calendar.
     s.run("invite.respond", &json!({"answer": "declined"})).unwrap();
@@ -390,21 +390,25 @@ fn calendar_groups_follow_the_server_and_stay_when_not_read() {
     let id = s.run("account.add", &json!({"email": "zoe@contoso.example", "password": "pw"})).unwrap()["account"].as_str().unwrap().to_string();
     let read = DavSync {
         calendar_groups: Some(vec!["Équipe".into(), "Salles".into()]),
+        own_calendar_groups: Some(vec!["Salles".into()]),
         my_calendar_group: Some("Mes calendriers".into()),
         checked: NOW,
         ..Default::default()
     };
     s.apply(Event::DavSynced { account: id.clone(), sync: Box::new(read) });
     assert_eq!(s.pim.get(&id).unwrap().calendar_groups, ["Équipe", "Salles"]);
+    assert_eq!(s.pim.get(&id).unwrap().own_calendar_groups, ["Salles"], "only the group this session wrote is ours");
     assert_eq!(s.pim.get(&id).unwrap().my_calendar_group, "Mes calendriers", "the server's name for My Calendars is kept");
     // A partial sync (this account's own calendar only) doesn't name the groups: kept.
     s.apply(Event::DavSynced { account: id.clone(), sync: Box::new(DavSync { checked: NOW + 1, ..Default::default() }) });
     assert_eq!(s.pim.get(&id).unwrap().calendar_groups, ["Équipe", "Salles"]);
+    assert_eq!(s.pim.get(&id).unwrap().own_calendar_groups, ["Salles"], "a partial sync keeps it");
     assert_eq!(s.pim.get(&id).unwrap().my_calendar_group, "Mes calendriers", "a partial sync keeps it");
     // The server says it has none.
-    let none = DavSync { calendar_groups: Some(Vec::new()), checked: NOW + 2, ..Default::default() };
+    let none = DavSync { calendar_groups: Some(Vec::new()), own_calendar_groups: Some(Vec::new()), checked: NOW + 2, ..Default::default() };
     s.apply(Event::DavSynced { account: id.clone(), sync: Box::new(none) });
     assert!(s.pim.get(&id).unwrap().calendar_groups.is_empty());
+    assert!(s.pim.get(&id).unwrap().own_calendar_groups.is_empty());
     done(s);
 }
 
@@ -795,5 +799,37 @@ fn an_event_at_the_end_of_time_is_drawn_without_overflow() {
     }
     let _ = s.agenda(i64::MAX - 100, i64::MAX);
     let _ = s.agenda(i64::MIN, i64::MIN + 100);
+    done(s);
+}
+
+/// A calendar opened by its owner's address has no shortcut in Outlook's groups: the engine
+/// refuses the move, so a drag can't bypass the greyed menu.
+#[test]
+fn an_opened_calendar_cannot_be_moved_to_a_group() {
+    use quatrelle_model::pim::{CalendarInfo, DavSync};
+    let mut s = Session::open(Some(temp("ews-opened-move")), quatrelle_model::dates::Clock::new(NOW, 0));
+    let id = s
+        .run("account.add", &json!({"email": "zoe@contoso.example", "password": "pw", "ews": "https://mail.contoso.example/EWS/Exchange.asmx"}))
+        .unwrap()["account"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let sync = DavSync {
+        calendars: Some(vec![
+            CalendarInfo { id: "FOLDER1".into(), name: "Calendar".into(), main: true, ..Default::default() },
+            CalendarInfo { id: "shared:ana@contoso.example".into(), name: "Ana Exemple".into(), group: "Équipe".into(), ..Default::default() },
+        ]),
+        calendar_groups: Some(vec!["Équipe".into()]),
+        checked: NOW,
+        ..Default::default()
+    };
+    s.apply(Event::DavSynced { account: id.clone(), sync: Box::new(sync) });
+    s.pim_mut(&id).shared.push("ana@contoso.example".into());
+    s.take_jobs();
+    assert!(
+        s.run("calendar.moveTo", &json!({"account": id, "calendar": "shared:ana@contoso.example", "group": "Équipe"})).is_err(),
+        "the opened calendar is refused"
+    );
+    assert!(s.take_jobs().is_empty(), "and no job is queued");
     done(s);
 }

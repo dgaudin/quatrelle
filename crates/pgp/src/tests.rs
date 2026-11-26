@@ -45,11 +45,11 @@ fn unlocked(uid: &str) -> Unlocked {
 
 #[test]
 fn a_secret_key_opens_with_its_passphrase_only() {
-    let file = make("Ana Lima <Ana@Posteo.example>", Some("correct horse"), true);
+    let file = make("Ana Exemple <Ana@Posteo.example>", Some("correct horse"), true);
     assert_eq!(read_secret_key(&file, "wrong").unwrap_err(), Error::Passphrase);
     let k = read_secret_key(&file, "correct horse").unwrap();
     assert_eq!(k.info.emails, ["ana@posteo.example"]);
-    assert_eq!(k.info.name, "Ana Lima");
+    assert_eq!(k.info.name, "Ana Exemple");
     assert!(k.info.encrypts && k.info.signs && k.info.revoked.is_none() && k.info.expires.is_none());
     assert_eq!(k.info.fingerprint.len(), 40);
     assert!(!format!("{k:?}").contains("secret: ["), "never in a log");

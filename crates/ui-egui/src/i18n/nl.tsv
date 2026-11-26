@@ -2522,3 +2522,21 @@ presence	Offline	Offline
 	Microsoft 365 can't move a calendar between groups	Microsoft 365 kan een agenda niet tussen groepen verplaatsen
 	Group name	Naam van de groep
 	This calendar isn't in Outlook's calendar groups yet	Deze agenda staat nog niet in een agendagroep van Outlook
+	Outlook's own calendar group can't be changed here	Een agendagroep van Outlook kan hier niet worden gewijzigd
+	A calendar group that still holds calendars can't be deleted here	Een agendagroep met agenda's kan hier niet worden verwijderd
+	a calendar group that still holds calendars can't be deleted here	Een agendagroep die nog agenda's bevat kan hier niet worden verwijderd
+	this account's server doesn't keep calendar groups	De server van dit account bewaart geen agendagroepen
+	it's the first calendar group already	Het is al de eerste agendagroep
+	it's the last calendar group already	Het is al de laatste agendagroep
+	this calendar was opened by its owner's address; it has no shortcut in Outlook's groups	Deze agenda is geopend via het adres van de eigenaar; hij heeft geen snelkoppeling in Outlooks groepen
+	the server doesn't name the group My Calendars is in	De server noemt de groep van Mijn agenda's niet
+	the account's main calendar stays in My Calendars	De hoofdagenda van het account blijft in Mijn agenda's
+	it's the first already	Het is al de eerste
+	it's the last already	Het is al de laatste
+	it's removed from the list: bring it back first	Hij is uit de lijst verwijderd: haal hem eerst terug
+	the account's main calendar stays as it is	De hoofdagenda van het account blijft zoals hij is
+	only the account's own calendars can be changed	Alleen de eigen agenda's van het account kunnen worden gewijzigd
+	the server hasn't listed the calendars yet	De server heeft de agenda's nog niet vermeld
+	this account's server doesn't allow it	De server van dit account staat het niet toe
+	the account's main calendar stays in the list	De hoofdagenda van het account blijft in de lijst
+	one opened by its owner's address or subscribed to by its link goes by its own Remove	Een agenda die via het adres van de eigenaar is geopend of via zijn link is geabonneerd, gaat via zijn eigen Verwijderen

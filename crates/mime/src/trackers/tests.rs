@@ -406,7 +406,7 @@ fn ordinary_mail_keeps_its_pictures_and_titles() {
 <p class=MsoNormal>Hello<o:p>&nbsp;</o:p></p>
 <p class=MsoNormal><b><span style='font-size:20.0pt;font-family:"Segoe UI"'>Big title</span></b><o:p></o:p></p>
 <noscript><img src="https://img.example/ns.png" alt="Without scripts"></noscript>
-<table><tr><td><img src="https://img.example/sig.png" width="120" height="40" alt="Ana Lima"></td><td><b>Ana Lima</b><br>Contoso</td></tr></table>"#;
+<table><tr><td><img src="https://img.example/sig.png" width="120" height="40" alt="Ana Exemple"></td><td><b>Ana Exemple</b><br>Contoso</td></tr></table>"#;
     let shown: Vec<String> = ["logo", "vml", "ns", "sig"].iter().map(|f| format!("https://img.example/{f}.png")).collect();
     for sheet in ["", "<style>p.MsoNormal{margin:0}</style>"] {
         let p = message(sheet, body);

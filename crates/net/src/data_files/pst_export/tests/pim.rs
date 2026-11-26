@@ -45,7 +45,7 @@ fn nov(d: u32) -> i64 {
 pub(super) fn account() -> Pim {
     let ana = Card {
         uid: "c1".into(),
-        name: "Ana Lima".into(),
+        name: "Ana Exemple".into(),
         given: "Ana".into(),
         family: "Lima".into(),
         name_rest: "Maria;Dr.;Jr.".into(),
@@ -102,7 +102,7 @@ pub(super) fn account() -> Pim {
     let crew = Card {
         uid: "g1".into(),
         name: "Crew".into(),
-        note: "Ana Lima <ana@studio.example>\nben@example.com\n\nThe film crew.".into(),
+        note: "Ana Exemple <ana@studio.example>\nben@example.com\n\nThe film crew.".into(),
         extra: vec!["X-ROLE:crew".into(), "KIND:group".into(), "MEMBER:mailto:ana@studio.example".into(), "MEMBER:mailto:ben@example.com".into()],
         ..Default::default()
     };
@@ -233,13 +233,13 @@ fn contacts_groups_notes_and_tasks_round_trip_inside_a_data_file() {
     // As Outlook keeps them: the classes, a contact's three addresses and picture, a group's
     // checksum, a task's fraction done, a note's colour and size.
     let class = |names: &[&str], subject: &str| props_of(&file, names, subject, &[0x001A]).remove(0).as_ref().and_then(crate::pst::text_of);
-    assert_eq!(class(&["Contacts"], "Ana Lima").as_deref(), Some("IPM.Contact"));
+    assert_eq!(class(&["Contacts"], "Ana Exemple").as_deref(), Some("IPM.Contact"));
     assert_eq!(class(&["Contacts"], "Crew").as_deref(), Some("IPM.DistList"));
     assert_eq!(class(&["Notes"], "Shopping").as_deref(), Some("IPM.StickyNote"));
     assert_eq!(class(&["Tasks"], "Book the stage").as_deref(), Some("IPM.Task"));
     let address = |lid| named_id(&file, 0x0006_2004, lid).unwrap();
     let got =
-        props_of(&file, &["Contacts"], "Ana Lima", &[address(0x8083), address(0x8093), address(0x80A3), address(0x8015), address(0x8005), 0x3A1C]);
+        props_of(&file, &["Contacts"], "Ana Exemple", &[address(0x8083), address(0x8093), address(0x80A3), address(0x8015), address(0x8005), 0x3A1C]);
     let texts: Vec<Option<String>> = got.iter().map(|v| v.as_ref().and_then(crate::pst::text_of)).collect();
     assert_eq!(texts[..3], [Some("ana@studio.example".into()), Some("ana@home.example".into()), Some("al@posteo.example".into())]);
     assert!(matches!(got[3], Some(V::Boolean(true))));
@@ -327,7 +327,7 @@ fn a_file_added_to_keeps_its_own_contacts() {
         let got: Pim = back.load_account_doc("b1", quatrelle_model::pim::PIM_DOC).unwrap();
         let mut names: Vec<String> = got.cards.iter().map(|c| c.card.name.clone()).collect();
         names.sort();
-        assert_eq!(names, ["Ana Lima", "Zoe Park"]);
+        assert_eq!(names, ["Ana Exemple", "Zoe Park"]);
         let folders = back.load_folders("b1").unwrap();
         assert!(folders.iter().any(|f| f.path == "Notes" && f.total == 1), "{folders:?}");
         assert!(!folders.iter().any(|f| f.path == "Contacts"), "{folders:?}");

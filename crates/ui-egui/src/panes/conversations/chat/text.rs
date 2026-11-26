@@ -267,12 +267,12 @@ mod tests {
     #[test]
     fn a_mention_shows_the_members_own_name() {
         let t = Tokens::light();
-        let members: ChatMembers = [Member { user_id: "U-Ana".into(), name: "Ana Lima".into(), ..Default::default() }].into_iter().collect();
+        let members: ChatMembers = [Member { user_id: "U-Ana".into(), name: "Ana Exemple".into(), ..Default::default() }].into_iter().collect();
         let cx = Context { me: "u-me", members: &members, color: t.text, clean_links: true };
         let mut m = message(vec![Run { text: "The boss".into(), mention: Some(3), ..Default::default() }]);
         m.mentions = vec![quatrelle_engine::model::pim::teams::Mention { id: 3, text: "The boss".into(), user_id: Some("u-ana".into()) }];
         let (job, _) = layout(&t, &m.mentions, &cx, &m.body.blocks[0], 0, 400.0).unwrap();
-        assert_eq!(job.text, "Ana Lima");
+        assert_eq!(job.text, "Ana Exemple");
     }
 
     /// Control and bidi characters drop out of a run; a line break (`<br>`) stays.

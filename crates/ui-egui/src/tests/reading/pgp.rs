@@ -125,13 +125,13 @@ fn the_security_bar_says_what_openpgp_found() {
     // bar says what to do about it.
     open(&mut a, signed_by_ana(Some(&ana)).as_bytes());
     let t = drawn(&ctx, &mut a, &mut tex, "unconfirmed");
-    assert!(has(&t, "Signed by Ana Lima <ana@posteo.example>: the signature holds, but its key isn't confirmed (OpenPGP key "), "{t:?}");
+    assert!(has(&t, "Signed by Ana Exemple <ana@posteo.example>: the signature holds, but its key isn't confirmed (OpenPGP key "), "{t:?}");
     assert!(has(&t, "Their key came with their own mail, and anyone can send a key in someone's name."), "{t:?}");
     // Confirmed in File › Info › Security: the bar says the signature is hers.
     let fingerprint = pgp::info(&ana).unwrap().fingerprint;
     a.session.run("pgp.confirmPublic", &json!({"email": "ana@posteo.example", "fingerprint": fingerprint})).unwrap();
     let t = drawn(&ctx, &mut a, &mut tex, "good");
-    assert!(has(&t, "Signed by Ana Lima <ana@posteo.example>: the signature holds (OpenPGP key "), "{t:?}");
+    assert!(has(&t, "Signed by Ana Exemple <ana@posteo.example>: the signature holds (OpenPGP key "), "{t:?}");
     assert!(has(&t, "You confirmed their key."), "{t:?}");
     // Forgotten, it comes again with her next mail, as any key from mail.
     a.session.run("pgp.forgetPublic", &json!({"email": "ana@posteo.example"})).unwrap();
@@ -143,7 +143,7 @@ fn the_security_bar_says_what_openpgp_found() {
     // Ana's signature on someone else's mail.
     open(&mut a, signed_by_ana(None).replace("From: Ana L. <ana@posteo.example>", "From: Boss <boss@posteo.example>").as_bytes());
     let t = drawn(&ctx, &mut a, &mut tex, "other-address");
-    assert!(has(&t, "Signed by Ana Lima <ana@posteo.example>, but its key is for ana@posteo.example, not for the sender."), "{t:?}");
+    assert!(has(&t, "Signed by Ana Exemple <ana@posteo.example>, but its key is for ana@posteo.example, not for the sender."), "{t:?}");
     // Encrypted to Riley, who has no key yet: said, and how to read it.
     let to_riley = String::from_utf8(pgpdata("ana-to-riley.asc")).unwrap();
     let encrypted = |armored: &str| {
@@ -165,7 +165,7 @@ Content-Type: application/octet-stream; name=\"encrypted.asc\"\r\n\r\n{armored}\
     answer_decrypt(&mut a);
     let t = drawn(&ctx, &mut a, &mut tex, "decrypted");
     assert!(has(&t, "Encrypted: only you and its other recipients can read it."), "{t:?}");
-    assert!(has(&t, "Signed by Ana Lima <ana@posteo.example>: the signature holds"), "{t:?}");
+    assert!(has(&t, "Signed by Ana Exemple <ana@posteo.example>: the signature holds"), "{t:?}");
     assert!(has(&t, "the proof is approved"), "{t:?}");
     // Her next message brings another key for her address: said on it, once.
     let other = pgp::public_keys(&pgpdata("bo.asc")).unwrap().remove(0);

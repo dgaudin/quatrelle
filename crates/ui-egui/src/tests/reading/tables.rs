@@ -301,7 +301,7 @@ fn icon_signature() -> String {
     format!(
         "<div>Hello Riley,</div><div>The new build is ready.</div>\
          <div class=\"mail_signature\"><table border=\"0\" cellspacing=\"0\" cellpadding=\"0\" style=\"font-family: Georgia;\"><tbody><tr>\
-         <td style=\"padding: 0px; vertical-align: middle;\"><h2 style=\"margin: 0px; font-size: 18px;\">Ana Lima</h2>\
+         <td style=\"padding: 0px; vertical-align: middle;\"><h2 style=\"margin: 0px; font-size: 18px;\">Ana Exemple</h2>\
          <div><span style=\"font-size: 14px;\">Sales, Contoso</span></div>\
          <table border=\"0\" cellspacing=\"0\" cellpadding=\"0\" style=\"width: 454px; height: 100px;\"><tbody>{}{}{}</tbody></table></td>\
          <td colspan=\"3\" style=\"max-width: 300px; font-size: 12px;\"><div><p style=\"margin: 0px;\">Thanks</p></div></td><td width=\"46\"></td>\

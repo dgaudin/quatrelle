@@ -590,7 +590,8 @@ impl MailApp {
     /// What a submit its command refused says: on the dialog's own error line, or as a notice when
     /// it has none (Select Names, a question) or none is open. Never dropped.
     fn refused(&mut self, error: &str) {
-        let said = error.trim_start_matches("bad parameters: ").to_string();
+        // Quatrelle's own wording in the catalogs, a server's text as it came.
+        let said = crate::i18n::error(error.trim_start_matches("bad parameters: "));
         let shown = self.ui.dialog.as_mut().is_some_and(|d| d.set_error(said.clone()));
         if !shown {
             self.session.notice(said, true);

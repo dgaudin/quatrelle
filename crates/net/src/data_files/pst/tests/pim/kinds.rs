@@ -76,7 +76,7 @@ fn posts_and_documents_are_mail_and_other_kinds_are_counted() {
     let texts: Vec<String> = mail.iter().map(|c| format!("Text of {c}")).collect();
     let mut puts: Vec<Put<'_>> = mail.iter().zip(&texts).map(|(c, t)| Put::new(&["Inbox"], "IPF.Note", item(c, c, t, &[]))).collect();
     let ana = [named(ADDRESS, 0x8083, V::Unicode("ana@posteo.example"))];
-    puts.push(Put::new(&["Inbox"], "IPF.Note", item("IPM.Contact", "Ana Lima", "", &ana)));
+    puts.push(Put::new(&["Inbox"], "IPF.Note", item("IPM.Contact", "Ana Exemple", "", &ana)));
     puts.push(Put::new(&["Inbox"], "IPF.Note", item("IPM.Configuration.Junk", "x", "", &[])));
     let b = Brought::of("kinds", &puts);
     assert_eq!((b.done.messages, b.done.contacts, b.done.skipped), (mail.len(), 1, 1), "{:?}", b.done);
@@ -198,7 +198,7 @@ fn what_was_thrown_away_stays_out_of_the_address_book_and_calendar() {
         "trash",
         &[
             Put::new(&["Inbox"], "IPF.Note", item("IPM.Note", "Hello", "Notes", &[])),
-            Put::new(&["Inbox"], "IPF.Note", item("IPM.Contact", "Ana Lima", "Notes", &[])),
+            Put::new(&["Inbox"], "IPF.Note", item("IPM.Contact", "Ana Exemple", "Notes", &[])),
             Put::new(&["Deleted Items"], "IPF.Note", item("IPM.Contact", "Bea Costa", "Notes", &[])),
             Put::new(&["Deleted Items"], "IPF.Note", item("IPM.Appointment", "Stage call", "Notes", &when)),
             Put::new(&["Deleted Items"], "IPF.Note", item("IPM.Task", "Book the stage", "Notes", &[])),

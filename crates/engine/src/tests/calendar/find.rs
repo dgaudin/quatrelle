@@ -173,7 +173,7 @@ fn searching_25000_appointments_stays_quick() {
     let mut s = sample_session("calendar-search-big");
     let id = s.run("account.add", &json!({"email": "zoe@example.org", "password": "pw"})).unwrap()["account"].as_str().unwrap().to_string();
     let people = [
-        ("Ana Lima", "ana@studio.example"),
+        ("Ana Exemple", "ana@studio.example"),
         ("Jun Park", "jun@studio.example"),
         ("Sam Reyes", "sam@example.org"),
         ("Zoe Martin", "zoe@example.org"),

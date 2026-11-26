@@ -51,7 +51,7 @@ fn a_new_message_is_news_with_who_said_it() {
     let want = News {
         chat: GROUP.into(),
         message: at.to_string(),
-        sender: "Ana Lima".into(),
+        sender: "Ana Exemple".into(),
         external: false,
         app: false,
         mentions_me: false,
@@ -66,7 +66,7 @@ fn a_new_message_is_news_with_who_said_it() {
     // The other's, a one-to-one chat: sent to the user alone, no chat's name.
     until_news(&mut r, from, OTHER);
     let other = news(&r, from).into_iter().filter(|n| n.chat == OTHER).collect::<Vec<_>>();
-    assert!(matches!(other.as_slice(), [n] if n.direct && n.chat_name.is_none() && n.sender == "Ana Lima" && n.text == "Later"), "{other:?}");
+    assert!(matches!(other.as_slice(), [n] if n.direct && n.chat_name.is_none() && n.sender == "Ana Exemple" && n.text == "Later"), "{other:?}");
 }
 
 #[test]
@@ -135,7 +135,7 @@ fn a_sender_is_named_as_the_members_name_them() {
     let from = r.events().len();
     // The message says another name, under Eve's id (in another case once).
     for (i, id) in ["u-eve", "U-EVE"].iter().enumerate() {
-        let from_json = json!({"user": {"id": id, "displayName": "Ana Lima", "userIdentityType": "aadUser", "tenantId": TENANT}});
+        let from_json = json!({"user": {"id": id, "displayName": "Ana Exemple", "userIdentityType": "aadUser", "tenantId": TENANT}});
         write(&r, GROUP, "u-eve", NOW + (i as i64 + 1) * MINUTE, "<p>Hello</p>", |m| m.from_json = Some(from_json));
     }
     r.turns(Duration::from_secs(11));
@@ -186,14 +186,17 @@ fn names_and_text_carry_no_bidi_or_control() {
     // A member's name as a damaged or hostile copy may hold it.
     let mut kept = r.record(GROUP);
     for m in kept.chat.members.iter_mut().filter(|m| m.user_id == "u-ana") {
-        m.name = "Ana\u{202E} Lima\u{7}".into();
+        m.name = "Ana\u{202E} Exemple\u{7}".into();
     }
     r.w.copy.as_ref().unwrap().put_chat(&kept).unwrap();
     let from = r.events().len();
     write(&r, GROUP, "u-ana", NOW + MINUTE, "<p>Lunch\u{7}?\u{202E}</p>", |_| {});
     r.turns(Duration::from_secs(11));
     let said = news(&r, from);
-    assert!(matches!(said.as_slice(), [n] if n.sender == "Ana Lima" && n.text == "Lunch?" && n.chat_name.as_deref() == Some("Agenda")), "{said:?}");
+    assert!(
+        matches!(said.as_slice(), [n] if n.sender == "Ana Exemple" && n.text == "Lunch?" && n.chat_name.as_deref() == Some("Agenda")),
+        "{said:?}"
+    );
     let all = said.iter().map(|n| format!("{}{}{}", n.sender, n.text, n.chat_name.clone().unwrap_or_default())).collect::<String>();
     assert!(!all.chars().any(|c| c.is_control() || is_bidi(c)), "{all:?}");
 }
@@ -212,7 +215,7 @@ fn an_unreadable_chats_new_preview_is_news_once() {
     let want = News {
         chat: GROUP.into(),
         message: String::new(),
-        sender: "Ana Lima".into(),
+        sender: "Ana Exemple".into(),
         external: false,
         app: false,
         mentions_me: false,

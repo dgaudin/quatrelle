@@ -40,7 +40,7 @@ fn chat(id: &str, topic: Option<&str>) -> Chat {
         topic: topic.map(str::to_string),
         members: vec![
             Member { user_id: "u-me".into(), name: "Morgan Lee".into(), ..Member::default() },
-            Member { user_id: "u-ana".into(), name: "Ana Lima".into(), ..Member::default() },
+            Member { user_id: "u-ana".into(), name: "Ana Exemple".into(), ..Member::default() },
         ],
         last_read: None,
         hidden: false,
@@ -64,7 +64,7 @@ fn msg(chat: &str, i: i64, says: &str) -> ChatMessage {
     ChatMessage {
         id: at.to_string(),
         chat: chat.into(),
-        sender: Sender::User { id: "u-ana".into(), name: "Ana Lima".into(), identity_type: Some("aadUser".into()), tenant_id: Some("t-1".into()) },
+        sender: Sender::User { id: "u-ana".into(), name: "Ana Exemple".into(), identity_type: Some("aadUser".into()), tenant_id: Some("t-1".into()) },
         created: at,
         modified: at,
         body: text(says),
@@ -140,7 +140,7 @@ fn finds_a_word_of_a_message_and_a_chat_name() {
         assert_eq!(hits(copy, "equipe"), one(A, &id(1)));
         assert_eq!(hits(copy, "launch noon"), Vec::<(String, String)>::new());
         // The sender's name: of both messages, the newest first.
-        assert_eq!(hits(copy, "lima"), vec![(B.to_string(), id(2)), (A.to_string(), id(1))]);
+        assert_eq!(hits(copy, "exemple"), vec![(B.to_string(), id(2)), (A.to_string(), id(1))]);
         // A chat by its name: no message of it.
         assert_eq!(hits(copy, "budget rev"), one(A, ""));
         assert_eq!(hits(copy, ""), Vec::<(String, String)>::new());
@@ -195,7 +195,7 @@ fn a_deleted_message_leaves_the_index() {
 #[test]
 fn words_per_message_and_length_are_capped() {
     let (copy, store) = copy();
-    // The sender's two words ("ana", "lima") come first, then the text's: 2,000 in all.
+    // The sender's two words ("ana", "exemple") come first, then the text's: 2,000 in all.
     let many: Vec<String> = (0..2_500).map(|i| format!("w{i:04}")).collect();
     let long = "x".repeat(100);
     copy.upsert(A, &[msg(A, 1, &many.join(" ")), msg(A, 2, &format!("a {long} word"))]).unwrap();
@@ -207,7 +207,7 @@ fn words_per_message_and_length_are_capped() {
     assert_eq!(hits(&copy, &long), one(A, &id(2)));
     let kept: serde_json::Value = serde_json::from_str(&index_files(&store, A).unwrap()).unwrap();
     let words = kept["words"].as_object().unwrap();
-    assert_eq!(words.len(), 2_000 + 3, "2,000 of the first message, 'a', the long one and 'word' of the second ('ana' and 'lima' shared)");
+    assert_eq!(words.len(), 2_000 + 3, "2,000 of the first message, 'a', the long one and 'word' of the second ('ana' and 'exemple' shared)");
     assert!(words.keys().all(|w| w.chars().count() <= 64));
 }
 

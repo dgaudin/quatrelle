@@ -40,6 +40,9 @@ impl Data {
         if let Some(done) = self.calendar_folders(op) {
             return (format!("{}Response", op.name), done);
         }
+        if op.name == "FindFolder" && super::server::take_one(&mut self.find_folder_fails) {
+            return ("FindFolderResponse".into(), vec![err("ErrorAccessDenied")]);
+        }
         if let Some(done) = self.folder_route(op).or_else(|| self.rules_route(op)) {
             return (format!("{}Response", op.name), done);
         }
@@ -654,6 +657,10 @@ impl Data {
             "DeleteItem" => {
                 for id in ids(op.child("ItemIds")) {
                     // A navigation shortcut ([MS-OXOCFG] 2.2.9) goes.
+                    if self.delete_busy.contains(&id) && self.wlinks.iter().any(|w| wlink_id(w).as_deref() == Some(id.as_str())) {
+                        out.push(err("ErrorServerBusy"));
+                        continue;
+                    }
                     if let Some(pos) = self.wlinks.iter().position(|w| wlink_id(w).as_deref() == Some(id.as_str())) {
                         self.wlinks.remove(pos);
                         self.hidden_wlinks.retain(|h| h != &id);

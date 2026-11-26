@@ -320,9 +320,9 @@ mod tests {
     /// Issue #1: a wrong address picked from the suggestions goes with one Backspace.
     #[test]
     fn backspace_takes_a_whole_recipient() {
-        let f = "Ana Lima <ana@x.example>, Zoe <zoe@x.example>, ";
+        let f = "Ana Exemple <ana@x.example>, Zoe <zoe@x.example>, ";
         let (out, at) = remove_recipient(f, f.chars().count()).unwrap();
-        assert_eq!(out, "Ana Lima <ana@x.example>, ");
+        assert_eq!(out, "Ana Exemple <ana@x.example>, ");
         assert_eq!(at, out.chars().count());
         let (out, _) = remove_recipient(&out, out.chars().count()).unwrap();
         assert_eq!(out, "");
@@ -330,7 +330,7 @@ mod tests {
         assert_eq!(remove_recipient(f, f.chars().count()).unwrap().0, "", "a comma in a quoted name isn't a separator");
         assert_eq!(remove_recipient("ana@x.example; ", 15).unwrap().0, "");
         // Half-typed, or inside an address: an ordinary backspace.
-        assert_eq!(remove_recipient("Ana Lima <ana@x.example>, zo", 28), None);
+        assert_eq!(remove_recipient("Ana Exemple <ana@x.example>, zo", 31), None);
         assert_eq!(remove_recipient("Ana <ana@x.exa", 14), None);
         assert_eq!(remove_recipient("", 0), None);
         assert_eq!(remove_recipient(", ", 2), None);

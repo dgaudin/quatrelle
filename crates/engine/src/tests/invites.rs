@@ -17,7 +17,7 @@ mod sequence;
 mod showing;
 
 const WEEK: i64 = 7 * 86_400;
-const ANA: (&str, &str) = ("Ana Lima", "ana@soundlab.example");
+const ANA: (&str, &str) = ("Ana Exemple", "ana@soundlab.example");
 
 /// Put a message carrying a calendar in the sample Inbox and open it.
 fn deliver(s: &mut Session, n: u32, from: (&str, &str), method: &str, events: &[CalEvent], stamp: i64) {

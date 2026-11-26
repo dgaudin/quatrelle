@@ -48,7 +48,7 @@ fn with_riley(name: &str) -> Session {
 /// `Autocrypt:` header when `autocrypt`.
 fn from_ana_about(subject: &str, autocrypt: bool, content_type: &str, body: &str) -> Vec<u8> {
     let mut m = format!(
-        "From: Ana Lima <ana@posteo.example>\r\nTo: riley@studio.example\r\nSubject: {subject}\r\nDate: Sat, 24 Oct 2026 09:00:00 +0000\r\n\
+        "From: Ana Exemple <ana@posteo.example>\r\nTo: riley@studio.example\r\nSubject: {subject}\r\nDate: Sat, 24 Oct 2026 09:00:00 +0000\r\n\
 Message-ID: <{}@posteo.example>\r\n",
         NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
     );
@@ -171,7 +171,7 @@ fn a_signature_says_whose_key_made_it_and_whether_it_holds() {
     open_raw(&mut s, 9604, signed_by_ana(false).replace("is approved", "is rejected").as_bytes());
     assert!(matches!(seal(&s), Seal::Broken(_)), "{:?}", seal(&s));
     // Someone else with Ana's signature on their mail: her key, not for that sender.
-    let posing = signed_by_ana(false).replace("From: Ana Lima <ana@posteo.example>", "From: Boss <boss@posteo.example>");
+    let posing = signed_by_ana(false).replace("From: Ana Exemple <ana@posteo.example>", "From: Boss <boss@posteo.example>");
     open_raw(&mut s, 9605, posing.as_bytes());
     match seal(&s) {
         Seal::Untrusted(p) => assert_eq!(p, [smime::Problem::OtherAddress(vec!["ana@posteo.example".into()])]),

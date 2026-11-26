@@ -85,7 +85,7 @@ fn an_account_round_trips_through_a_data_file() {
         ..Default::default()
     });
     pim.cards.push(quatrelle_model::pim::StoredCard {
-        card: quatrelle_model::vcard::Card { uid: "c1".into(), name: "Ana Lima".into(), ..Default::default() },
+        card: quatrelle_model::vcard::Card { uid: "c1".into(), name: "Ana Exemple".into(), ..Default::default() },
         ..Default::default()
     });
     store.save_account_doc("a1", quatrelle_model::pim::PIM_DOC, &pim).unwrap();

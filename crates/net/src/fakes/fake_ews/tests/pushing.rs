@@ -82,7 +82,7 @@ fn contacts_notes_and_tasks_changed_while_they_went_up_are_made_once() {
     let contacts = d.folder("Contacts", None, Some("contacts"), "IPF.Contact");
     let notes = d.folder("Notes", None, Some("notes"), "IPF.StickyNote");
     let tasks = d.folder("Tasks", None, Some("tasks"), "IPF.Task");
-    let ana = parse("<t:Contact><t:DisplayName>Ana Lima</t:DisplayName><t:Surname>Lima</t:Surname></t:Contact>");
+    let ana = parse("<t:Contact><t:DisplayName>Ana Exemple</t:DisplayName><t:Surname>Lima</t:Surname></t:Contact>");
     d.pim.push(("C1".into(), contacts.clone(), ana.kids[0].clone()));
     let server = serve(d);
     let store = crate::fake::tests_store("ews-cards-made-once");
@@ -91,7 +91,7 @@ fn contacts_notes_and_tasks_changed_while_they_went_up_are_made_once() {
             StoredCard {
                 book: crate::ews_pim::CONTACTS.into(),
                 href: "contact:C1".into(),
-                card: Card { uid: "C1".into(), name: format!("Ana Lima {n}"), family: "Lima".into(), ..Default::default() },
+                card: Card { uid: "C1".into(), name: format!("Ana Exemple {n}"), family: "Lima".into(), ..Default::default() },
                 dirty: true,
                 ..Default::default()
             },
@@ -146,7 +146,7 @@ fn contacts_notes_and_tasks_changed_while_they_went_up_are_made_once() {
     };
     assert_eq!(
         (in_folder(&contacts, "DisplayName"), in_folder(&notes, "Subject"), in_folder(&tasks, "Subject")),
-        (vec!["Ana Lima 2".to_string(), "Bo Chen 2".into()], vec!["Buy paper 2".to_string()], vec!["Order paper 2".to_string()]),
+        (vec!["Ana Exemple 2".to_string(), "Bo Chen 2".into()], vec!["Buy paper 2".to_string()], vec!["Order paper 2".to_string()]),
         "each once, as changed last"
     );
     drop(pool);

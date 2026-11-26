@@ -176,6 +176,9 @@ impl Session {
         if let Some(my) = &sync.my_calendar_group {
             p.my_calendar_group = my.clone();
         }
+        if let Some(own) = &sync.own_calendar_groups {
+            p.own_calendar_groups = own.clone();
+        }
         if let Some(groups) = &sync.calendar_groups {
             p.calendar_groups = groups.clone();
         }

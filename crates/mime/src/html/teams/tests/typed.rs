@@ -24,14 +24,14 @@ fn entry(id: u32, text: &str, user: Option<&str>) -> Mention {
 
 #[test]
 fn a_mention_is_written_as_graph_documents_it() {
-    let typed = Typed { text: "hi Ana Lima!".into(), mentions: vec![(3..11, "u-ana".into())], ..Typed::default() };
+    let typed = Typed { text: "hi Ana Exemple!".into(), mentions: vec![(3..14, "u-ana".into())], ..Typed::default() };
     let (t, m) = teams_compose_typed(&typed);
-    assert_eq!(m, vec![Mention { id: 0, text: "Ana Lima".into(), user_id: Some("u-ana".into()) }]);
+    assert_eq!(m, vec![Mention { id: 0, text: "Ana Exemple".into(), user_id: Some("u-ana".into()) }]);
     let html = teams_write_mentions(&t, &m).unwrap();
-    assert_eq!(html, "<p>hi <at id=\"0\">Ana Lima</at>!</p>");
+    assert_eq!(html, "<p>hi <at id=\"0\">Ana Exemple</at>!</p>");
     assert_eq!(teams_foreign_markup(&html), None);
     assert_eq!(teams_html(&html, C, "1").blocks[0].runs[1].mention, Some(0));
-    assert_eq!(teams_write(&t).unwrap(), "<p>hi Ana Lima!</p>", "without the mentions, its text alone");
+    assert_eq!(teams_write(&t).unwrap(), "<p>hi Ana Exemple!</p>", "without the mentions, its text alone");
 }
 
 #[test]
@@ -52,17 +52,17 @@ fn mention_ranges_that_cant_be_are_plain_text() {
     assert!(mentioned(&typed("a\nb", &[(0..3, "u")])).is_empty());
     assert!(mentioned(&typed("a\u{7}b", &[(0..3, "u")])).is_empty());
     // The second of two that overlap is dropped, the first kept.
-    assert_eq!(mentioned(&typed("Ana Lima", &[(0..3, "u-1"), (2..8, "u-2")])), ["Ana"]);
-    assert_eq!(mentioned(&typed("Ana Lima", &[(4..8, "u-2"), (0..3, "u-1")])), ["Ana", "Lima"], "in the text's order");
+    assert_eq!(mentioned(&typed("Ana Exemple", &[(0..3, "u-1"), (2..8, "u-2")])), ["Ana"]);
+    assert_eq!(mentioned(&typed("Ana Exemple", &[(4..8, "u-2"), (0..3, "u-1")])), ["Ana", "Exem"], "in the text's order");
     // A user id: empty, too long, with a control character.
     assert!(mentioned(&typed("Ana", &[(0..3, "")])).is_empty());
     assert!(mentioned(&typed("Ana", &[(0..3, &"x".repeat(MAX_ID + 1))])).is_empty());
     assert_eq!(mentioned(&typed("Ana", &[(0..3, &"x".repeat(MAX_ID))])), ["Ana"]);
     assert!(mentioned(&typed("Ana", &[(0..3, "u\u{7}")])).is_empty());
     // A text that isn't one line as it stands: no mention, the text whole.
-    let (t, m) = teams_compose_typed(&typed("Ana  Lima", &[(0..9, "u")]));
+    let (t, m) = teams_compose_typed(&typed("Ana  Exemple", &[(0..12, "u")]));
     assert!(m.is_empty());
-    assert_eq!(t.plain(), "Ana  Lima");
+    assert_eq!(t.plain(), "Ana  Exemple");
     assert!(runs(&t).iter().all(|r| r.mention.is_none()));
     // Past the most.
     let words: Vec<String> = (0..=MAX_MENTIONS).map(|n| format!("w{}", "x".repeat(n % 7))).collect();
@@ -86,16 +86,16 @@ fn mention_ranges_that_cant_be_are_plain_text() {
 
 #[test]
 fn a_bold_mention_is_one_run_in_its_first_characters_look() {
-    let t = Typed { text: "Ana Lima".into(), bold: vec![0..3], mentions: vec![(0..8, "u-ana".into())], ..Typed::default() };
+    let t = Typed { text: "Ana Exemple".into(), bold: vec![0..3], mentions: vec![(0..11, "u-ana".into())], ..Typed::default() };
     let (c, m) = teams_compose_typed(&t);
     assert_eq!(m.len(), 1);
     assert_eq!(c.blocks.len(), 1);
-    assert_eq!(c.blocks[0].runs, [Run { text: "Ana Lima".into(), bold: true, mention: Some(0), ..Run::default() }]);
-    assert_eq!(teams_write_mentions(&c, &m).unwrap(), "<p><b><at id=\"0\">Ana Lima</at></b></p>");
+    assert_eq!(c.blocks[0].runs, [Run { text: "Ana Exemple".into(), bold: true, mention: Some(0), ..Run::default() }]);
+    assert_eq!(teams_write_mentions(&c, &m).unwrap(), "<p><b><at id=\"0\">Ana Exemple</at></b></p>");
     // The first character not bold: the whole mention isn't, whatever follows.
-    let t = Typed { text: "Ana Lima".into(), bold: vec![1..8], italic: vec![0..1], mentions: vec![(0..8, "u-ana".into())] };
+    let t = Typed { text: "Ana Exemple".into(), bold: vec![1..11], italic: vec![0..1], mentions: vec![(0..11, "u-ana".into())] };
     let (c, _) = teams_compose_typed(&t);
-    assert_eq!(c.blocks[0].runs, [Run { text: "Ana Lima".into(), italic: true, mention: Some(0), ..Run::default() }]);
+    assert_eq!(c.blocks[0].runs, [Run { text: "Ana Exemple".into(), italic: true, mention: Some(0), ..Run::default() }]);
 }
 
 #[test]

@@ -62,7 +62,7 @@ impl Shape {
     fn message(&self, i: usize, k: usize) -> ChatMessage {
         let created = Shape::last(i) + (k as i64 - (self.count(i) as i64 - 1)) * MINUTE;
         let sender = if k.is_multiple_of(2) {
-            Sender::User { id: "u-ana".into(), name: "Ana Lima".into(), identity_type: Some("aadUser".into()), tenant_id: Some(TENANT.into()) }
+            Sender::User { id: "u-ana".into(), name: "Ana Exemple".into(), identity_type: Some("aadUser".into()), tenant_id: Some(TENANT.into()) }
         } else {
             Sender::User { id: ME.into(), name: "Morgan Lee".into(), identity_type: Some("aadUser".into()), tenant_id: Some(TENANT.into()) }
         };
@@ -87,7 +87,7 @@ impl Shape {
             id: Shape::id(i),
             kind: ChatKind::Group,
             topic: Some(format!("Project {i}")),
-            members: vec![member(ME, "Morgan Lee"), member("u-ana", "Ana Lima"), member("u-bruno", "Bruno Rossi")],
+            members: vec![member(ME, "Morgan Lee"), member("u-ana", "Ana Exemple"), member("u-bruno", "Bruno Rossi")],
             last_read: Some(last),
             hidden: false,
             left: false,
@@ -161,7 +161,7 @@ fn measure(name: &str, shape: Shape) -> Took {
     build(&store, shape);
     eprintln!("teams scale: the copy {shape:?} made in {:?}", started.elapsed());
     // The fake has the long chat only: what it is sent to.
-    let teams = teams_with(vec![FakeChat::new(LONG, "group", Some("Project 0"), vec![me(), FakeUser::new("u-ana", "Ana Lima")])]);
+    let teams = teams_with(vec![FakeChat::new(LONG, "group", Some("Project 0"), vec![me(), FakeUser::new("u-ana", "Ana Exemple")])]);
     let kept = store.clone();
     let mut r = run_with(teams, move |w| w.store = kept);
     {

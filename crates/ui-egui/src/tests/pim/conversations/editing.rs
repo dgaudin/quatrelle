@@ -30,7 +30,7 @@ fn esc() -> Event {
 
 /// Ana's question.
 fn from_ana(id: &str, secs: i64) -> ChatMessage {
-    said(id, user("u-ana", "Ana Lima"), secs, para(vec![words("Can you check the figures?")]))
+    said(id, user("u-ana", "Ana Exemple"), secs, para(vec![words("Can you check the figures?")]))
 }
 
 /// The user's "hello", its "hel" bold.
@@ -249,10 +249,10 @@ fn esc_closes_the_offer_then_cancels_the_edit_and_keeps_the_search() {
         step(&mut a, e);
     }
     let texts = texts_of(&frame_shapes(&ctx, &mut a, vec![], size));
-    assert!(has_text(&texts, "Ana Lima"), "the offer: {texts:?}");
+    assert!(has_text(&texts, "Ana Exemple"), "the offer: {texts:?}");
     step(&mut a, esc());
     let texts = texts_of(&frame_shapes(&ctx, &mut a, vec![], size));
-    assert!(!has_text(&texts, "Ana Lima"), "the offer closed: {texts:?}");
+    assert!(!has_text(&texts, "Ana Exemple"), "the offer closed: {texts:?}");
     assert_eq!(editing(&a).as_deref(), Some("m2"), "still editing");
     assert_eq!(in_box(&a), "hello @a");
     assert_eq!(a.ui.conversations.query, "agenda");

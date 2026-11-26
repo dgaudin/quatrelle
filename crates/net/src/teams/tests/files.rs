@@ -82,7 +82,7 @@ fn people_teams() -> FakeTeams {
     let mut t = FakeTeams::new(FakeUser::new(MORGAN, "Morgan Lee"), TENANT);
     let mut carla = FakeUser::new(CARLA, "Carla Dias");
     carla.mail = "carla@fabrikam.example".into();
-    t.directory = vec![FakeUser::new(ANA, "Ana Lima"), FakeUser::new(BRUNO, "Bruno Reis"), carla];
+    t.directory = vec![FakeUser::new(ANA, "Ana Exemple"), FakeUser::new(BRUNO, "Bruno Reis"), carla];
     t.guests = vec![CARLA.into()];
     t
 }
@@ -475,7 +475,7 @@ fn a_search_is_one_quoted_term() {
     assert_eq!(fake(&server, |t| t.last_search.clone()), "\"displayName:ana OR mail:eve\" OR \"mail:ana OR mail:eve\"");
     assert!(headers(&server, "users").contains(&("consistencylevel".into(), "eventual".into())), "{:?}", headers(&server, "users"));
     let found = c.users_search("ana").unwrap();
-    assert_eq!(found, [person(ANA, "Ana Lima", false)]);
+    assert_eq!(found, [person(ANA, "Ana Exemple", false)]);
     assert_eq!(search_term("  a\u{7}b\u{202E}  c "), "ab c");
     assert_eq!(search_term("a\tb\\c\"d"), "a bcd");
     assert_eq!(search_term(&"a".repeat(80)).chars().count(), 64);
@@ -529,8 +529,8 @@ fn people_come_clean_and_few() {
     assert!(seen[1].contains("\r\nConsistencyLevel: eventual\r\n"), "{}", seen[1]);
 
     // One read alone: an id that is a GUID, a name on one line, a guest by its type.
-    let p = person_of(&json!({"id": ANA, "displayName": " Ana\n Lima ", "mail": " ana@contoso.example ", "userType": "guest"})).unwrap();
-    assert_eq!(p, Person { id: ANA.into(), name: "Ana Lima".into(), address: "ana@contoso.example".into(), guest: true });
+    let p = person_of(&json!({"id": ANA, "displayName": " Ana\n Exemple ", "mail": " ana@contoso.example ", "userType": "guest"})).unwrap();
+    assert_eq!(p, Person { id: ANA.into(), name: "Ana Exemple".into(), address: "ana@contoso.example".into(), guest: true });
     assert_eq!(person_of(&json!({"id": ANA, "mail": "ana@contoso.example"})).unwrap().name, "ana@contoso.example");
     for odd in
         [json!({"id": "x')/../me", "displayName": "Eve"}), json!({"id": ANA}), json!({"id": ANA, "displayName": "Eve", "mail": "e v@x"}), json!("x")]
@@ -545,7 +545,7 @@ fn a_chat_is_created_as_graph_documents_it() {
     let c = client(&server);
     let base = server.base.clone();
     let member = |id: &str, role: &str| json!({"@odata.type": "#microsoft.graph.aadUserConversationMember", "roles": [role], "user@odata.bind": format!("{base}/users('{id}')")});
-    let ana = person(ANA, "Ana Lima", false);
+    let ana = person(ANA, "Ana Exemple", false);
     let made = c.create_chat(MORGAN, std::slice::from_ref(&ana), None).unwrap();
     assert_eq!(made["chatType"], "oneOnOne");
     let creations = fake(&server, |t| t.creations.clone());
@@ -575,7 +575,7 @@ fn a_chat_is_created_as_graph_documents_it() {
 fn a_member_id_cant_break_the_bind() {
     let server = serve_teams(people_teams());
     let c = client(&server);
-    let ana = person(ANA, "Ana Lima", false);
+    let ana = person(ANA, "Ana Exemple", false);
     let eve = Person { id: "x')/../me".into(), ..person(ANA, "Eve Moss", false) };
     let many: Vec<Person> = (0..21).map(|i| person(&format!("00000000-0000-0000-0000-0000000002{i:02}"), "Someone Else", false)).collect();
     let me = person(MORGAN, "Morgan Lee", false);

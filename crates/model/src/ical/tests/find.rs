@@ -12,7 +12,7 @@ fn board() -> CalEvent {
         summary: "Board meeting".into(),
         location: "Room 2.14, Main building".into(),
         description: "Budget for 2027 and the new studio".into(),
-        organizer: Some(Attendee { email: "ana@studio.example".into(), name: "Ana Lima".into(), ..Default::default() }),
+        organizer: Some(Attendee { email: "ana@studio.example".into(), name: "Ana Exemple".into(), ..Default::default() }),
         attendees: vec![Attendee { email: "jun.park@studio.example".into(), name: "Jun Park".into(), ..Default::default() }],
         categories: vec!["Red category".into(), "Clients".into()],
         ..Default::default()
@@ -41,7 +41,7 @@ fn words_and_fields_find_an_event() {
         ("title:budget", false),
         ("notes:budget", true),
         ("organizer:ana", true),
-        ("from:lima", true),
+        ("from:exemple", true),
         ("from:jun", false),
         ("attendee:jun", true),
         ("to:ana", false),
@@ -134,7 +134,7 @@ fn the_search_finds_the_conference() {
 #[test]
 fn a_bare_word_looks_through_each_field() {
     assert!(hit("board-budget"), "the subject's and the notes' words");
-    assert!(hit("2027 lima") && hit("studio clients"));
+    assert!(hit("2027 exemple") && hit("studio clients"));
     assert!(!hit("board-dinner"));
     assert!(hit("notes:2027") && !hit("subject:2027"));
     // A phrase written across fields (the separator in it) still finds them joined.

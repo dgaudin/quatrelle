@@ -89,7 +89,7 @@ fn create(s: &mut Session, id: &str, kind: Kind) -> String {
         Kind::Task => s.run("task.create", &json!({"subject": "Send the budget", "account": id})),
         Kind::Note => s.run("note.create", &json!({"text": "Call Ana back", "account": id})),
         Kind::ExchangeContact | Kind::CardDavContact => {
-            s.run("contact.create", &json!({"name": "Ana Lima", "emails": "ana@soundlab.example", "account": id}))
+            s.run("contact.create", &json!({"name": "Ana Exemple", "emails": "ana@soundlab.example", "account": id}))
         }
     };
     made.unwrap()["uid"].as_str().unwrap().to_string()

@@ -19,6 +19,8 @@
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 
+use rand_core::RngCore as _;
+
 use quatrelle_mime as mime;
 use quatrelle_model::{FieldChange, Flag, Flags, FolderRole, MessageKey, Op, Summary, sort_newest_first, utf7};
 use quatrelle_store::{FolderState, Store};
@@ -146,6 +148,9 @@ pub struct Client {
     pf_mailboxes: RefCell<HashMap<String, String>>,
     /// Other people's addresses as the directory has them (see [`Client::address_of`]).
     addresses: Box<RefCell<HashMap<String, String>>>,
+    /// The directory's answer for an X.500 name, once asked: a calendar group's read and each of
+    /// its moves ask for the same people again and again otherwise (`ews_pim`'s shortcuts).
+    resolved_names: RefCell<HashMap<String, Option<String>>>,
     /// The account's public folder hierarchy mailbox (Autodiscover's PublicFolderInformation),
     /// once asked: `None` inside when there is none.
     pf_hierarchy: RefCell<Option<Option<String>>>,
@@ -184,6 +189,9 @@ pub struct Client {
     /// The Common Views folder's id, once found by its name or the shortcuts it holds; `None`
     /// inside when this mailbox has none this session (see `ews_pim/links.rs`).
     common_views: RefCell<Option<Option<String>>>,
+    /// The save stamp this session writes on a calendar group header ([MS-OXOCFG] 2.2.9.4): what
+    /// makes a header one Quatrelle may change, the others being Outlook's or another client's.
+    group_stamp: RefCell<Option<u32>>,
     /// The folders whose changes the server won't give this session (`SyncFolderItems` refused
     /// from nothing: public folders, on some servers), by the element naming them: read whole, as
     /// before, without asking again.
@@ -428,6 +436,7 @@ impl Client {
             route: RefCell::new(None),
             pf_mailboxes: RefCell::new(HashMap::new()),
             addresses: Box::new(RefCell::new(HashMap::new())),
+            resolved_names: RefCell::new(HashMap::new()),
             pf_hierarchy: RefCell::new(None),
             pf_replicas: RefCell::new(Vec::new()),
             anchor: RefCell::new(None),
@@ -442,6 +451,7 @@ impl Client {
             user_agent: None,
             no_calendar: RefCell::new(Vec::new()),
             common_views: RefCell::new(None),
+            group_stamp: RefCell::new(None),
             changes_refused: RefCell::new(Vec::new()),
             fields_refused: Cell::new(false),
             clock: Cell::new(None),
@@ -467,6 +477,7 @@ impl Client {
             route: self.route.clone(),
             pf_mailboxes: self.pf_mailboxes.clone(),
             addresses: self.addresses.clone(),
+            resolved_names: self.resolved_names.clone(),
             pf_hierarchy: self.pf_hierarchy.clone(),
             pf_replicas: self.pf_replicas.clone(),
             anchor: self.anchor.clone(),
@@ -481,6 +492,7 @@ impl Client {
             user_agent: self.user_agent.clone(),
             no_calendar: self.no_calendar.clone(),
             common_views: self.common_views.clone(),
+            group_stamp: self.group_stamp.clone(),
             changes_refused: self.changes_refused.clone(),
             fields_refused: self.fields_refused.clone(),
             clock: self.clock.clone(),
@@ -488,6 +500,21 @@ impl Client {
             spent: Cell::new(Timing::default()),
             once: Cell::new(false),
             lost: Cell::new(false),
+        }
+    }
+
+    /// The directory's answer for `dn`, when it was asked this session: `Some(None)` when it
+    /// didn't know the name.
+    pub(crate) fn resolved_name(&self, dn: &str) -> Option<Option<String>> {
+        self.resolved_names.borrow().get(dn).cloned()
+    }
+
+    /// Keep the directory's answer for `dn` (a bounded number of names).
+    pub(crate) fn keep_resolved_name(&self, dn: &str, email: Option<String>) {
+        const MAX_RESOLVED_NAMES: usize = 1000;
+        let mut names = self.resolved_names.borrow_mut();
+        if names.len() < MAX_RESOLVED_NAMES {
+            names.insert(dn.to_string(), email);
         }
     }
 
@@ -499,6 +526,20 @@ impl Client {
     /// Keep the Common Views folder's id (or that there is none) for this session.
     pub(crate) fn keep_common_views(&self, id: &Option<String>) {
         *self.common_views.borrow_mut() = Some(id.clone());
+    }
+
+    /// The save stamp this session writes on a calendar group header, made once
+    /// ([MS-OXOCFG] 2.2.9.4: the writer's session).
+    pub(crate) fn group_stamp(&self) -> u32 {
+        let mut slot = self.group_stamp.borrow_mut();
+        if let Some(v) = *slot {
+            return v;
+        }
+        let mut bytes = [0u8; 4];
+        rand_core::OsRng.fill_bytes(&mut bytes);
+        let v = u32::from_le_bytes(bytes);
+        *slot = Some(v);
+        v
     }
 
     /// Whether the server refused an appointment's fields asked by name this session.

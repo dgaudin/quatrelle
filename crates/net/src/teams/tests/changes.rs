@@ -109,22 +109,22 @@ fn restart(r: Run) -> Run {
 #[test]
 fn an_edit_goes_as_a_patch_of_escaped_html_with_its_mentions() {
     let mut r = run(teams_with(vec![chat(CHAT, T0, 4)]));
-    let typed = Typed { text: "<b>x</b> & Ana Lima".into(), mentions: vec![(11..19, "u-ana".into())], ..Typed::default() };
+    let typed = Typed { text: "<b>x</b> & Ana Exemple".into(), mentions: vec![(11..22, "u-ana".into())], ..Typed::default() };
     let (body, mentions) = teams_compose_typed(&typed);
     r.w.job(Job::Op { op: Op::Edit { chat: CHAT.into(), local: "1-1".into(), message: OWN.into(), created: T0 + MINUTE, body, mentions } });
     r.turns(Duration::from_secs(3));
     let writes = r.fake(|t| t.writes.clone());
     assert_eq!(writes.len(), 1);
     assert_eq!((writes[0].0.as_str(), writes[0].2.as_str()), ("edit", OWN));
-    assert_eq!(writes[0].3["body"]["content"], "<p>&lt;b&gt;x&lt;/b&gt; &amp; <at id=\"0\">Ana Lima</at></p>");
+    assert_eq!(writes[0].3["body"]["content"], "<p>&lt;b&gt;x&lt;/b&gt; &amp; <at id=\"0\">Ana Exemple</at></p>");
     assert_eq!(writes[0].3["mentions"][0]["mentioned"]["user"]["id"], "u-ana");
     assert!(r.outbox_said(CHAT).is_empty());
     let m = r.messages_said(CHAT).into_iter().rfind(|m| m.id == OWN).unwrap();
     assert!(m.edited.is_some());
-    assert_eq!(m.body.plain(), "<b>x</b> & Ana Lima");
+    assert_eq!(m.body.plain(), "<b>x</b> & Ana Exemple");
     // In the copy too, with its mention, at Graph's time.
     let kept = r.kept(CHAT, OWN, T0 + MINUTE);
-    assert_eq!((kept.body.plain(), kept.mentions.len()), ("<b>x</b> & Ana Lima".to_string(), 1));
+    assert_eq!((kept.body.plain(), kept.mentions.len()), ("<b>x</b> & Ana Exemple".to_string(), 1));
     assert!(kept.edited.is_some_and(|t| t >= NOW) && kept.modified >= NOW, "{kept:?}");
     assert!(r.ops().is_empty());
 }
@@ -668,18 +668,17 @@ fn a_message_with_mentions_goes_with_its_array_and_its_check_finds_it() {
         t.answer_lost.insert("post".into(), 1);
         t.lost_retry_after = Some(1);
     });
-    let typed = Typed { text: "Ana Lima, the figures?".into(), mentions: vec![(0..8, "u-ana".into())], ..Typed::default() };
+    let typed = Typed { text: "Ana Exemple, the figures?".into(), mentions: vec![(0..11, "u-ana".into())], ..Typed::default() };
     let (body, mentions) = teams_compose_typed(&typed);
     r.w.job(Job::Op { op: Op::Send { chat: CHAT.into(), local: "1-1".into(), body, mentions, parts: Vec::new() } });
     r.turns(Duration::from_secs(10));
     let posts = r.fake(|t| t.posts.clone());
     assert_eq!(posts.len(), 1, "posted once: {posts:?}");
-    assert_eq!(posts[0].1["body"]["content"], "<p><at id=\"0\">Ana Lima</at>, the figures?</p>");
-    let mention =
-        json!({"id": 0, "mentionText": "Ana Lima", "mentioned": {"user": {"id": "u-ana", "displayName": "Ana Lima", "userIdentityType": "aadUser"}}});
+    assert_eq!(posts[0].1["body"]["content"], "<p><at id=\"0\">Ana Exemple</at>, the figures?</p>");
+    let mention = json!({"id": 0, "mentionText": "Ana Exemple", "mentioned": {"user": {"id": "u-ana", "displayName": "Ana Exemple", "userIdentityType": "aadUser"}}});
     assert_eq!(posts[0].1["mentions"], json!([mention]));
     assert!(r.ops().is_empty(), "found sent: {:?}", r.ops());
-    let m = r.messages_said(CHAT).into_iter().rfind(|m| m.body.plain() == "Ana Lima, the figures?").expect("found, and shown");
+    let m = r.messages_said(CHAT).into_iter().rfind(|m| m.body.plain() == "Ana Exemple, the figures?").expect("found, and shown");
     assert_eq!(m.mentions.iter().map(|x| x.user_id.as_deref()).collect::<Vec<_>>(), [Some("u-ana")]);
 }
 
