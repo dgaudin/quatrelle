@@ -450,14 +450,15 @@ pub fn nav(s: &Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action>) {
     });
 }
 
-/// Everyone as business cards, side by side (Outlook's Business Card view): a click picks one,
-/// a double-click edits it.
 /// The phone a business card shows, as Outlook's Business Card view does: the business one
-/// (work, voice, or the preferred number), else the first number the card has.
+/// (work, voice, or the preferred number). Without one, Outlook leaves the line empty — no
+/// fallback to the first number, even a home or fax one.
 fn business_phone(phones: &[quatrelle_engine::model::vcard::Typed]) -> Option<&quatrelle_engine::model::vcard::Typed> {
-    phones.iter().find(|x| matches!(x.kind.as_str(), "work" | "voice" | "pref")).or_else(|| phones.first())
+    phones.iter().find(|x| matches!(x.kind.as_str(), "work" | "voice" | "pref"))
 }
 
+/// Everyone as business cards, side by side (Outlook's Business Card view): a click picks one,
+/// a double-click edits it.
 fn cards(s: &Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action>) {
     let t = st.tokens;
     let people = shown(s, st);
