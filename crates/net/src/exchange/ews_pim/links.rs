@@ -27,7 +27,7 @@ pub(crate) struct CalendarLink {
 }
 
 /// A group of the Calendar pane: its name, and whether Quatrelle wrote its header (so it may be
-/// renamed, moved or deleted here; the save stamp is the writer's session, [MS-OXOCFG] 2.2.9.4).
+/// renamed, moved or deleted here; its save stamp is the one its header id gives, [MS-OXOCFG] 2.2.9.4).
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub(crate) struct CalendarGroup {
     pub name: String,
@@ -82,7 +82,7 @@ const PROPS: [(&str, &str); 13] = [
     ("0x684B", "Binary"),
     ("0x684C", "Binary"),
     ("0x684E", "Binary"),
-    ("0x684F", "CLSID"),
+    ("0x684F", "Binary"),
     ("0x6850", "Binary"),
     ("0x6851", "String"),
     ("0x6852", "Integer"),
@@ -193,7 +193,7 @@ struct Wlink {
     group_id: Option<String>,
     header_id: Option<String>,
     ordinal: Vec<u8>,
-    save_stamp: Option<i64>,
+    ours: bool,
     address_book_eid: Option<Vec<u8>>,
 }
 
@@ -211,7 +211,7 @@ fn wlink(it: &El) -> Option<Wlink> {
         group_id: guid_prop(it, "0x6850"),
         header_id: guid_prop(it, "0x6842"),
         ordinal: bin_prop(it, "0x684B").unwrap_or_default(),
-        save_stamp: int_prop(it, "0x6847"),
+        ours: int_prop(it, "0x6847").is_some_and(|s| bin_prop(it, "0x6842").is_some_and(|id| s == i64::from(crate::ews::group_stamp(&id)))),
         address_book_eid: bin_prop(it, "0x6854"),
     })
 }
@@ -293,10 +293,9 @@ fn shape(c: &Client, items: &[El], pages: usize) -> Shortcuts {
     let mut group_headers: Vec<&Wlink> =
         wlinks.iter().filter(|w| w.section == Some(CALENDAR_SECTION) && w.kind == Some(WLINK_HEADER) && !w.name.is_empty()).collect();
     group_headers.sort_by(|a, b| a.ordinal.cmp(&b.ordinal));
-    let stamp = i64::from(c.group_stamp());
     let mut groups: Vec<CalendarGroup> = Vec::new();
     for w in group_headers {
-        let ours = w.save_stamp == Some(stamp);
+        let ours = w.ours;
         if let Some(g) = groups.iter_mut().find(|g| g.name.eq_ignore_ascii_case(&w.name)) {
             g.ours |= ours;
         } else {
