@@ -95,3 +95,59 @@ fn a_number_typed_in_the_other_box_takes_that_boxs_kind() {
     assert_eq!(saved.addresses[0].kind, "");
     let _ = std::fs::remove_dir_all(dir);
 }
+
+/// The business-card grid shows the business phone, as Outlook's Business Card view does: the
+/// work number, not the first number of the card when that is a home one.
+#[test]
+fn the_business_card_grid_shows_the_business_phone() {
+    let (mut a, dir) = app("cards-phone");
+    let ctx = egui::Context::default();
+    a.run("view.module", json!({"name": "people"}));
+    a.session
+        .run(
+            "contact.create",
+            &json!({
+                "name": "Ada Byron",
+                "emails": [{"value": "ada@x.example", "kind": "work"}],
+                "phones": [{"value": "+1 555 0001", "kind": "home"}, {"value": "+1 555 0100", "kind": "work"}],
+            }),
+        )
+        .unwrap();
+    a.ui.people_view = crate::people::PeopleView::Cards;
+    let size = egui::vec2(1280.0, 800.0);
+    let _ = frame_shapes(&ctx, &mut a, vec![], size);
+    let shapes = frame_shapes(&ctx, &mut a, vec![], size);
+    let phone = text_at(&shapes, "+1 555 0100").expect("the business phone is on the card");
+    assert!(text_at(&shapes, "+1 555 0001").is_none(), "the home number, first in the card, is not the one shown");
+    let name = text_at(&shapes, "Ada Byron").expect("the card's name");
+    assert!(phone.y > name.y, "the phone line is under the name ({name:?} vs {phone:?})");
+    assert!((phone.x - name.x).abs() < 1.0, "same text column, right of the photo band ({name:?} vs {phone:?})");
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// Without a business number (work, voice or the preferred one), the card's phone line stays
+/// empty, as Outlook's does: no fallback to the first number, even a home or fax one.
+#[test]
+fn a_card_without_a_business_number_shows_no_phone_line() {
+    let (mut a, dir) = app("cards-no-phone");
+    let ctx = egui::Context::default();
+    a.run("view.module", json!({"name": "people"}));
+    a.session
+        .run(
+            "contact.create",
+            &json!({
+                "name": "Grace Hopper",
+                "emails": [{"value": "grace@x.example", "kind": "work"}],
+                "phones": [{"value": "+1 555 0007", "kind": "home"}, {"value": "+1 555 0008", "kind": "fax"}],
+            }),
+        )
+        .unwrap();
+    a.ui.people_view = crate::people::PeopleView::Cards;
+    let size = egui::vec2(1280.0, 800.0);
+    let _ = frame_shapes(&ctx, &mut a, vec![], size);
+    let shapes = frame_shapes(&ctx, &mut a, vec![], size);
+    assert!(text_at(&shapes, "Grace Hopper").is_some(), "the card is drawn");
+    assert!(text_at(&shapes, "+1 555 0007").is_none(), "the home number isn't shown as the business one");
+    assert!(text_at(&shapes, "+1 555 0008").is_none(), "nor the fax one");
+    let _ = std::fs::remove_dir_all(dir);
+}
