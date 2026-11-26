@@ -370,7 +370,7 @@ fn a_group_header_has_a_save_stamp_and_flags() {
         let header = kept.wlinks.iter().find(|w| w.contains(">Salles<")).expect("the new group header");
         assert!(header.contains("PropertyTag=\"0x6847\""), "the save stamp is written: {header}");
         assert!(header.contains("PropertyTag=\"0x684A\""), "the flags are written: {header}");
-        assert!(header.contains("PropertyTag=\"0x684F\" PropertyType=\"CLSID\""), "the folder type is a CLSID: {header}");
+        assert!(header.contains("PropertyTag=\"0x684F\" PropertyType=\"Binary\""), "the folder type is binary: {header}");
     }
     crate::ews_pim::rename_calendar_group(&c, "Salles", "Rooms").unwrap();
     let kept = server.data.lock().unwrap();

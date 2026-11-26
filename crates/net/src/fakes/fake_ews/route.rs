@@ -10,6 +10,7 @@ pub(super) mod folders;
 mod mailtips;
 mod rules;
 mod schema;
+mod wlinks;
 
 pub(super) use schema::in_schema_order;
 
@@ -343,6 +344,11 @@ impl Data {
                     // A navigation shortcut in the Common Views folder ([MS-OXOCFG] 2.2.9): an
                     // associated item, made with its item id and the properties FindItem asks for.
                     if folder == "COMMON-VIEWS" {
+                        // As Exchange: a property of the wrong type, or a value its type can't hold.
+                        if wlinks::refuses_wlink_item(&m) {
+                            out.push(err("ErrorInvalidPropertyValue"));
+                            continue;
+                        }
                         let id = self.id("W");
                         let class = m.text_of("ItemClass").unwrap_or_default().to_string();
                         let subject = m.text_of("Subject").unwrap_or_default().to_string();
@@ -493,6 +499,7 @@ impl Data {
                         let mut e = parse(&self.wlinks[pos]);
                         let mut item = e.kids.remove(0);
                         let updates = ch.child("Updates").map(|u| u.kids.clone()).unwrap_or_default();
+                        let mut refused = false;
                         for u in updates {
                             if u.name != "SetItemField" {
                                 continue;
@@ -514,8 +521,16 @@ impl Data {
                                 && let Some(value) = u.find("ExtendedProperty").and_then(|p| p.text_of("Value"))
                             {
                                 let kind = u.child("ExtendedFieldURI").and_then(|f| f.attr("PropertyType")).unwrap_or("String");
+                                if wlinks::refuses_wlink_property(tag, kind, value) {
+                                    refused = true;
+                                    break;
+                                }
                                 set_ext(&mut item, tag, kind, value);
                             }
+                        }
+                        if refused {
+                            out.push(err("ErrorInvalidPropertyValue"));
+                            continue;
                         }
                         self.wlinks[pos] = xml(&item);
                         out.push(ok(String::new()));

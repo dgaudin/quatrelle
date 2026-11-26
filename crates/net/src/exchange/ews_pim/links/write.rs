@@ -214,7 +214,8 @@ fn after_group(all: &[Shortcut], group: &Shortcut, except: Option<&str>) -> Vec<
     last
 }
 
-/// CLSID_CalendarFolder ([MS-OXOCFG] 2.2.9.11, the value [MS-OXCDATA] 2.2.5.2 gives): the
+/// CLSID_CalendarFolder ([MS-OXOCFG] 2.2.9.11, the value [MS-OXCDATA] 2.2.5.2 gives) as 16 bytes, its
+/// first three fields little-endian ([MS-DTYP] 2.3.4); the property is PtypBinary: the
 /// folder class a calendar shortcut points at.
 const CALENDAR_FOLDER: [u8; 16] = [0x02, 0x78, 0x06, 0x00, 0x00, 0x00, 0x00, 0x00, 0xC0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x46];
 
@@ -247,7 +248,7 @@ fn create_group_xml(views: &str, name: &str, id: &[u8], ordinal: &[u8], stamp: u
         ext("0x6849", "Integer", "4"),
         ext("0x684A", "Integer", "0"),
         ext("0x684B", "Binary", &ordinal),
-        ext("0x684F", "CLSID", &folder_type),
+        ext("0x684F", "Binary", &folder_type),
         ext("0x6852", "Integer", "3"),
     )
 }
@@ -546,13 +547,15 @@ pub(crate) fn move_calendar_to_group(c: &Client, calendar: &str, name: &str, gro
 mod tests {
     use super::*;
 
-    /// The folder type is read and written as the same CLSID: a header written with a type the
-    /// read doesn't ask for is a property Outlook may ignore or "repair".
+    /// The folder type is binary ([MS-OXOCFG] 2.2.9.11, PtypBinary), read and written as such: the
+    /// 16 bytes of CLSID_CalendarFolder, little-endian ([MS-DTYP] 2.3.4), in base64.
     #[test]
-    fn the_folder_type_is_read_and_written_as_the_same_clsid() {
+    fn the_folder_type_is_read_and_written_as_binary() {
         let read = PROPS.iter().find(|(tag, _)| *tag == "0x684F").map(|(_, kind)| *kind);
         let written = create_group_xml("F", "G", &[0u8; 16], &[0x80], 1);
-        assert_eq!(read, Some("CLSID"), "the read asks the type the write uses");
-        assert!(written.contains("PropertyTag=\"0x684F\" PropertyType=\"CLSID\""), "{written}");
+        assert_eq!(read, Some("Binary"), "the read asks the type the write uses");
+        let value = crate::imap::base64(&CALENDAR_FOLDER);
+        assert_eq!(value, "AngGAAAAAADAAAAAAAAARg==");
+        assert!(written.contains(&format!("PropertyTag=\"0x684F\" PropertyType=\"Binary\"/><t:Value>{value}</t:Value>")), "{written}");
     }
 }
