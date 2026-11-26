@@ -269,6 +269,15 @@ fn insert_disk_read(g: &mut crate::session::DiskScan, k: (String, String), msgs:
     g.stamp = g.stamp.wrapping_add(1);
 }
 
+/// Whether an account's folders are labels, one message under several (Gmail's IMAP): its
+/// server, or its `[Gmail]` folders, say so.
+fn folders_are_labels(a: &crate::session::AccountState) -> bool {
+    let host = a.config.imap.host.to_ascii_lowercase();
+    host.ends_with("gmail.com")
+        || host.ends_with("googlemail.com")
+        || a.folders.iter().any(|f| f.path.starts_with("[Gmail]/") || f.path.starts_with("[Google Mail]/"))
+}
+
 impl Session {
     /// Whether a folder is in the account's own mailbox, whose followed mail the To-Do List and
     /// the reminders read, as Outlook's read the user's own store only: not a shared mailbox
@@ -401,13 +410,16 @@ impl Session {
             self.accounts.iter().flat_map(|a| a.folders.iter().map(move |f| ((a.config.id.as_str(), f.path.as_str()), f.role))).collect();
         // A message under several of Gmail's labels (Inbox, Starred, All Mail…) is one row, as
         // its reminder rings once (both by its Message-ID): the Inbox's, else an ordinary
-        // folder's, the archive's last.
+        // folder's, the archive's last. Only where folders are labels, and in the same state:
+        // elsewhere two copies with one Message-ID (sent to oneself, or a sender reusing one)
+        // are two messages, neither hiding the other.
+        let labels: std::collections::HashSet<&str> = self.accounts.iter().filter(|a| folders_are_labels(a)).map(|a| a.config.id.as_str()).collect();
         let rank = |account: &str, folder: &str| match roles.get(&(account, folder)) {
             Some(quatrelle_model::FolderRole::Inbox) => 0u8,
             Some(quatrelle_model::FolderRole::Archive) => 2,
             _ => 1,
         };
-        let mut by_id: std::collections::HashMap<(String, String), (usize, u8)> = std::collections::HashMap::new();
+        let mut by_id: std::collections::HashMap<(String, String, bool), (usize, u8)> = std::collections::HashMap::new();
         self.scan_mail(|account, folder, m| {
             // Flagged and not done, or (with the completed ones shown) a follow-up done.
             let done = m.flags.follow_up_complete();
@@ -435,11 +447,11 @@ impl Session {
                 complete: done,
             });
             let here = rank(account, folder);
-            if m.message_id.is_empty() {
+            if m.message_id.is_empty() || !labels.contains(account) {
                 list.push(row);
                 return;
             }
-            match by_id.entry((account.to_string(), m.message_id.clone())) {
+            match by_id.entry((account.to_string(), m.message_id.clone(), done)) {
                 std::collections::hash_map::Entry::Occupied(mut seen) => {
                     let (at, was) = *seen.get();
                     if here < was
