@@ -100,7 +100,7 @@ pub(super) fn commands() -> Vec<CommandSpec> {
         CommandSpec::new("mail.toggleRead", "Read / Unread", "Home › Tags", |s, _| s.flag_selection(Flag::Seen, None)).when(has_selection),
         CommandSpec::new("mail.flag", "Flag / Unflag", "Home › Tags", flag)
             .key("Insert")
-            .params(r#"{"key"?: string (that message, from the To-Do List), "on"?: bool, "due"?: "today"|"tomorrow"|"thisWeek"|"nextWeek"|"none"|"YYYY-MM-DD" (Follow Up: flag, due then), "start"?: "YYYY-MM-DD"|"none" (the follow-up's start), "reminder"?: "YYYY-MM-DDTHH:MM"|unix seconds|false|"none" (when it rings), "title"?: string|false|"none" (the flag's title, the task's PidLidToDoTitle on Exchange), "complete"?: true (Mark Complete: unflag, mark it done today; flagging again or "on": false clears that)}"#),
+            .params(r#"{"key"?: string (that message, from the To-Do List), "on"?: bool, "due"?: "today"|"tomorrow"|"thisWeek"|"nextWeek"|"none"|"YYYY-MM-DD" (Follow Up: flag, due then), "start"?: "YYYY-MM-DD"|"none" (the follow-up's start), "reminder"?: "YYYY-MM-DDTHH:MM"|unix seconds|false|"none"|null (when it rings), "title"?: string|false|"none"|null (the flag's title, the task's PidLidToDoTitle on Exchange); "none" in any case takes it off, "complete"?: true (Mark Complete: unflag, mark it done today; flagging again or "on": false clears that)}"#),
         CommandSpec::new("mail.markAllRead", "Mark all as read", "Folder", mark_all_read).when(has_account),
         CommandSpec::new("mail.categorize", "Categorize", "Home › Tags", |s, v| s.categorize_selection(p::req_str(v, "category")?, p::bool(v, "on")))
             .params(r#"{"category": string, "on"?: bool}"#)
@@ -288,11 +288,11 @@ pub(super) fn flag(s: &mut Session, v: &Value) -> CmdResult {
             Some(_) => Err(CmdError::Params(format!("`{key}` is a date (YYYY-MM-DD), or none"))),
         }
     };
-    // A reminder's time (`false`, `none` or null: taken off); absent: left as it is.
+    // A reminder's time (`false`, `none` — any case — or null: taken off); absent: left as it is.
     let reminder = match v.get("reminder") {
         None => None,
         Some(Value::Bool(false)) | Some(Value::Null) => Some(None),
-        Some(Value::String(x)) if matches!(x.trim(), "" | "none") => Some(None),
+        Some(Value::String(x)) if x.trim().is_empty() || x.trim().eq_ignore_ascii_case("none") => Some(None),
         Some(x) => {
             let text = x.as_str().map(str::trim).map(|t| if t.len() == 10 { format!("{t}T08:00") } else { t.to_string() });
             match text.as_deref().and_then(|t| crate::parse_local(t, &s.clock)).or_else(|| x.as_i64().map(|n| (n, false))) {
@@ -301,11 +301,11 @@ pub(super) fn flag(s: &mut Session, v: &Value) -> CmdResult {
             }
         }
     };
-    // The flag's title (`false`, `none` or null: taken off); absent: left as it is.
+    // The flag's title (`false`, `none` — any case — or null: taken off); absent: left as it is.
     let title = match v.get("title") {
         None => None,
         Some(Value::Null) | Some(Value::Bool(false)) => Some(None),
-        Some(Value::String(x)) if matches!(x.trim(), "" | "none") => Some(None),
+        Some(Value::String(x)) if x.trim().is_empty() || x.trim().eq_ignore_ascii_case("none") => Some(None),
         Some(Value::String(x)) => Some(Some(x.trim().chars().take(255).collect::<String>())),
         Some(_) => return Err(CmdError::Params("`title` is a string, false or none".into())),
     };

@@ -60,13 +60,18 @@ impl Session {
         let mut restore: BTreeMap<(String, i64, i64, i64, String), Vec<MessageKey>> = BTreeMap::new();
         if !on {
             for m in sel {
-                // Only a message that has a flag or a date there is written to: Clear Flag on
-                // one with neither would send an UpdateItem deleting eight properties it
-                // doesn't have.
-                let has = m.flags.flagged || m.flags.follow_up.start > 0 || m.flags.follow_up.due > 0 || m.flags.follow_up.reminder > 0;
+                let title = self.follow_up_title(m).unwrap_or_default().to_string();
+                // Only a message that has a flag, a date or a title there is written to: Clear
+                // Flag on one with none of them would send an UpdateItem deleting eight
+                // properties it doesn't have — but a title left alone (after Mark Complete,
+                // say) is taken off like the rest.
+                let has = m.flags.flagged
+                    || m.flags.follow_up.start > 0
+                    || m.flags.follow_up.due > 0
+                    || m.flags.follow_up.reminder > 0
+                    || !title.is_empty();
                 if server_side(&m.key.account) && has {
                     let old = (m.flags.follow_up.start.max(0), m.flags.follow_up.due.max(0), m.flags.follow_up.reminder.max(0));
-                    let title = self.follow_up_title(m).unwrap_or_default().to_string();
                     clear.entry(m.key.account.clone()).or_default().push(m.key.clone());
                     restore.entry((m.key.account.clone(), old.0, old.1, old.2, title)).or_default().push(m.key.clone());
                 }
@@ -85,7 +90,10 @@ impl Session {
             let mut by_title: BTreeMap<(String, String), Vec<MessageKey>> = BTreeMap::new();
             for m in sel {
                 if !m.flags.flagged && ews.contains(m.key.account.as_str()) {
-                    by_title.entry((m.key.account.clone(), m.subject.clone())).or_default().push(m.key.clone());
+                    // A message that already has a title of its own (flagged again after Mark
+                    // Complete, say) keeps it: the new flag doesn't replace it with the subject.
+                    let title = self.follow_up_title(m).filter(|t| !t.is_empty()).map(str::to_string).unwrap_or_else(|| m.subject.clone());
+                    by_title.entry((m.key.account.clone(), title)).or_default().push(m.key.clone());
                 }
             }
             for ((a, title), keys) in by_title {
