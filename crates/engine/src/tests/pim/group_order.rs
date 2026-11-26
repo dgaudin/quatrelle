@@ -39,3 +39,30 @@ fn a_group_moved_here_keeps_its_place_until_the_server_shows_it() {
     assert_eq!(groups(&s), ["Projets", "Salles", "Équipe"], "past the wait, the server's order");
     done(s);
 }
+
+/// A move the server refused ends the wait at once: the next read's order is taken, not kept
+/// out for the rest of the wait.
+#[test]
+fn a_refused_move_ends_the_wait() {
+    let mut s = Session::open(Some(temp("group-order-refused")), quatrelle_model::dates::Clock::new(NOW, 0));
+    let id = s
+        .run("account.add", &json!({"email": "zoe@contoso.example", "password": "pw", "ews": "https://mail.contoso.example/EWS/Exchange.asmx"}))
+        .unwrap()["account"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let read = |s: &mut Session, groups: &[&str], at: i64| {
+        let sync = DavSync { calendar_groups: Some(groups.iter().map(|g| g.to_string()).collect()), checked: at, ..Default::default() };
+        s.apply(Event::DavSynced { account: id.clone(), sync: Box::new(sync) });
+    };
+    read(&mut s, &["Équipe", "Salles"], NOW);
+    s.run("calendar.group.move", &json!({"account": id, "group": "Équipe", "up": false})).unwrap();
+    s.apply(Event::OpFailed {
+        account: id.clone(),
+        op: quatrelle_model::Op::MoveCalendarGroup { group: "Équipe".into(), up: false },
+        error: "refused".into(),
+    });
+    read(&mut s, &["Équipe", "Salles"], NOW + 1);
+    assert_eq!(s.pim.get(&id).unwrap().calendar_groups, ["Équipe", "Salles"], "the server's order, at once");
+    done(s);
+}

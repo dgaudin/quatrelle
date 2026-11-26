@@ -415,6 +415,10 @@ impl Session {
             }
             Event::OpFailed { account, op, error } => {
                 self.policy_failed(&account, &op);
+                // A group's move the server refused: its order isn't on its way any more.
+                if matches!(op, Op::MoveCalendarGroup { .. }) {
+                    self.group_order_waiting.remove(&account);
+                }
                 // What it counted here (a message read) didn't happen: the folders it names count
                 // as the server last said, which the sync that follows may not say again (its
                 // count unchanged, it reports none).
