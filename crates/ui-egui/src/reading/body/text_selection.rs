@@ -471,32 +471,48 @@ pub(crate) fn finish(st: &mut UiState, ui: &mut Ui, whole: Option<&str>) {
     // Right-click in the text, as Outlook's menu: Copy the selection — greyed out when nothing
     // is selected — and the whole message as it is written.
     let menu = ui.interact(rect.intersect(clip), id.with("text-menu"), Sense::hover());
-    menu.container_context_menu(|ui| {
-        if ui
-            .add_enabled(d.selection().is_some(), egui::Button::new((crate::widgets::menu_icon(Some(crate::icons::Icon::Copy)), tl!("Copy"))))
-            .on_hover_text("Ctrl+C")
-            .clicked()
-        {
-            ui.ctx().copy_text(d.text(whole));
-            ui.close();
-        }
-        if ui.button((crate::widgets::menu_icon(None), tl!("Copy the whole message"))).clicked() {
-            let (a, h) = (d.anchor, d.head);
-            d.anchor = Some(Mark::START);
-            d.head = Some(Mark::END);
-            let all = d.text(whole);
-            d.anchor = a;
-            d.head = h;
-            ui.ctx().copy_text(all.trim().to_string());
-            ui.close();
-        }
-    });
+    // Not on a click that a picture's or a line's own menu took: a window keeps one menu open,
+    // and this one, asked last, would replace it.
+    if !right_click_taken(&ctx) {
+        menu.container_context_menu(|ui| {
+            if ui
+                .add_enabled(d.selection().is_some(), egui::Button::new((crate::widgets::menu_icon(Some(crate::icons::Icon::Copy)), tl!("Copy"))))
+                .on_hover_text("Ctrl+C")
+                .clicked()
+            {
+                ui.ctx().copy_text(d.text(whole));
+                ui.close();
+            }
+            if ui.button((crate::widgets::menu_icon(None), tl!("Copy the whole message"))).clicked() {
+                let (a, h) = (d.anchor, d.head);
+                d.anchor = Some(Mark::START);
+                d.head = Some(Mark::END);
+                let all = d.text(whole);
+                d.anchor = a;
+                d.head = h;
+                ui.ctx().copy_text(all.trim().to_string());
+                ui.close();
+            }
+        });
+    }
     let ts = &mut st.text_selection;
     if ts.docs.len() >= KEPT {
         ts.docs.retain(|_, v| v.active);
     }
     d.runs.clear();
     ts.docs.insert(id, d);
+}
+
+/// Says the right-click of this pass is a child's: its own menu opens, the text's stays shut.
+pub(crate) fn take_right_click(ctx: &egui::Context) {
+    let pass = ctx.cumulative_pass_nr();
+    ctx.data_mut(|d| d.insert_temp(egui::Id::unique("right-click-taken"), pass));
+}
+
+/// Whether a child of the text took this pass's right-click ([`take_right_click`]).
+fn right_click_taken(ctx: &egui::Context) -> bool {
+    let pass = ctx.cumulative_pass_nr();
+    ctx.data(|d| d.get_temp::<u64>(egui::Id::unique("right-click-taken"))) == Some(pass)
 }
 
 /// The runs, with what's selected of them shaded, a run's shading meeting the next's on a row.

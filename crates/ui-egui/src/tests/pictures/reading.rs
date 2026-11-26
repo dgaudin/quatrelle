@@ -364,3 +364,49 @@ fn the_pictures_of_older_mail_not_kept_are_drawn() {
     assert!(!store.has_body(&k), "nothing of it is written to the cache");
     let _ = std::fs::remove_dir_all(dir);
 }
+
+/// Right-click on a picture of the message opens the picture's menu (Copy picture), not the
+/// text's: one menu is open at a time in a window, and the text's, drawn last, won.
+#[test]
+fn right_click_on_a_picture_opens_the_pictures_menu() {
+    let (mut a, dir) = app("picture-menu");
+    let ctx = egui::Context::default();
+    frame(&ctx, &mut a, vec![]);
+    let inline = vec![InlinePicture { cid: "pic@x".into(), name: "pic.png".into(), mime: "image/png".into(), data: png(60, 60) }];
+    let html = "<p>Look at this</p><img src=\"cid:pic@x\" width=\"60\" height=\"60\">".to_string();
+    let k = with_files_and_html(&mut a, 9200, Vec::new(), Some(html), inline);
+    a.run("list.open", json!({"key": k.to_id()}));
+    let mut at = None;
+    for _ in 0..300 {
+        std::thread::sleep(std::time::Duration::from_millis(10));
+        let found = frame_shapes(&ctx, &mut a, vec![], WINDOW).iter().find_map(|s| match s {
+            Shape::Mesh(m) if m.texture_id != egui::TextureId::default() && m.calc_bounds().width() > 30.0 => Some(m.calc_bounds()),
+            Shape::Rect(r) if r.brush.is_some() && r.rect.width() > 30.0 => Some(r.rect),
+            _ => None,
+        });
+        if let Some(r) = found {
+            at = Some(r.center());
+            break;
+        }
+    }
+    let at = at.expect("the picture is drawn");
+    let button = |pressed| Event::PointerButton { pos: at, button: egui::PointerButton::Secondary, pressed, modifiers: Modifiers::NONE };
+    for events in [vec![Event::PointerMoved(at)], vec![button(true)], vec![button(false)], vec![]] {
+        paint(&mut a, &ctx, events);
+    }
+    let shapes = frame_shapes(&ctx, &mut a, vec![], WINDOW);
+    let has = |label: &str| shapes.iter().any(|s| matches!(s, Shape::Text(t) if t.galley.text() == label));
+    assert!(
+        has("Copy picture"),
+        "the picture's own menu opens: {:?} at {at:?}",
+        shapes
+            .iter()
+            .filter_map(|s| match s {
+                Shape::Text(t) => Some(t.galley.text().to_string()),
+                _ => None,
+            })
+            .collect::<Vec<_>>()
+    );
+    assert!(!has("Copy the whole message"), "not the text's");
+    let _ = std::fs::remove_dir_all(dir);
+}
