@@ -33,22 +33,18 @@ impl Worker {
                 } else {
                     s.login(&user, &secret)?;
                 }
-                let written = s.set_rules(wanted, categories);
+                let written = s.set_rules(wanted, categories.clone());
                 let listed = s.list();
+                let bodies = foreign_scripts(&mut s, &listed);
                 s.logout();
                 written?;
-                let (names, _) = listed?;
+                let (names, active) = listed?;
                 let others = names
                     .iter()
                     .filter(|n| n.as_str() != crate::sieve::SCRIPT)
-                    .map(|n| quatrelle_model::organize::ForeignRule {
-                        account: self.acc.id.clone(),
-                        id: format!("sieve:{n}"),
-                        name: n.clone(),
-                        enabled: true,
-                        runnable: false,
-                        rule: None,
-                        summary: "a Sieve script".into(),
+                    .flat_map(|n| {
+                        let body = bodies.iter().find(|(b, _)| b == n).map(|(_, b)| b.as_str());
+                        foreign_script(&self.acc.id, n, body, active.as_deref() == Some(n.as_str()), &categories)
                     })
                     .collect();
                 return Ok((ids, others));
@@ -136,8 +132,9 @@ impl Worker {
                 s.login(&user, &secret)?;
             }
             let listed = s.list();
+            let bodies = foreign_scripts(&mut s, &listed);
             s.logout();
-            let (names, _) = listed?;
+            let (names, active) = listed?;
             // Our script holds our rules; without it, they're gone from the server.
             let own = names.iter().any(|n| n == crate::sieve::SCRIPT);
             let ids =
@@ -146,14 +143,9 @@ impl Worker {
             let others = names
                 .iter()
                 .filter(|n| n.as_str() != crate::sieve::SCRIPT)
-                .map(|n| quatrelle_model::organize::ForeignRule {
-                    account: self.acc.id.clone(),
-                    id: format!("sieve:{n}"),
-                    name: n.clone(),
-                    enabled: true,
-                    runnable: false,
-                    rule: None,
-                    summary: "a Sieve script".into(),
+                .flat_map(|n| {
+                    let body = bodies.iter().find(|(b, _)| b == n).map(|(_, b)| b.as_str());
+                    foreign_script(&self.acc.id, n, body, active.as_deref() == Some(n.as_str()), &[])
                 })
                 .collect();
             return Ok((ids, others, cleared));
@@ -343,5 +335,42 @@ impl Worker {
             wanted.push(kept);
         }
         (wanted, ids)
+    }
+}
+
+/// The bodies of the scripts Quatrelle didn't write (a `GETSCRIPT` each, before the logout); a
+/// script that vanished between the listing and the read is just left out.
+fn foreign_scripts<S: std::io::Read + std::io::Write>(
+    s: &mut crate::sieve::Client<S>,
+    listed: &crate::Result<(Vec<String>, Option<String>)>,
+) -> Vec<(String, String)> {
+    let Ok((names, _)) = listed else { return Vec::new() };
+    names.iter().filter(|n| n.as_str() != crate::sieve::SCRIPT).filter_map(|n| s.get(n).ok().map(|body| (n.clone(), body))).collect()
+}
+
+/// The entries a script Quatrelle didn't write becomes: its rules read as Sieve statements when
+/// it has `if` blocks in it, else the script itself as one entry, named as it is.
+fn foreign_script(
+    account: &str,
+    name: &str,
+    body: Option<&str>,
+    active: bool,
+    categories: &[(String, String)],
+) -> Vec<quatrelle_model::organize::ForeignRule> {
+    let stub = || quatrelle_model::organize::ForeignRule {
+        account: account.to_string(),
+        id: format!("sieve:{name}"),
+        name: name.to_string(),
+        enabled: active,
+        runnable: false,
+        rule: None,
+        summary: "a Sieve script".into(),
+    };
+    match body {
+        Some(b) => {
+            let parsed = crate::sieve::parse_rules(account, name, b, active, categories);
+            if parsed.is_empty() { vec![stub()] } else { parsed }
+        }
+        None => vec![stub()],
     }
 }

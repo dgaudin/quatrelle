@@ -564,3 +564,60 @@ fn imap_mail_kept_is_downloaded_whole_through_the_worker() {
         let _ = pool.wait(Duration::from_millis(50));
     }
 }
+
+/// A script of the user's own, with real Sieve rules in it, is listed as those rules — runnable,
+/// with their conditions and actions in Quatrelle's terms — not just as a name.
+#[test]
+fn a_foreign_sieve_script_is_listed_as_its_rules() {
+    let st = State::new();
+    let imap_port = serve_tcp(&st);
+    let (sieve_port, _sieve) = crate::sieve::tests::serve(crate::sieve::tests::Fake {
+        scripts: vec![(
+            "filters".into(),
+            "require [\"fileinto\", \"imap4flags\"];\r\nif header :contains \"subject\" \"invoice\" {\r\n    fileinto \"Archive\";\r\n    addflag \"\\\\Seen\";\r\n    stop;\r\n}\r\nif body :contains \"spam\" { discard; }\r\n"
+                .into(),
+        )],
+        active: Some("filters".into()),
+        sieve: "fileinto imap4flags",
+        log: Vec::new(),
+    });
+    let store = store("sieve-foreign");
+    let mut pool = crate::worker::Pool::new(store.clone(), std::sync::Arc::new(crate::worker::MemoryCredentials::default()));
+    pool.sieve_port = sieve_port;
+    let account = AccountConfig {
+        id: "a1".into(),
+        email: "me@studio.example".into(),
+        username: "me@studio.example".into(),
+        imap: ServerConfig { host: "127.0.0.1".into(), port: imap_port, security: Security::None },
+        smtp: ServerConfig { host: "127.0.0.1".into(), port: 1, security: Security::None },
+        ..Default::default()
+    };
+    pool.submit(Job::Start { account, password: Some(Secret("pw".into())) });
+    until(&pool, "online", |e| matches!(e, Event::Status { status: SyncStatus::Online { .. }, .. }));
+    pool.submit(Job::GetServerRules { account: "a1".into(), ours: Vec::new() });
+    let seen = until(&pool, "rules read", |e| matches!(e, Event::ServerRules { others, error: None, .. } if !others.is_empty()));
+    let (_, others, _) = seen
+        .into_iter()
+        .find_map(|e| match e {
+            Event::ServerRules { ids, others, cleared, error: None, .. } => Some((ids, others, cleared)),
+            _ => None,
+        })
+        .unwrap_or_default();
+    use quatrelle_model::organize::{Condition, RuleAction};
+    assert_eq!(others.len(), 2, "{others:?}");
+    let r = &others[0];
+    assert_eq!(r.id, "sieve:filters#0");
+    assert_eq!(r.name, "filters #0");
+    assert!(r.enabled, "the active script's rules are on: {r:?}");
+    assert!(r.runnable, "{r:?}");
+    let rule = r.rule.as_ref().expect("runnable");
+    assert_eq!(rule.conditions, vec![Condition::Subject("invoice".into())]);
+    assert_eq!(rule.actions, vec![RuleAction::MoveTo("Archive".into()), RuleAction::MarkRead]);
+    assert!(rule.stop);
+    assert!(r.summary.contains("file into \"Archive\""), "{}", r.summary);
+    // The body test Quatrelle can't say: listed, not runnable, said in words.
+    let r1 = &others[1];
+    assert!(!r1.runnable && r1.rule.is_none(), "{r1:?}");
+    assert!(r1.summary.contains("body"), "{}", r1.summary);
+    let _ = std::fs::remove_dir_all(store.root());
+}
