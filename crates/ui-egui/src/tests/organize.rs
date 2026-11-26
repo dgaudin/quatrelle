@@ -887,6 +887,7 @@ fn a_sieve_rule_is_shown_as_managed_on_the_server() {
         })
         .collect();
     assert!(texts.iter().any(|t| t == "These rules are managed on the server; change them where they were made."), "{texts:?}");
+    let _ = std::fs::remove_dir_all(dir);
 }
 
 /// The Custom Follow Up form has the flag's title: it opens with the message's own, an edited
