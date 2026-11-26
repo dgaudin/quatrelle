@@ -135,6 +135,17 @@ pub(super) fn loose_item(m: &Loose<'_>, named: &crate::pst_pim::Named, depth: us
                     *left_out.entry(FileLeftOut::TooBig).or_insert(0) += 1;
                 } else if photo.is_none() {
                     photo = crate::pst_pim::contact_photo(true, mime, Some(data.as_slice()));
+                    if photo.is_none() {
+                        // A flagged attachment that isn't a picture (no image type, no picture
+                        // magic): counted, as it would otherwise go unsaid.
+                        log::info!("a contact's flagged attachment wasn't a picture (mime `{mime}`, {} bytes): left out", data.len());
+                        *left_out.entry(FileLeftOut::Unreadable).or_insert(0) += 1;
+                    }
+                } else {
+                    // A card keeps one picture: the further flagged ones are counted, not
+                    // dropped silently.
+                    log::info!("a contact's flagged picture was left out: the card already has one");
+                    *left_out.entry(FileLeftOut::NoPlace).or_insert(0) += 1;
                 }
                 None
             }

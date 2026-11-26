@@ -30,7 +30,7 @@ fn file_lines(extra: &[String]) -> Vec<String> {
 /// go.
 #[test]
 fn pictures_and_files_come_in_on_cards_and_events() {
-    let png = b"\x89PNG\r\n\x1a\npicture";
+    let png: &[u8] = &crate::data_files::msg::tests::PNG_1PX;
     let photo_flag = [UnicodePstProperty::tagged(0x7FFF, V::Boolean(true))];
     let mut contact = Put::new(&["Contacts"], "IPF.Contact", item("IPM.Contact", "Ana Lima", "", &[]));
     contact.files = vec![file("ContactPicture.png", "image/png", png, &photo_flag), file("cv.pdf", "application/pdf", b"%PDF", &[])];
@@ -44,7 +44,7 @@ fn pictures_and_files_come_in_on_cards_and_events() {
     let pim = b.pim();
     let card = &pim.cards[0].card;
     let photo = card.photo.as_ref().expect("the contact's picture");
-    assert_eq!((photo.media.as_str(), photo.bytes(1 << 20).as_deref()), ("image/png", Some(&png[..])));
+    assert_eq!((photo.media.as_str(), photo.bytes(1 << 20).as_deref()), ("image/png", Some(png)));
     assert_eq!(file_lines(&card.extra), ["X-QUATRELLE-ATTACH;X-FILENAME=\"cv.pdf\""]);
     assert_eq!(file_lines(&pim.events[0].event.extra), ["ATTACH;FMTTYPE=application/pdf;ENCODING=BASE64;VALUE=BINARY;X-FILENAME=\"agenda.pdf\""]);
     assert_eq!(b.done.files_left_out.get(&FileLeftOut::NoPlace), Some(&1), "{:?}", b.done);
@@ -56,6 +56,30 @@ fn pictures_and_files_come_in_on_cards_and_events() {
     let event = &pim.events[0].event;
     assert_eq!(shown(event_files(event)), [("agenda.pdf".to_string(), "application/pdf".to_string(), 8)]);
     assert_eq!(event_file_data(event, 0).as_deref(), Some(&b"%PDF-1.7"[..]));
+}
+
+/// A contact's further flagged pictures are counted (a card keeps one), and a flagged one that
+/// isn't a picture at all (no image type, no picture magic) is counted as unreadable — neither
+/// is dropped silently.
+#[test]
+fn extra_and_invalid_flagged_pictures_are_counted() {
+    let png: &[u8] = &crate::data_files::msg::tests::PNG_1PX;
+    let photo_flag = [UnicodePstProperty::tagged(0x7FFF, V::Boolean(true))];
+    let mut contact = Put::new(&["Contacts"], "IPF.Contact", item("IPM.Contact", "Ana Lima", "", &[]));
+    contact.files = vec![
+        // First flagged one isn't a picture: counted unreadable, and the card still has no photo.
+        file("odd.bin", "application/octet-stream", b"not a picture", &photo_flag),
+        // The real picture: kept.
+        file("ContactPicture.png", "image/png", png, &photo_flag),
+        // A second one: counted, the card keeps the first.
+        file("second.png", "image/png", png, &photo_flag),
+    ];
+    let b = Brought::of("extra-pictures", &[contact]);
+    let card = &b.pim().cards[0].card;
+    let photo = card.photo.as_ref().expect("the valid flagged picture is kept");
+    assert_eq!((photo.media.as_str(), photo.bytes(1 << 20).as_deref()), ("image/png", Some(png)));
+    assert_eq!(b.done.files_left_out.get(&FileLeftOut::Unreadable), Some(&1), "the invalid one is counted: {:?}", b.done);
+    assert_eq!(b.done.files_left_out.get(&FileLeftOut::NoPlace), Some(&1), "the extra one is counted: {:?}", b.done);
 }
 
 /// A file as the import holds it.

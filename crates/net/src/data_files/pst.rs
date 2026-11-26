@@ -204,7 +204,8 @@ pub enum FileLeftOut {
     TooDeep,
     /// An attached message's files past what one item may read.
     FilesPastLimit,
-    /// A file of an item that has nowhere to keep one (a task, a note, a journal entry).
+    /// A file of an item that has nowhere to keep one (a task, a note, a journal entry), or a
+    /// contact's further flagged pictures (a card keeps one).
     NoPlace,
 }
 
@@ -330,7 +331,7 @@ macro_rules! reader {
                     store.clone()
                 };
                 let m = <$message>::read(store, entry, None)?;
-                Ok(item_with_files(&Held { m, named: &named, photo: RefCell::new(None) }))
+                Ok(item_with_files(&Held { m, named: &named, photo: RefCell::new(None), left_out: RefCell::new(Default::default()) }))
             };
             let done = walk(&*any, &read, out);
             out.reading.add(source, reopens.get());
@@ -350,15 +351,40 @@ macro_rules! reader {
                         match <$attachment>::read(self.m.clone(), node, None) {
                             Ok(a) => {
                                 // A contact's picture is one of its attachments, hidden.
-                                if let Ok(mut photo) = self.photo.try_borrow_mut()
-                                    && photo.is_none()
-                                {
-                                    *photo = picture_of(&*a);
+                                let contact = class.get(.."ipm.contact".len()).is_some_and(|c| c.eq_ignore_ascii_case("ipm.contact"));
+                                if contact && let Ok(mut photo) = self.photo.try_borrow_mut() {
+                                    let props = a.properties();
+                                    let flagged = matches!(props.get(0x7FFF).map(|v| props::val(v, cp)), Some(Val::Bool(true)));
+                                    match picture_of(&*a) {
+                                        Some(pic) if photo.is_none() => *photo = Some(pic),
+                                        Some(_) => {
+                                            // A card keeps one picture: the further flagged ones are
+                                            // counted, not dropped silently.
+                                            log::info!("a contact's flagged picture was left out: the card already has one");
+                                            if let Ok(mut lo) = self.left_out.try_borrow_mut() {
+                                                *lo.entry(FileLeftOut::NoPlace).or_insert(0) += 1;
+                                            }
+                                        }
+                                        None if flagged => {
+                                            // Flagged as the contact's picture but not a picture (no
+                                            // image type, no picture magic): counted, not silent.
+                                            log::info!("a contact's flagged attachment wasn't a picture: left out");
+                                            if let Ok(mut lo) = self.left_out.try_borrow_mut() {
+                                                *lo.entry(FileLeftOut::Unreadable).or_insert(0) += 1;
+                                            }
+                                        }
+                                        None => {}
+                                    }
                                 }
                                 match attachment(&*a, cp, &class, top) {
                                     Some(got) => Part::Got(got),
                                     None => match a.embedded_message() {
-                                        Some(m) => Part::Message(Held { m, named: self.named, photo: RefCell::new(None) }),
+                                        Some(m) => Part::Message(Held {
+                                            m,
+                                            named: self.named,
+                                            photo: RefCell::new(None),
+                                            left_out: RefCell::new(Default::default()),
+                                        }),
                                         None => Part::Got(item::Got::Left(FileLeftOut::MessageUnreadable)),
                                     },
                                 }
@@ -374,7 +400,13 @@ macro_rules! reader {
 
             fn item(&self, files: Vec<File>) -> Item {
                 let photo = self.photo.try_borrow_mut().ok().and_then(|mut p| p.take());
-                item(&*self.m, files, self.named, photo)
+                let mut it = item(&*self.m, files, self.named, photo);
+                if let Ok(lo) = self.left_out.try_borrow() {
+                    for (reason, n) in lo.iter() {
+                        *it.left_out.entry(*reason).or_default() += n;
+                    }
+                }
+                it
             }
 
             fn key(&self) -> Option<Vec<u8>> {
@@ -390,6 +422,8 @@ struct Held<'a, M> {
     named: &'a crate::pst_pim::Named,
     /// A contact's picture, met among its attachments as they're read.
     photo: RefCell<Option<(String, Vec<u8>)>>,
+    /// The contact's flagged pictures left out (past the first, or not a picture at all): counted.
+    left_out: RefCell<std::collections::BTreeMap<FileLeftOut, usize>>,
 }
 
 /// A message's search key (`PidTagSearchKey`), which a copy of it keeps: an attached message

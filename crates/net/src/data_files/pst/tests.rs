@@ -353,6 +353,17 @@ fn a_contact_picture_is_a_hidden_picture() {
         Some(("image/png".to_string(), jpeg.to_vec())),
         "the item's own type wins"
     );
+    let png = crate::data_files::msg::tests::PNG_1PX;
+    assert_eq!(
+        crate::pst_pim::contact_photo(true, "", Some(&png)),
+        Some(("image/png".to_string(), png.to_vec())),
+        "a real PNG is recognized by its magic, with no type given"
+    );
+    assert_eq!(
+        crate::pst_pim::contact_photo(true, "image/png", Some(b"not an image at all")),
+        Some(("image/png".to_string(), b"not an image at all".to_vec())),
+        "a stated image type wins over the bytes, as in a data file: the bytes aren't re-checked"
+    );
     assert_eq!(crate::pst_pim::contact_photo(false, "image/jpeg", Some(&jpeg)), None, "a visible attachment isn't the picture");
     assert_eq!(crate::pst_pim::contact_photo(true, "text/plain", Some(b"hello")), None, "not a picture");
     assert_eq!(crate::pst_pim::contact_photo(true, "", Some(b"")), None);

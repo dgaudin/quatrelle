@@ -73,7 +73,13 @@ pub(super) fn item_in<M: Holder>(m: &M, walk: &mut Walk) -> Item {
     if held {
         walk.chain.pop();
     }
-    Item { left_out: files.left_out, ..m.item(files.files) }
+    // The files' own left-outs (links, too big, unreadable…) and the item's (a contact's further
+    // flagged pictures, say) both count.
+    let mut it = m.item(files.files);
+    for (reason, n) in files.left_out {
+        *it.left_out.entry(reason).or_default() += n;
+    }
+    it
 }
 
 /// The files of `m`, a message `nesting` attached messages down from the item.
