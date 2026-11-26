@@ -23,7 +23,7 @@ const KINDS: [(&str, &str); 13] = [
 ];
 
 /// Whether a shortcut property written as `kind` with `value` is one Exchange refuses: the wrong
-/// type for the tag, or a binary that isn't base64.
+/// type for the tag, an integer outside a signed 32-bit one, or a binary that isn't base64.
 pub(in crate::fakes::fake_ews) fn refuses_wlink_property(tag: &str, kind: &str, value: &str) -> bool {
     let Some((_, wanted)) = KINDS.iter().find(|(t, _)| crate::ews::is_tag(tag, t)) else {
         return false;
@@ -32,6 +32,7 @@ pub(in crate::fakes::fake_ews) fn refuses_wlink_property(tag: &str, kind: &str, 
         return true;
     }
     match *wanted {
+        "Integer" => value.trim().parse::<i32>().is_err(),
         "Binary" => crate::ews::unb64(value.trim()).is_none(),
         _ => false,
     }
@@ -52,12 +53,15 @@ pub(in crate::fakes::fake_ews) fn refuses_wlink_item(item: &El) -> bool {
 mod tests {
     use super::*;
 
-    /// The fake refuses what Exchange would: a GUID text under a CLSID type for the folder type, a binary that isn't base64; and takes the right ones.
+    /// The fake refuses what Exchange would: a GUID text under a CLSID type for the folder type, an
+    /// integer past 32 bits, a binary that isn't base64; and takes the right ones.
     #[test]
     fn the_fake_refuses_what_exchange_refuses() {
         assert!(refuses_wlink_property("0x684F", "CLSID", "00067802-0000-0000-c000-000000000046"));
         assert!(refuses_wlink_property("0x684F", "CLSID", "AngGAAAAAADAAAAAAAAARg=="));
         assert!(!refuses_wlink_property("0x684F", "Binary", "AngGAAAAAADAAAAAAAAARg=="));
+        assert!(refuses_wlink_property("0x6847", "Integer", "3000000000"));
+        assert!(!refuses_wlink_property("0x6847", "Integer", "2000000000"));
         assert!(refuses_wlink_property("0x684B", "Binary", "not base64!"));
         assert!(!refuses_wlink_property("0x6851", "String", "Rooms"));
     }

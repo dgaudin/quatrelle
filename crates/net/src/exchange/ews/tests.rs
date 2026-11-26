@@ -13,6 +13,7 @@ mod kinds;
 mod listing;
 mod refusals;
 mod replied;
+mod stamps;
 
 #[test]
 fn the_inbox_rules_go_to_exchange_and_come_back() {

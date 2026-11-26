@@ -537,7 +537,7 @@ impl Client {
         }
         let mut bytes = [0u8; 4];
         rand_core::OsRng.fill_bytes(&mut bytes);
-        let v = u32::from_le_bytes(bytes);
+        let v = stamp_from(bytes);
         *slot = Some(v);
         v
     }
@@ -682,6 +682,12 @@ fn voting_choices(it: &El) -> Vec<String> {
         .and_then(|v| unb64(v.trim()))
         .map(|b| voting::choices(&b))
         .unwrap_or_default()
+}
+
+/// A save stamp made of four random bytes: `PidTagWlinkSaveStamp` is a signed 32-bit integer
+/// ([MS-OXOCFG] 2.2.9.4), so the top bit is cleared and zero is never used.
+fn stamp_from(bytes: [u8; 4]) -> u32 {
+    (u32::from_le_bytes(bytes) & 0x7fff_ffff).max(1)
 }
 
 /// Whether a property tag as the server writes it is `tag`: Exchange answers in its own
