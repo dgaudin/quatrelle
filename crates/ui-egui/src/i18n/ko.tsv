@@ -2551,3 +2551,4 @@ presence	Offline	오프라인
 	These rules are managed on the server; change them where they were made.	이 규칙들은 서버에서 관리됩니다. 만들어진 곳에서 변경하세요.
 	a Sieve script	Sieve 스크립트
 	Run this rule on this computer's Inbox	이 규칙을 이 컴퓨터의 받은편지함에 적용
+	Type the task's subject, then Enter: its dates, reminder and notes follow	작업 제목을 입력하고 Enter를 누르세요. 날짜, 미리 알림, 메모는 그다음에 이어집니다

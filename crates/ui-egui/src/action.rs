@@ -61,6 +61,12 @@ pub enum Action {
     NewNote,
     /// Show a task in Tasks (from its reminder).
     OpenTask(String),
+    /// Make the task New Task's form was typed into (its subject, in `list`, or the default
+    /// one), then show its full form.
+    NewTask {
+        subject: String,
+        list: Option<String>,
+    },
     /// Show someone in People: their full card (`cards`: false) or their business card (`true`),
     /// from the reading pane's contact card or the To-Do bar's People part.
     OpenPerson {

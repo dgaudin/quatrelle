@@ -6,7 +6,7 @@
 
 use quatrelle_engine::model::dates::civil_from_days;
 
-use super::calendar_menu::day_view;
+use super::calendar_menu::{SIZE, day_view, texts};
 use super::*;
 use crate::calendar::Pick;
 use crate::dialogs::pim_dialogs::EventForm;
@@ -125,4 +125,54 @@ fn ctrl_shift_m_writes_a_message_from_the_calendar() {
     }
     assert!(a.session.compose.is_some(), "a new message");
     let _ = std::fs::remove_dir_all(dir);
+}
+
+/// A click on New task (the pane's button and the ribbon's) opens a new task's form, the cursor
+/// in its subject, as Outlook's does: the subject typed, Enter makes the task and its full form
+/// follows; Escape makes nothing.
+#[test]
+fn a_click_on_new_task_opens_a_new_tasks_form() {
+    for (button, escape) in [("pane", false), ("ribbon", false), ("pane", true)] {
+        let (mut a, dir) = app(&format!("new-task-click-{button}-{escape}"));
+        let ctx = egui::Context::default();
+        a.run("view.module", json!({"name": "tasks"}));
+        a.ui.tasks.list = "sample".into();
+        for _ in 0..5 {
+            frame_sized(&ctx, &mut a, vec![], SIZE);
+        }
+        let shapes = frame_shapes(&ctx, &mut a, vec![], SIZE);
+        let mut at: Vec<egui::Pos2> = Vec::new();
+        for s in &shapes {
+            if let egui::Shape::Text(t) = s
+                && t.galley.job.text == "New task"
+            {
+                at.push(t.galley.rect.translate(t.pos.to_vec2()).center());
+            }
+        }
+        at.sort_by(|p, q| p.y.total_cmp(&q.y));
+        let pick = if button == "ribbon" { at.first() } else { at.last() };
+        let pos = *pick.unwrap_or_else(|| panic!("no New task drawn: {at:?}"));
+        let press = |pressed| Event::PointerButton { pos, button: egui::PointerButton::Primary, pressed, modifiers: Modifiers::NONE };
+        frame_sized(&ctx, &mut a, vec![Event::PointerMoved(pos)], SIZE);
+        frame_sized(&ctx, &mut a, vec![press(true)], SIZE);
+        frame_sized(&ctx, &mut a, vec![press(false)], SIZE);
+        frame_sized(&ctx, &mut a, vec![], SIZE);
+        let shown = texts(&frame_shapes(&ctx, &mut a, vec![], SIZE));
+        assert!(
+            shown.iter().any(|t| t == "Type the task's subject, then Enter: its dates, reminder and notes follow"),
+            "the new task's form: {shown:?}"
+        );
+        frame_sized(&ctx, &mut a, vec![Event::Text("Call the framer".into())], SIZE);
+        let last = if escape { key(Key::Escape, Modifiers::NONE) } else { key(Key::Enter, Modifiers::NONE) };
+        frame_sized(&ctx, &mut a, vec![last], SIZE);
+        frame_sized(&ctx, &mut a, vec![], SIZE);
+        let made = a.session.tasks("framer", false);
+        if escape {
+            assert!(made.is_empty(), "Escape makes nothing");
+        } else {
+            assert_eq!(made.len(), 1, "made after a click on the {button}'s New task");
+            assert_eq!(a.ui.tasks.selected.as_deref(), Some(made[0].task.uid.as_str()), "its form follows");
+        }
+        let _ = std::fs::remove_dir_all(dir);
+    }
 }

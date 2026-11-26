@@ -2553,3 +2553,4 @@ presence	Offline	Не в сети
 	These rules are managed on the server; change them where they were made.	Эти правила управляются на сервере; изменяйте их там, где они были созданы.
 	a Sieve script	скрипт Sieve
 	Run this rule on this computer's Inbox	Выполнить это правило для папки «Входящие» на этом компьютере
+	Type the task's subject, then Enter: its dates, reminder and notes follow	Введите тему задачи и нажмите Enter: даты, напоминание и заметки — следом

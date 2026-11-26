@@ -65,6 +65,30 @@ impl Form {
 /// What % Complete offers, as Outlook's arrows step it.
 const PERCENTS: [u8; 5] = [0, 25, 50, 75, 100];
 
+/// New Task's form (Outlook's opens one): the subject, the cursor in it. Enter, or the box left
+/// with a subject, makes the task in `list` and its full form follows; Escape, or nothing typed,
+/// makes nothing.
+pub(super) fn new_task(tu: &mut TasksUi, t: &Tokens, ui: &mut Ui, list: Option<&quatrelle_engine::TaskList>, acts: &mut Vec<Action>) {
+    ui.label(RichText::new(tl!("New task")).font(theme::bold(13.0)).color(t.faint));
+    ui.add_space(6.0);
+    let focus = std::mem::take(&mut tu.draft_focus);
+    let Some(subject) = tu.draft.as_mut() else { return };
+    let field = ui.add(egui::TextEdit::singleline(subject).font(theme::bold(17.0)).hint_text(tl!("Subject")).desired_width(f32::INFINITY));
+    if focus {
+        field.request_focus();
+    }
+    ui.add_space(6.0);
+    ui.label(RichText::new(tl!("Type the task's subject, then Enter: its dates, reminder and notes follow")).color(t.faint).small());
+    if field.lost_focus() {
+        let text = subject.trim().to_string();
+        let escaped = ui.input(|i| i.key_pressed(egui::Key::Escape));
+        tu.draft = None;
+        if !text.is_empty() && !escaped {
+            acts.push(Action::NewTask { subject: text, list: list.map(|l| l.id.clone()) });
+        }
+    }
+}
+
 pub(super) fn show(s: &Session, tu: &mut TasksUi, t: &Tokens, ui: &mut Ui, r: &TaskRef, today: i64, acts: &mut Vec<Action>) {
     let task = &r.task;
     // Filled in again when another task is picked, or this one changed (here, or in Outlook)

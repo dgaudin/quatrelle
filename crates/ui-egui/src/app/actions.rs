@@ -276,6 +276,20 @@ impl MailApp {
                 }
                 Err(e) => self.session.notice(e.to_string(), true),
             },
+            Action::NewTask { subject, list } => {
+                let mut p = json!({"subject": subject});
+                if let Some(l) = list {
+                    p["list"] = json!(l);
+                }
+                match self.session.run("task.create", &p) {
+                    Ok(v) => {
+                        if let Some(uid) = v.get("uid").and_then(Value::as_str) {
+                            self.ui.tasks.selected = Some(uid.to_string());
+                        }
+                    }
+                    Err(e) => self.session.notice(e.to_string(), true),
+                }
+            }
             Action::OpenTask(uid) => {
                 self.session.module = Module::Tasks;
                 self.ui.tasks.query.clear();

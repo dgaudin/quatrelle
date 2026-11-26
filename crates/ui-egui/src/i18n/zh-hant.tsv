@@ -2555,3 +2555,4 @@ presence	Offline	離線
 	These rules are managed on the server; change them where they were made.	這些規則由伺服器管理；請在建立它們的地方修改。
 	a Sieve script	一個 Sieve 腳本
 	Run this rule on this computer's Inbox	在此電腦的收件匣上執行此規則
+	Type the task's subject, then Enter: its dates, reminder and notes follow	輸入工作的主旨，然後按 Enter：日期、提醒和備註隨後設定

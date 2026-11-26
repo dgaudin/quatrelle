@@ -313,7 +313,7 @@ impl MailApp {
                 self.act(new);
             }
             Module::People => self.ui.dialog = Some(Dialog::new_contact()),
-            Module::Tasks => self.ui.tasks.focus_new = true,
+            Module::Tasks => self.ui.tasks.new_task(),
             Module::Conversations => conversations::open_new_chat(&self.session, &mut self.ui.conversations),
             Module::Notes => {
                 let mut acts = Vec::new();

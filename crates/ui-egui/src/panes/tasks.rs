@@ -99,10 +99,26 @@ pub struct TasksUi {
     /// (New Task).
     pub new_text: String,
     pub focus_new: bool,
+    /// New Task's form, open, with the subject typed so far (Outlook's opens a task's form); the
+    /// task is made once a subject is there.
+    pub draft: Option<String>,
+    /// The form's subject is to get the keyboard.
+    pub draft_focus: bool,
     /// The completed ones listed too.
     pub completed: bool,
     /// The picked one's form, as typed.
     form: Option<form::Form>,
+}
+
+impl TasksUi {
+    /// New Task, as Outlook's: a new task's form opens beside the list, the cursor in its
+    /// subject; nothing is made until a subject is typed.
+    pub(crate) fn new_task(&mut self) {
+        self.selected = None;
+        self.form = None;
+        self.draft = Some(String::new());
+        self.draft_focus = true;
+    }
 }
 
 /// The My Tasks list Tasks shows (empty: the To-Do List).
@@ -141,7 +157,7 @@ pub fn nav(s: &Session, st: &mut UiState, ui: &mut Ui, _acts: &mut Vec<Action>) 
     ui.add_space(8.0);
     if widgets::accent_button(ui, Icon::Plus, "New task", &t, !s.accounts.is_empty() && !s.task_list(&chosen).is_some_and(|l| l.read_only)).clicked()
     {
-        st.tasks.focus_new = true;
+        st.tasks.new_task();
     }
     ui.add_space(8.0);
     let today = dates::today(&s.clock);
@@ -160,7 +176,7 @@ pub fn nav(s: &Session, st: &mut UiState, ui: &mut Ui, _acts: &mut Vec<Action>) 
 pub(crate) fn ribbon(s: &Session, st: &mut UiState, ui: &mut Ui, groups: &mut widgets::Groups, acts: &mut Vec<Action>) {
     let t = st.tokens;
     if widgets::big_accent(ui, Icon::Tasks, "New task", &t, !s.accounts.is_empty()).clicked() {
-        st.tasks.focus_new = true;
+        st.tasks.new_task();
     }
     groups.end(ui, &t, "New");
     let list = list_of(&st.tasks).to_string();
@@ -246,8 +262,17 @@ pub fn show(s: &Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action>) 
         st.tasks.selected = None;
         st.tasks.form = None;
     }
-    // A task is written on beside the list; a flagged message opens in its own (a double click).
-    if let Some(TodoRef::Task(p)) = &picked {
+    // New Task's form, beside the list, until its subject makes the task.
+    if st.tasks.draft.is_some() {
+        let end = if i18n::current().rtl() { egui::Panel::left("task-form") } else { egui::Panel::right("task-form") };
+        end.resizable(true)
+            .default_size(380.0)
+            .size_range(300.0..=560.0)
+            .frame(egui::Frame::new().fill(t.surface).inner_margin(Margin::same(16)).stroke(egui::Stroke::new(1.0, t.border)))
+            .show(ui, |ui| form::new_task(&mut st.tasks, &t, ui, list_ref.as_ref(), acts));
+    } else if let Some(TodoRef::Task(p)) = &picked {
+        // A task is written on beside the list; a flagged message opens in its own (a double
+        // click).
         let end = if i18n::current().rtl() { egui::Panel::left("task-form") } else { egui::Panel::right("task-form") };
         end.resizable(true)
             .default_size(380.0)

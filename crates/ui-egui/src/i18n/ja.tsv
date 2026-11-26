@@ -2549,3 +2549,4 @@ presence	Offline	オフライン
 	These rules are managed on the server; change them where they were made.	これらのルールはサーバーで管理されています。作成された場所で変更してください。
 	a Sieve script	Sieve スクリプト
 	Run this rule on this computer's Inbox	このルールをこのコンピューターの受信トレイに適用する
+	Type the task's subject, then Enter: its dates, reminder and notes follow	タスクの件名を入力して Enter を押します。日付、アラーム、メモはその後で設定できます
