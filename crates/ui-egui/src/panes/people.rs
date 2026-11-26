@@ -367,6 +367,7 @@ pub fn nav(s: &Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action>) {
         // the pane (shared by every module) grew a little each frame, up to its widest.
         let list_w = (ui.available_width() - INDEX_W - ui.spacing().item_spacing.x).max(80.0);
         ui.allocate_ui_with_layout(vec2(list_w, ui.available_height()), egui::Layout::top_down(egui::Align::Min), |ui| {
+            crate::widgets::solid_scroll_bars(ui);
             egui::ScrollArea::vertical().auto_shrink(false).id_salt("people").show(ui, |ui| {
                 let mut letter: Option<char> = None;
                 for p in people.iter() {
@@ -455,6 +456,7 @@ pub fn nav(s: &Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action>) {
 fn cards(s: &Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action>) {
     let t = st.tokens;
     let people = shown(s, st);
+    crate::widgets::solid_scroll_bars(ui);
     egui::ScrollArea::vertical().auto_shrink(false).id_salt("people-cards").show(ui, |ui| {
         egui::Frame::new().inner_margin(Margin::same(18)).show(ui, |ui| {
             if people.is_empty() {
@@ -613,6 +615,7 @@ fn phone_list(s: &Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action>
             ui.add_space(8.0);
             ui.label(RichText::new(tl!("No contacts yet.")).color(t.faint));
         }
+        crate::widgets::solid_scroll_bars(ui);
         egui::ScrollArea::vertical().auto_shrink(false).id_salt("people-phone").show(ui, |ui| {
             ui.spacing_mut().item_spacing.y = 0.0;
             for (i, p) in people.iter().enumerate() {

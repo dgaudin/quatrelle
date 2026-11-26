@@ -110,6 +110,7 @@ pub fn show(s: &Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action>) 
             open(st, &n.note);
         }
     }
+    crate::widgets::solid_scroll_bars(ui);
     egui::ScrollArea::vertical().auto_shrink(false).id_salt("notes").show(ui, |ui| {
         egui::Frame::new().inner_margin(Margin::same(18)).show(ui, |ui| {
             let size = 210.0;

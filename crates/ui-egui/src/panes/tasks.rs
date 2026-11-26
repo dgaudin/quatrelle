@@ -322,6 +322,7 @@ fn list_pane(
         });
         return;
     }
+    crate::widgets::solid_scroll_bars(ui);
     egui::ScrollArea::vertical().auto_shrink(false).id_salt("tasks").show(ui, |ui| {
         if view == TaskView::Detailed {
             detail_header(ui, t);

@@ -203,6 +203,7 @@ pub fn show(s: &Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action>) 
     let has_footer = s.more_on_server().is_some() || s.search.is_some();
     // A page (Page Up, Page Down): the rows shown at once, less one kept in view.
     st.list_page = ((ui.available_height() / mh.max(1.0)).floor() as u64).saturating_sub(1).max(1);
+    crate::widgets::solid_scroll_bars(ui);
     egui::ScrollArea::vertical().auto_shrink(false).id_salt("list").show_viewport(ui, |ui, viewport| {
         ui.set_height(total + if has_footer { FOOTER_H } else { 0.0 });
         let origin = ui.min_rect().min;

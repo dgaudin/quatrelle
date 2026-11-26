@@ -158,3 +158,24 @@ fn the_folder_panes_scroll_bar_stays_off_the_rows() {
     assert!(pane.max.x - row_right >= 9.0, "the bar's strip is left of the rows: pane right {:.0}, row right {:.0}", pane.max.x, row_right);
     let _ = std::fs::remove_dir_all(dir);
 }
+
+/// The panes' lists (calendars, contacts and their A–Z index, tasks, notes, Teams chats, the
+/// message list, the To-Do bar) take their scroll bars as the folder pane does: in a strip of
+/// their own, the margin from the window's edge kept.
+#[test]
+fn a_panes_scroll_bars_keep_their_own_strip() {
+    let ctx = egui::Context::default();
+    let mut outer = 0.0;
+    let mut style = None;
+    let mut out = ctx.run_ui(egui::RawInput::default(), |ui| {
+        ui.spacing_mut().scroll.bar_outer_margin = 7.0;
+        outer = ui.spacing().scroll.bar_outer_margin;
+        crate::widgets::solid_scroll_bars(ui);
+        style = Some(ui.spacing().scroll);
+    });
+    out.textures_delta.clear();
+    let scroll = style.expect("drawn");
+    assert!(!scroll.floating, "the bar doesn't float over the rows: {scroll:?}");
+    assert_eq!(scroll.bar_width, egui::style::ScrollStyle::solid().bar_width);
+    assert_eq!(scroll.bar_outer_margin, outer, "the margin from the window's edge is kept");
+}

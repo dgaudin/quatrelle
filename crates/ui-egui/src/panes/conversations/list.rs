@@ -238,6 +238,7 @@ fn hits<'a>(s: &'a Session, ui: &mut Ui, t: &Tokens) -> Vec<&'a ChatRow> {
 fn rows_pane(s: &Session, c: &mut ConversationsUi, pics: &TeamsPictures, ui: &mut Ui, t: &Tokens, rows: &[&ChatRow], acts: &mut Vec<Action>) {
     let searching = !c.query.trim().is_empty();
     let open_at = s.teams.open.as_deref().and_then(|o| rows.iter().position(|r| r.id == o));
+    crate::widgets::solid_scroll_bars(ui);
     let mut area = egui::ScrollArea::vertical().id_salt("conversations-list").auto_shrink([false, false]);
     // Alt+↑/↓ opened one off screen: it's brought into view.
     if std::mem::take(&mut c.scroll_to_open)

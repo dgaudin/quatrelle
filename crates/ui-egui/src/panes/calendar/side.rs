@@ -13,6 +13,7 @@ mod menu;
 /// The side pane: a month to jump around in, then the calendars.
 pub fn nav(s: &Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action>) {
     let t = st.tokens;
+    crate::widgets::solid_scroll_bars(ui);
     egui::ScrollArea::vertical().auto_shrink(false).id_salt("calendar-nav").show(ui, |ui| {
         months(s, st, ui, acts);
         ui.add_space(8.0);
@@ -543,6 +544,7 @@ pub(super) fn mini_month_to(s: &Session, st: &mut UiState, ui: &mut Ui, acts: &m
 pub fn todo_bar(s: &Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action>) {
     let t = st.tokens;
     let parts = s.prefs.todo_bar();
+    crate::widgets::solid_scroll_bars(ui);
     egui::ScrollArea::vertical().auto_shrink(false).id_salt("todo-bar").show(ui, |ui| {
         if parts.calendar {
             todo_heading(ui, &t, "Calendar");

@@ -40,6 +40,14 @@ impl RibbonFit {
     }
 }
 
+/// The scroll bars under `ui` take their own strip on the right instead of floating over the
+/// rows (egui's default), as the folder pane's do: a count, a "read-only", a date or an A–Z index
+/// drawn at the right of a row stays whole. The margin kept from the window's edge stays as it is.
+pub fn solid_scroll_bars(ui: &mut Ui) {
+    let margin = ui.spacing().scroll.bar_outer_margin;
+    ui.spacing_mut().scroll = egui::style::ScrollStyle { bar_outer_margin: margin, ..egui::style::ScrollStyle::solid() };
+}
+
 pub fn ribbon_fit_id() -> egui::Id {
     egui::Id::unique("ribbon-fit")
 }
