@@ -756,7 +756,8 @@ impl Session {
     /// disk scan's own (a folder read off the interface thread refreshes the lists too).
     pub fn todo_stamp(&self) -> u64 {
         let disk = self.disk_lists.lock().unwrap_or_else(|e| e.into_inner()).stamp;
-        self.mail_stamp ^ disk
+        // Both only grow: their sum moves whenever either does (an exclusive or could cancel).
+        self.mail_stamp.wrapping_add(disk)
     }
 
     /// Wait until the background disk read has come to every folder (tests; the interface

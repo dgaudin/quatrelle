@@ -785,3 +785,16 @@ fn a_folder_the_memory_cache_lets_go_of_stays_in_the_todo_list() {
     assert!(found, "read again from the disk: {:?}", s.todo("", false).iter().map(|r| r.subject().to_string()).collect::<Vec<_>>());
     done(s);
 }
+
+/// The To-Do stamp moves when both of its counters do, whatever their parity.
+#[test]
+fn the_todo_stamp_moves_when_both_counters_move_together() {
+    let mut s = sample_session("todo-stamp");
+    s.mail_stamp = 0;
+    s.disk_lists.lock().unwrap_or_else(|e| e.into_inner()).stamp = 0;
+    let before = s.todo_stamp();
+    s.mail_stamp = 1;
+    s.disk_lists.lock().unwrap_or_else(|e| e.into_inner()).stamp = 1;
+    assert_ne!(s.todo_stamp(), before, "one change on each side is a change");
+    done(s);
+}
