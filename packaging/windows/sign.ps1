@@ -70,6 +70,18 @@ try {
     $signArgs = $common + @('/tr', $ts, '/f', $pfx)
     if ($env:WINDOWS_CERTIFICATE_PASSWORD) { $signArgs += @('/p', $env:WINDOWS_CERTIFICATE_PASSWORD) }
     Invoke-SignTool ($signArgs + $Files)
+    # A self-signed certificate (no authority behind it) is trusted on this build machine only,
+    # so that `signtool verify` below can check the signatures; users' machines are unchanged.
+    $cert = [System.Security.Cryptography.X509Certificates.X509Certificate2]::new($pfx, [string]$env:WINDOWS_CERTIFICATE_PASSWORD)
+    if ($cert.Subject -eq $cert.Issuer) {
+      Write-Output "Self-signed certificate ($($cert.Subject)): trusted on this build machine to verify the signatures"
+      foreach ($name in @('Root', 'TrustedPublisher')) {
+        $store = [System.Security.Cryptography.X509Certificates.X509Store]::new($name, 'LocalMachine')
+        $store.Open('ReadWrite')
+        $store.Add([System.Security.Cryptography.X509Certificates.X509Certificate2]::new($cert.RawData))
+        $store.Close()
+      }
+    }
   }
   else {
     Write-Output "Signing with Azure Trusted Signing ($env:AZURE_SIGNING_ACCOUNT / $env:AZURE_CERT_PROFILE): $($Files -join ', ')"
